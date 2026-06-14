@@ -36,8 +36,8 @@ It works with any major LLM provider — Anthropic Claude, OpenAI GPT, or a full
 ## Quick Start
 
 ```bash
-git clone https://github.com/hegazi-sec/nullshift.git
-cd nullshift
+git clone https://github.com/hegazi-sec/Ai-ChatBot.git
+cd Ai-ChatBot/nullshift
 python setup.py
 ```
 
@@ -180,15 +180,15 @@ PRs welcome. Open against the `beta` branch, not `main`. See `CONTRIBUTING.md` f
 
 This is an actively maintained project — I'm building NullShift to be a tool we can all rely on, not just a side experiment. **Your feedback shapes the roadmap.**
 
-**If anything doesn't work the way you expect**, please [open an issue](https://github.com/hegazi-sec/nullshift/issues) on GitHub. I'll do my best to respond quickly and ship a fix.
+**If anything doesn't work the way you expect**, please [open an issue](https://github.com/hegazi-sec/Ai-ChatBot/issues) on GitHub. I'll do my best to respond quickly and ship a fix.
 
 ### Connector Maturity
 
 | Status | Connector | Notes |
 |---|---|---|
+| ✅ **Production-ready** | **LimaCharlie** | Most thoroughly tested. Recommended for production. |
 | ✅ **Production-ready** | **Wazuh** | Most thoroughly tested. Recommended for production. |
-| ✅ **Production-ready** | **Splunk** | Most thoroughly tested. Recommended for production. |
-| ✅ **Production-ready** | **LimaCharlie** | Functional. Updates pushed as edge cases are found. |
+| 🧪 **Beta — under active testing** | **Splunk** | Functional. Updates pushed as edge cases are found. |
 | 🧪 **Beta — under active testing** | **Elasticsearch** | Functional. Updates pushed as edge cases are found. |
 | 🧪 **Beta — under active testing** | **Microsoft Sentinel** | Functional. Updates pushed as edge cases are found. |
 
