@@ -55,6 +55,7 @@ nullshift status     # check if it's running, see URL + PID + uptime
 nullshift logs       # stream live server logs (Ctrl+C to exit)
 nullshift stop       # stop the server
 nullshift restart    # restart
+nullshift update     # pull latest from GitHub, refresh deps, restart
 nullshift setup      # re-run the configuration wizard
 ```
 

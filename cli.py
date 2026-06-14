@@ -8,6 +8,7 @@ Usage:
     nullshift status    Show server status and URL
     nullshift logs      Stream live server logs (Ctrl+C to exit)
     nullshift setup     Run the configuration wizard
+    nullshift update    Pull latest from GitHub, refresh dependencies, restart
 """
 from __future__ import annotations
 import os
@@ -202,6 +203,117 @@ def cmd_setup() -> None:
     subprocess.run([exe, str(BASE / 'setup.py')])
 
 
+def cmd_update() -> None:
+    """Pull the latest from origin/main, refresh dependencies, and restart."""
+    if not (BASE / '.git').exists():
+        print(_red('✗ Not a git repository.'))
+        print(f'  This command only works when NullShift was installed via git clone.')
+        sys.exit(1)
+
+    print(f'  {_bold("Updating NullShift…")}')
+    print()
+
+    # 1) Warn about uncommitted local changes
+    try:
+        dirty = subprocess.run(
+            ['git', '-C', str(BASE), 'status', '--porcelain'],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        if dirty:
+            print(_red('✗ Uncommitted local changes detected:'))
+            print()
+            for line in dirty.splitlines()[:8]:
+                print(f'    {_muted(line)}')
+            if len(dirty.splitlines()) > 8:
+                print(f'    {_muted("…")}')
+            print()
+            print('  Commit, stash, or revert your changes before updating.')
+            print(f'  To force a clean update: {_cyan("git stash && nullshift update")}')
+            sys.exit(1)
+    except subprocess.CalledProcessError:
+        print(_red('✗ Could not check git status. Aborting.'))
+        sys.exit(1)
+
+    # 2) Fetch
+    print(f'  {_muted("◯")} Fetching from origin…')
+    fetch = subprocess.run(
+        ['git', '-C', str(BASE), 'fetch', 'origin', 'main'],
+        capture_output=True, text=True,
+    )
+    if fetch.returncode != 0:
+        print(_red('✗ git fetch failed:'))
+        print(fetch.stderr)
+        sys.exit(1)
+
+    # 3) Determine commits behind
+    behind = subprocess.run(
+        ['git', '-C', str(BASE), 'rev-list', '--count', 'HEAD..origin/main'],
+        capture_output=True, text=True,
+    ).stdout.strip()
+    try:
+        behind_n = int(behind)
+    except ValueError:
+        behind_n = 0
+
+    if behind_n == 0:
+        print(f'  {_green("✓")} Already up to date.')
+        return
+
+    # 4) Preview the new commits
+    print(f'  {_cyan("●")} {behind_n} commit{"s" if behind_n != 1 else ""} behind origin/main:')
+    print()
+    log = subprocess.run(
+        ['git', '-C', str(BASE), 'log', '--oneline', '--no-decorate',
+         f'HEAD..origin/main'],
+        capture_output=True, text=True,
+    ).stdout.strip()
+    for line in log.splitlines()[:10]:
+        print(f'    {_muted("•")} {line}')
+    if behind_n > 10:
+        print(f'    {_muted(f"… and {behind_n - 10} more")}')
+    print()
+
+    # 5) Snapshot requirements.txt to detect dependency changes
+    req_path = BASE / 'requirements.txt'
+    req_before = req_path.read_text() if req_path.exists() else ''
+
+    # 6) Pull
+    print(f'  {_muted("◯")} Pulling…')
+    pull = subprocess.run(
+        ['git', '-C', str(BASE), 'pull', 'origin', 'main', '--ff-only'],
+        capture_output=True, text=True,
+    )
+    if pull.returncode != 0:
+        print(_red('✗ git pull failed:'))
+        print(pull.stderr)
+        sys.exit(1)
+    print(f'  {_green("✓")} Code updated.')
+
+    # 7) Reinstall dependencies if requirements changed
+    req_after = req_path.read_text() if req_path.exists() else ''
+    if req_before != req_after:
+        print(f'  {_muted("◯")} requirements.txt changed — installing updated dependencies…')
+        python = _venv_python()
+        if python.exists():
+            subprocess.run(
+                [str(python), '-m', 'pip', 'install', '-q', '-r', str(req_path)],
+                cwd=str(BASE),
+            )
+            print(f'  {_green("✓")} Dependencies updated.')
+        else:
+            print(f'  {_red("⚠")}  venv missing — run {_cyan("python setup.py")} to recreate it.')
+
+    # 8) Restart the server if it's running
+    pid = _read_pid()
+    if _is_running(pid):
+        print(f'  {_muted("◯")} Restarting server…')
+        cmd_restart()
+    else:
+        print()
+        print(f'  Server was not running.')
+        print(f'  Start it with:  {_cyan("nullshift start")}')
+
+
 # ── entry point ───────────────────────────────────────────────────────────────
 
 COMMANDS = {
@@ -211,6 +323,7 @@ COMMANDS = {
     'status':  cmd_status,
     'logs':    cmd_logs,
     'setup':   cmd_setup,
+    'update':  cmd_update,
 }
 
 
@@ -225,6 +338,7 @@ def main() -> None:
         print(f'    {_cyan("status")}  Show server status and URL')
         print(f'    {_cyan("logs")}    Stream live server logs  (Ctrl+C to exit)')
         print(f'    {_cyan("setup")}   Run the configuration wizard')
+        print(f'    {_cyan("update")}  Pull latest from GitHub, refresh dependencies, restart')
         print()
         sys.exit(0 if len(sys.argv) < 2 else 1)
 
