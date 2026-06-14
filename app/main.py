@@ -53,18 +53,44 @@ def _rag_query(message: str) -> str:
 
 
 def _strip_html_from_llm(text: str) -> str:
+    """Normalize LLM output: convert any leaked HTML to clean markdown.
+
+    Local models (qwen, llama) sometimes ignore the 'no HTML' system prompt rule
+    and emit <ul><li>...</li></ul> or other tags. This function catches all
+    such drift and converts it back to markdown before display."""
     if not text or '<' not in text:
         return text
-    # Convert <li> to markdown list items with double newline prefix so inline
-    # <ul><li> blocks become their own paragraph block in the frontend renderer
+
+    # Pass 1: Convert <li>X</li> to markdown bullets — double newlines force
+    # block-level rendering in the frontend's markdown parser
     text = re.sub(r'<li[^>]*>(.*?)</li>', lambda m: f'\n\n- {m.group(1).strip()}', text, flags=re.DOTALL | re.IGNORECASE)
-    # Replace <ul>/<ol> tags with a newline to preserve block separation
+    # Orphaned <li>X (no closing tag) — still convert it
+    text = re.sub(r'<li[^>]*>', '\n\n- ', text, flags=re.IGNORECASE)
+    text = re.sub(r'</li>', '', text, flags=re.IGNORECASE)
+
+    # Pass 2: <ul>/<ol> wrappers → newlines so they don't collapse blocks
     text = re.sub(r'</?(?:ul|ol)[^>]*>', '\n', text, flags=re.IGNORECASE)
-    text = re.sub(r'</?(?:div|p|span)[^>]*>', '', text, flags=re.IGNORECASE)
+
+    # Pass 3: Common inline tags → markdown equivalents
+    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
     text = re.sub(r'<(?:b|strong)[^>]*>(.*?)</(?:b|strong)>', r'**\1**', text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<(?:i|em)[^>]*>(.*?)</(?:i|em)>', r'_\1_', text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<code[^>]*>(.*?)</code>', r'`\1`', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<a [^>]*href="([^"]*)"[^>]*>(.*?)</a>', r'[\2](\1)', text, flags=re.DOTALL | re.IGNORECASE)
+
+    # Pass 4: Strip block tags that don't carry semantic meaning
+    text = re.sub(r'</?(?:div|p|span|section|article|header|footer|nav|main)[^>]*>', '', text, flags=re.IGNORECASE)
+
+    # Pass 5: Headers — H1-H3 to markdown
+    for level, prefix in [(3, '### '), (2, '## '), (1, '# ')]:
+        text = re.sub(rf'<h{level}[^>]*>(.*?)</h{level}>', rf'\n\n{prefix}\1\n', text, flags=re.DOTALL | re.IGNORECASE)
+
+    # Pass 6: Belt-and-suspenders — strip any remaining HTML-shaped artifact
     text = re.sub(r'<[^>]+>', '', text)
+    # Also strip HTML entities the model might emit (&lt;, &gt;, &amp;, &nbsp;)
+    text = text.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&').replace('&nbsp;', ' ').replace('&quot;', '"').replace('&#39;', "'")
+
+    # Pass 7: Normalize whitespace
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
@@ -82,6 +108,32 @@ def _has_indicator(text: str) -> bool:
     if re.search(r"\b([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}\b", text):
         return True
     return False
+
+
+def _strip_investigation_format(text: str) -> str:
+    """Safety net: when the LLM is told to use targeted_answer mode but drifts
+    back into SECTION 1/2/3 format (common with local models like qwen that
+    mimic earlier turns), strip the structured headers so the response reads
+    as a normal conversational reply.
+
+    Removes:
+      - 'SECTION 1 — ...' / 'SECTION 2 — ...' / 'SECTION 3 — ...' header lines
+      - 'Verdict: ... Confidence: ...' decision footers
+      - Standalone verdict banners ('Likely Benign', 'Suspicious', etc.)
+    """
+    if not text:
+        return text
+    # Drop SECTION headers (the rest of the line goes too — they always end the line)
+    text = re.sub(r'^\s*SECTION\s*[123]\s*[—–-].*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    # Drop verdict/confidence decision lines
+    text = re.sub(r'^\s*\*{0,2}Verdict\*{0,2}\s*:.*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'^\s*\*{0,2}Confidence\*{0,2}\s*:.*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    # Drop standalone verdict banner words (when on their own line)
+    text = re.sub(r'^\s*(✓|⚠|✕|\?)?\s*(Likely Benign|Suspicious|Malicious|Inconclusive)\s*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    # Collapse the resulting whitespace gaps
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
 
 
 def select_response_mode(user_message: str, last_assistant_message: Optional[str]) -> str:
@@ -433,6 +485,11 @@ def handle_chat_orchestrated(req: ChatRequest, conv_id: str, last_assistant: Opt
     # We do not expose here; /chat route will add debug_trace in JSON if requested.
     if debug:
         evidence_bundle["_debug_trace"] = debug.to_list()
+    # Safety net: strip SECTION 1/2/3 + verdict banners from non-investigation modes
+    # (qwen and other local models often drift back into investigation format
+    # when earlier turns in the conversation used it).
+    if response_mode != "investigation_report":
+        reply = _strip_investigation_format(reply)
     return reply
 
 
@@ -1499,6 +1556,8 @@ def api_post_message(conversation_id: str, payload: MessageCreate, current_user:
         deployment_memory=get_cached_memory(),
     )
     reply_md = _strip_html_from_llm(reply_md)
+    if mode != "investigation_report":
+        reply_md = _strip_investigation_format(reply_md)
 
     # Persist assistant reply (scoped write)
     try:
@@ -1637,6 +1696,10 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
     aug_user = {"role": "user", "content": f"User message: {payload.message}\n\nUse evidence bundle to decide minimum necessary sources."}
     reply_md = orchestrated_llm_reply(aug_user, conversation_id, mode, evidence, current_user, retrieved=retrieved, debug=debug)
     reply_md = _strip_html_from_llm(reply_md)
+    # Safety net: any mode other than investigation_report must not show
+    # SECTION 1/2/3 or verdict banners. Strip them if the LLM drifted.
+    if mode != "investigation_report":
+        reply_md = _strip_investigation_format(reply_md)
 
     if debug:
         evidence["_debug_trace"] = debug.to_list()
