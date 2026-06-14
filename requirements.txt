@@ -14,7 +14,7 @@ numpy
 pytest
 pytest-asyncio
 passlib[bcrypt]==1.7.4
-python-jose==3.3.0
+python-jose==3.4.0
 python-multipart
 chromadb>=0.4.22
 google-genai>=1.0.0
