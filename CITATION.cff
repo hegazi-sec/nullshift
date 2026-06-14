@@ -1,0 +1,43 @@
+cff-version: 1.2.0
+message: "If you use NullShift in your research, tools, or publications, please cite it as below."
+type: software
+title: "NullShift"
+abstract: >
+  An open-source AI-powered triage assistant for L1 SOC analysts.
+  NullShift plugs into your SIEM, retrieves the right playbook for each
+  alert via RAG, runs deterministic investigation steps, enriches IOCs
+  against threat intelligence, and produces a structured investigation
+  report (Section 1 evidence, Section 2 reasoning, Section 3 verdict).
+  Provider-agnostic LLM layer supporting Claude Agent SDK, 15+ cloud
+  providers, and fully local Ollama. Built-in connectors for Wazuh,
+  LimaCharlie, Splunk, Elastic, and Microsoft Sentinel.
+authors:
+  - family-names: "Hegazi"
+    given-names: "Ahmed"
+    email: ahmedislam23@gmail.com
+    alias: hegazi-sec
+repository-code: "https://github.com/hegazi-sec/nullshift"
+url: "https://github.com/hegazi-sec/nullshift"
+license: Apache-2.0
+version: "0.1.0"
+date-released: "2026-06-14"
+keywords:
+  - cybersecurity
+  - security operations center
+  - SOC analyst
+  - L1 triage
+  - AI agents
+  - LLM
+  - RAG
+  - SIEM
+  - threat intelligence
+  - MITRE ATT&CK
+  - incident response
+  - Wazuh
+  - Splunk
+  - LimaCharlie
+  - Elasticsearch
+  - Microsoft Sentinel
+  - Anthropic Claude
+  - Ollama
+  - open source

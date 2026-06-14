@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NullShift — Setup</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --border:    #30363d;
+      --cyan:      #00e5ff;
+      --cyan-dim:  #00b8cc;
+      --green:     #3fb950;
+      --yellow:    #e3b341;
+      --red:       #f85149;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --radius:    8px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 32px 16px 64px;
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    .header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--cyan);
+      letter-spacing: -0.5px;
+    }
+    .header p {
+      color: var(--muted);
+      margin-top: 6px;
+      font-size: 0.9rem;
+    }
+
+    /* ── Progress bar ── */
+    .progress {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 32px;
+      width: 100%;
+      max-width: 560px;
+    }
+    .step-dot {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+    }
+    .step-dot .dot {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted);
+      transition: all 0.3s;
+      position: relative;
+      z-index: 1;
+    }
+    .step-dot.active .dot {
+      border-color: var(--cyan);
+      background: var(--cyan);
+      color: #000;
+    }
+    .step-dot.done .dot {
+      border-color: var(--green);
+      background: var(--green);
+      color: #000;
+    }
+    .step-dot .label {
+      margin-top: 6px;
+      font-size: 0.65rem;
+      color: var(--muted);
+      text-align: center;
+      white-space: nowrap;
+    }
+    .step-dot.active .label { color: var(--cyan); }
+    .step-dot.done .label   { color: var(--green); }
+    .step-line {
+      flex: 1;
+      height: 2px;
+      background: var(--border);
+      margin-bottom: 22px;
+      transition: background 0.3s;
+    }
+    .step-line.done { background: var(--green); }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      width: 100%;
+      max-width: 560px;
+    }
+    .card h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+    .card .sub {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    /* ── Form elements ── */
+    label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+      margin-top: 16px;
+      font-weight: 500;
+    }
+    label:first-child { margin-top: 0; }
+    input[type="text"],
+    input[type="password"],
+    input[type="url"],
+    select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 9px 12px;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus {
+      border-color: var(--cyan);
+    }
+    select option { background: var(--surface); }
+
+    .hint {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+    .hint a { color: var(--cyan); text-decoration: none; }
+    .hint a:hover { text-decoration: underline; }
+
+    /* ── Radio cards ── */
+    .radio-grid {
+      display: grid;
+      gap: 12px;
+      margin-top: 4px;
+    }
+    .radio-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .radio-card:hover { border-color: var(--cyan-dim); }
+    .radio-card.selected {
+      border-color: var(--cyan);
+      background: rgba(0,229,255,0.06);
+    }
+    .radio-card input[type="radio"] { margin-top: 2px; accent-color: var(--cyan); flex-shrink: 0; }
+    .radio-card .rc-body { flex: 1; }
+    .radio-card .rc-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .radio-card .rc-desc {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 3px;
+      line-height: 1.4;
+    }
+
+    /* ── Collapsible SIEM fields ── */
+    .siem-fields { display: none; margin-top: 16px; }
+    .siem-fields.show { display: block; }
+
+    /* ── Buttons ── */
+    .btn-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 28px;
+      justify-content: flex-end;
+    }
+    button {
+      padding: 9px 22px;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    button:active { transform: scale(0.97); }
+    .btn-primary {
+      background: var(--cyan);
+      color: #000;
+    }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .btn-ghost:hover { border-color: var(--text); color: var(--text); }
+
+    /* ── Alerts ── */
+    .alert {
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      margin-bottom: 20px;
+      display: none;
+    }
+    .alert.show { display: block; }
+    .alert-err  { background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.4); color: var(--red); }
+    .alert-ok   { background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.4); color: var(--green); }
+    .alert-info { background: rgba(0,229,255,0.07); border: 1px solid rgba(0,229,255,0.3); color: var(--cyan); }
+
+    /* ── Done screen ── */
+    .done-icon {
+      text-align: center;
+      font-size: 3rem;
+      margin-bottom: 16px;
+    }
+    .code-block {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px 16px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: var(--cyan);
+      margin-top: 8px;
+      word-break: break-all;
+    }
+
+    /* ── Steps visibility ── */
+    .step { display: none; }
+    .step.active { display: block; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>NullShift Setup</h1>
+  <p>Security Operations Center AI Assistant — first-time configuration</p>
+</div>
+
+<!-- Progress dots -->
+<div class="progress" id="progress">
+  <div class="step-dot active" data-step="1"><div class="dot">1</div><div class="label">Welcome</div></div>
+  <div class="step-line"></div>
+  <div class="step-dot" data-step="2"><div class="dot">2</div><div class="label">Admin</div></div>
+  <div class="step-line"></div>
+  <div class="step-dot" data-step="3"><div class="dot">3</div><div class="label">LLM</div></div>
+  <div class="step-line"></div>
+  <div class="step-dot" data-step="4"><div class="dot">4</div><div class="label">SIEM</div></div>
+  <div class="step-line"></div>
+  <div class="step-dot" data-step="5"><div class="dot">5</div><div class="label">Done</div></div>
+</div>
+
+<div class="card">
+
+  <!-- ── Step 1: Welcome ── -->
+  <div class="step active" id="step-1">
+    <h2>Welcome to NullShift</h2>
+    <p class="sub">This wizard walks you through the one-time initial setup. You will configure:<br><br>
+      &bull; An admin account (username + password)<br>
+      &bull; An LLM provider (Claude SDK or API keys later)<br>
+      &bull; An optional SIEM connector<br><br>
+      All settings are written to <code>data/config.db</code> — no <code>.env</code> editing required.
+    </p>
+    <div class="btn-row">
+      <button class="btn-primary" onclick="goTo(2)">Get started &rarr;</button>
+    </div>
+  </div>
+
+  <!-- ── Step 2: Admin account ── -->
+  <div class="step" id="step-2">
+    <h2>Admin Account</h2>
+    <p class="sub">Create the initial administrator login for the NullShift web UI.</p>
+    <div id="alert-2" class="alert alert-err"></div>
+
+    <label for="admin_username">Username</label>
+    <input type="text" id="admin_username" value="admin" autocomplete="username" />
+
+    <label for="admin_password">Password <span style="color:var(--muted);font-weight:400">(min 16 characters)</span></label>
+    <input type="password" id="admin_password" autocomplete="new-password" />
+
+    <label for="admin_password2">Confirm Password</label>
+    <input type="password" id="admin_password2" autocomplete="new-password" />
+
+    <div class="btn-row">
+      <button class="btn-ghost" onclick="goTo(1)">&larr; Back</button>
+      <button class="btn-primary" onclick="validateAdmin()">Next &rarr;</button>
+    </div>
+  </div>
+
+  <!-- ── Step 3: LLM Provider ── -->
+  <div class="step" id="step-3">
+    <h2>LLM Provider</h2>
+    <p class="sub">Choose how NullShift connects to an AI model. You can add or change providers at any time from Admin &rarr; Settings.</p>
+
+    <div class="radio-grid">
+      <label class="radio-card selected" onclick="selectLlm('sdk')">
+        <input type="radio" name="llm_choice" value="sdk" checked />
+        <div class="rc-body">
+          <div class="rc-title">Claude Agent SDK</div>
+          <div class="rc-desc">Uses the local <code>claude</code> CLI with your Claude.ai Pro/Max subscription. No API key required — bills your subscription. Best for single-analyst / home SOC use.</div>
+        </div>
+      </label>
+      <label class="radio-card" onclick="selectLlm('later')">
+        <input type="radio" name="llm_choice" value="later" />
+        <div class="rc-body">
+          <div class="rc-title">Configure via API keys after setup</div>
+          <div class="rc-desc">You will add Anthropic, OpenAI, Gemini, or another provider's key from Admin &rarr; Settings once the app is running. Recommended for multi-analyst deployments.</div>
+        </div>
+      </label>
+    </div>
+
+    <div id="alert-3" class="alert alert-err" style="margin-top:16px"></div>
+
+    <div class="btn-row">
+      <button class="btn-ghost" onclick="goTo(2)">&larr; Back</button>
+      <button class="btn-primary" onclick="validateLlm()">Next &rarr;</button>
+    </div>
+  </div>
+
+  <!-- ── Step 4: SIEM connector ── -->
+  <div class="step" id="step-4">
+    <h2>SIEM Connector</h2>
+    <p class="sub">Connect to your Security Information and Event Management system. You can skip this and configure connectors later in <code>.env</code> or Admin Settings.</p>
+
+    <label for="siem_provider">SIEM / Data Source</label>
+    <select id="siem_provider" onchange="showSiemFields()">
+      <option value="skip">Skip — configure later</option>
+      <option value="limacharlie">LimaCharlie</option>
+      <option value="wazuh">Wazuh</option>
+      <option value="splunk">Splunk</option>
+      <option value="elastic">Elasticsearch / Elastic SIEM</option>
+      <option value="sentinel">Microsoft Sentinel</option>
+    </select>
+
+    <!-- LimaCharlie -->
+    <div class="siem-fields" id="fields-limacharlie">
+      <label>Organisation ID (OID)</label>
+      <input type="text" id="lc_oid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+      <label>Secret API Key</label>
+      <input type="password" id="lc_api_key" placeholder="Your LimaCharlie secret key" />
+    </div>
+
+    <!-- Wazuh -->
+    <div class="siem-fields" id="fields-wazuh">
+      <label>Wazuh Manager URL</label>
+      <input type="url" id="wazuh_api_url" placeholder="https://wazuh-manager.local:55000" />
+      <label>Wazuh Indexer (OpenSearch) URL</label>
+      <input type="url" id="wazuh_indexer_url" placeholder="https://wazuh-indexer.local:9200" />
+      <label>Indexer Username</label>
+      <input type="text" id="wazuh_indexer_user" placeholder="admin" value="admin" />
+      <label>Indexer Password</label>
+      <input type="password" id="wazuh_indexer_pass" />
+      <label>Wazuh API Token <span style="color:var(--muted);font-weight:400">(optional if using user/pass)</span></label>
+      <input type="password" id="wazuh_api_token" />
+    </div>
+
+    <!-- Splunk -->
+    <div class="siem-fields" id="fields-splunk">
+      <label>Splunk URL</label>
+      <input type="url" id="splunk_url" placeholder="https://splunk.corp.local:8089" />
+      <label>Bearer Token (preferred)</label>
+      <input type="password" id="splunk_token" />
+      <label>Index (pattern)</label>
+      <input type="text" id="splunk_index" value="*" />
+    </div>
+
+    <!-- Elastic -->
+    <div class="siem-fields" id="fields-elastic">
+      <label>Elasticsearch URL</label>
+      <input type="url" id="elastic_url" placeholder="https://elastic.corp.local:9200" />
+      <label>API Key <span style="color:var(--muted);font-weight:400">(base64 id:key)</span></label>
+      <input type="password" id="elastic_api_key" />
+      <label>Index Pattern</label>
+      <input type="text" id="elastic_index" value="logs-*,.alerts-security.alerts-*" />
+    </div>
+
+    <!-- Sentinel -->
+    <div class="siem-fields" id="fields-sentinel">
+      <label>Log Analytics Workspace ID</label>
+      <input type="text" id="sentinel_workspace_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+      <label>Azure Tenant ID</label>
+      <input type="text" id="sentinel_tenant_id" />
+      <label>App Registration Client ID</label>
+      <input type="text" id="sentinel_client_id" />
+      <label>App Registration Client Secret</label>
+      <input type="password" id="sentinel_client_secret" />
+    </div>
+
+    <div id="alert-4" class="alert alert-err" style="margin-top:16px"></div>
+
+    <div class="btn-row">
+      <button class="btn-ghost" onclick="goTo(3)">&larr; Back</button>
+      <button class="btn-primary" id="btn-complete" onclick="completeSetup()">Complete Setup &rarr;</button>
+    </div>
+  </div>
+
+  <!-- ── Step 5: Done ── -->
+  <div class="step" id="step-5">
+    <div class="done-icon">&#10003;</div>
+    <h2 style="text-align:center;color:var(--green)">Setup Complete!</h2>
+    <p class="sub" style="text-align:center;margin-top:8px">NullShift is configured and ready. Start the server with:</p>
+
+    <div class="code-block">uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload</div>
+
+    <p style="color:var(--muted);font-size:0.82rem;margin-top:16px;line-height:1.6">
+      If the server is already running, it will continue to work — no restart required for config.db changes.<br><br>
+      Open <strong style="color:var(--cyan)">http://localhost:8000</strong> and log in with the admin account you just created.<br><br>
+      To add LLM API keys or more SIEM connectors, go to <strong style="color:var(--cyan)">Admin &rarr; Settings</strong> after login.
+    </p>
+
+    <div class="btn-row" style="justify-content:center;margin-top:28px">
+      <a href="/login" style="text-decoration:none">
+        <button class="btn-primary">Go to Login &rarr;</button>
+      </a>
+    </div>
+  </div>
+
+</div><!-- .card -->
+
+<script>
+let _currentStep = 1;
+let _llmChoice = 'sdk';
+
+// ── Navigation ──────────────────────────────────────────────────────────────
+function goTo(n) {
+  document.getElementById('step-' + _currentStep).classList.remove('active');
+  document.getElementById('step-' + n).classList.add('active');
+  _currentStep = n;
+  updateProgress(n);
+}
+
+function updateProgress(active) {
+  const dots = document.querySelectorAll('.step-dot');
+  const lines = document.querySelectorAll('.step-line');
+  dots.forEach((d, i) => {
+    const n = i + 1;
+    d.classList.remove('active', 'done');
+    if (n < active) d.classList.add('done');
+    else if (n === active) d.classList.add('active');
+    const dot = d.querySelector('.dot');
+    if (n < active) dot.textContent = '✓';
+    else dot.textContent = String(n);
+  });
+  lines.forEach((l, i) => {
+    l.classList.toggle('done', i < active - 1);
+  });
+}
+
+// ── LLM radio cards ──────────────────────────────────────────────────────────
+function selectLlm(val) {
+  _llmChoice = val;
+  document.querySelectorAll('.radio-card').forEach(c => {
+    const r = c.querySelector('input[type="radio"]');
+    c.classList.toggle('selected', r && r.value === val);
+    if (r && r.value === val) r.checked = true;
+  });
+}
+
+// ── SIEM field toggle ────────────────────────────────────────────────────────
+function showSiemFields() {
+  const providers = ['limacharlie','wazuh','splunk','elastic','sentinel'];
+  const sel = document.getElementById('siem_provider').value;
+  providers.forEach(p => {
+    document.getElementById('fields-' + p).classList.toggle('show', p === sel);
+  });
+}
+
+// ── Validation ───────────────────────────────────────────────────────────────
+function showAlert(id, msg, type='err') {
+  const el = document.getElementById('alert-' + id);
+  el.textContent = msg;
+  el.className = 'alert alert-' + type + ' show';
+}
+function clearAlert(id) {
+  const el = document.getElementById('alert-' + id);
+  if (el) { el.textContent = ''; el.className = 'alert'; }
+}
+
+function validateAdmin() {
+  clearAlert(2);
+  const user = document.getElementById('admin_username').value.trim();
+  const pw   = document.getElementById('admin_password').value;
+  const pw2  = document.getElementById('admin_password2').value;
+  if (!user) return showAlert(2, 'Username is required.');
+  if (pw.length < 16) return showAlert(2, 'Password must be at least 16 characters.');
+  if (pw !== pw2) return showAlert(2, 'Passwords do not match.');
+  goTo(3);
+}
+
+function validateLlm() {
+  clearAlert(3);
+  goTo(4);
+}
+
+// ── Submit ───────────────────────────────────────────────────────────────────
+async function completeSetup() {
+  clearAlert(4);
+  const btn = document.getElementById('btn-complete');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const provider = document.getElementById('siem_provider').value;
+  const payload = {
+    admin_username: document.getElementById('admin_username').value.trim(),
+    admin_password: document.getElementById('admin_password').value,
+    sdk_enabled: _llmChoice === 'sdk',
+    siem_provider: provider === 'skip' ? null : provider,
+  };
+
+  // Collect SIEM-specific fields
+  if (provider === 'limacharlie') {
+    payload.limacharlie_oid     = document.getElementById('lc_oid').value.trim();
+    payload.limacharlie_api_key = document.getElementById('lc_api_key').value.trim();
+  } else if (provider === 'wazuh') {
+    payload.wazuh_api_url       = document.getElementById('wazuh_api_url').value.trim();
+    payload.wazuh_indexer_url   = document.getElementById('wazuh_indexer_url').value.trim();
+    payload.wazuh_indexer_user  = document.getElementById('wazuh_indexer_user').value.trim();
+    payload.wazuh_indexer_pass  = document.getElementById('wazuh_indexer_pass').value;
+    payload.wazuh_api_token     = document.getElementById('wazuh_api_token').value;
+  } else if (provider === 'splunk') {
+    payload.splunk_url   = document.getElementById('splunk_url').value.trim();
+    payload.splunk_token = document.getElementById('splunk_token').value;
+    payload.splunk_index = document.getElementById('splunk_index').value.trim() || '*';
+  } else if (provider === 'elastic') {
+    payload.elastic_url     = document.getElementById('elastic_url').value.trim();
+    payload.elastic_api_key = document.getElementById('elastic_api_key').value;
+    payload.elastic_index   = document.getElementById('elastic_index').value.trim();
+  } else if (provider === 'sentinel') {
+    payload.sentinel_workspace_id  = document.getElementById('sentinel_workspace_id').value.trim();
+    payload.sentinel_tenant_id     = document.getElementById('sentinel_tenant_id').value.trim();
+    payload.sentinel_client_id     = document.getElementById('sentinel_client_id').value.trim();
+    payload.sentinel_client_secret = document.getElementById('sentinel_client_secret').value;
+  }
+
+  try {
+    const resp = await fetch('/api/setup/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      showAlert(4, data.detail || data.error || 'Setup failed. Check server logs.');
+      btn.disabled = false;
+      btn.textContent = 'Complete Setup →';
+      return;
+    }
+    goTo(5);
+  } catch (e) {
+    showAlert(4, 'Network error: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Complete Setup →';
+  }
+}
+</script>
+</body>
+</html>
