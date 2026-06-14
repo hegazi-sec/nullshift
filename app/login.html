@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>NullShift — Sign In</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:      #060b14;
+      --bg2:     #0a1120;
+      --bg3:     #0f1928;
+      --border:  #1a2740;
+      --border2: #243352;
+      --text:    #a8bfd8;
+      --text2:   #c8dff0;
+      --muted:   #4a6080;
+      --accent:  #00b4d8;
+      --red:     #ef4444;
+      --font-ui: 'Work Sans', system-ui, sans-serif;
+      --font-hd: 'Chakra Petch', monospace;
+      --font-mono:'JetBrains Mono', monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-ui);
+      background: var(--bg);
+      color: var(--text2);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-image: radial-gradient(circle, #1a2740 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+
+    .login-wrap {
+      width: 100%;
+      max-width: 380px;
+      padding: 0 16px;
+      animation: fadein .35s ease;
+    }
+    @keyframes fadein {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Brand */
+    .brand {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+    .brand-ring {
+      width: 52px; height: 52px;
+      border-radius: 14px;
+      background: rgba(0,180,216,.08);
+      border: 1px solid rgba(0,180,216,.25);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    .brand-ring::before {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 18px;
+      border: 1px solid rgba(0,180,216,.1);
+    }
+    .brand-hex {
+      font-family: var(--font-hd);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .brand-name {
+      font-family: var(--font-hd);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--text2);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .brand-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      animation: pulse 2.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; box-shadow: 0 0 6px var(--accent); }
+      50%      { opacity: .4; box-shadow: 0 0 14px var(--accent); }
+    }
+    .brand-sub {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    /* Card */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 28px 26px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: .6;
+    }
+
+    .card-title {
+      font-family: var(--font-hd);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+
+    .field { margin-bottom: 16px; }
+    .field label {
+      display: block;
+      font-family: var(--font-hd);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .field input {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      color: var(--text2);
+      font-family: var(--font-ui);
+      font-size: 14px;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .field input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,180,216,.12);
+    }
+    .field input::placeholder { color: var(--muted); }
+
+    .btn-submit {
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-family: var(--font-hd);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 11px;
+      cursor: pointer;
+      margin-top: 6px;
+      transition: background .15s, opacity .15s;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-submit:hover { background: #00c8f0; }
+    .btn-submit:active { opacity: .85; }
+
+    /* Footer */
+    .login-footer {
+      text-align: center;
+      margin-top: 20px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: .06em;
+    }
+  </style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="brand">
+    <div class="brand-ring">
+      <span class="brand-hex">⬡</span>
+    </div>
+    <div class="brand-name">
+      <div class="brand-dot"></div>
+      NullShift
+    </div>
+    <div class="brand-sub">L1 Analyst Console · Secure Access</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Authenticate</div>
+    <form method="post" action="/login">
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" autocomplete="username" required placeholder="analyst_01"/>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required placeholder="••••••••"/>
+      </div>
+      <button class="btn-submit" type="submit">Sign In</button>
+    </form>
+  </div>
+
+  <div class="login-footer">All access is logged · Unauthorised access is prohibited</div>
+</div>
+</body>
+</html>

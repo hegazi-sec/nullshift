@@ -1,0 +1,10 @@
+# Package metadata — for open source distribution only.
+# The nullshift CLI command is registered by setup.py during first-run setup.
+
+[project]
+name = "nullshift"
+version = "0.1.0"
+description = "AI-Powered Security Operations Center triage assistant"
+requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "Apache-2.0" }

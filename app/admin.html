@@ -1,0 +1,1722 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Settings · NullShift</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:       #060b14;
+      --bg2:      #0a1120;
+      --bg3:      #0f1928;
+      --border:   #1a2740;
+      --border2:  #243352;
+      --text:     #a8bfd8;
+      --text2:    #c8dff0;
+      --muted:    #4a6080;
+      --accent:   #00b4d8;
+      --green:    #22c55e;
+      --red:      #ef4444;
+      --orange:   #f97316;
+      --yellow:   #eab308;
+      --font-ui:  'Chakra Petch', monospace;
+      --font-hd:  'Chakra Petch', monospace;
+      --font-mono:'JetBrains Mono', monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-ui);
+      background: var(--bg);
+      color: var(--text2);
+      min-height: 100vh;
+      background-image: radial-gradient(circle, #1a2740 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+
+    /* ── Header ─────────────────────────────────── */
+    .topbar {
+      position: sticky; top: 0; z-index: 10;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-hd);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .brand-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      animation: pulse 2.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; box-shadow: 0 0 6px var(--accent); }
+      50%      { opacity: .4; box-shadow: 0 0 14px var(--accent); }
+    }
+    .page-title {
+      font-family: var(--font-hd);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-left: 4px;
+    }
+    .topbar-right { display: flex; gap: 8px; align-items: center; }
+    .btn-nav {
+      font-family: var(--font-hd);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border2);
+      color: var(--muted);
+      background: transparent;
+      text-decoration: none;
+      cursor: pointer;
+      transition: color .12s, border-color .12s;
+    }
+    .btn-nav:hover { color: var(--text2); border-color: var(--accent); }
+
+    /* ── Page layout ────────────────────────────── */
+    .page { max-width: 960px; margin: 0 auto; padding: 28px 24px 60px; }
+
+    /* ── Tabs ───────────────────────────────────── */
+    .tabs {
+      display: flex;
+      gap: 2px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+    .tab {
+      font-family: var(--font-hd);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 10px 16px;
+      cursor: pointer;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color .12s, border-color .12s;
+    }
+    .tab:hover { color: var(--text2); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .pane { display: none; }
+    .pane.active { display: block; }
+
+    /* ── Section headings ───────────────────────── */
+    .section-title {
+      font-family: var(--font-hd);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .section-desc {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 16px;
+      line-height: 1.6;
+    }
+    .section-desc code {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      border-radius: 3px;
+      color: #7dd3fc;
+    }
+
+    /* ── Users table ────────────────────────────── */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-bottom: 24px;
+    }
+    .data-table th {
+      background: var(--bg3);
+      color: var(--accent);
+      font-family: var(--font-hd);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 9px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border2);
+    }
+    .data-table td {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      vertical-align: middle;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: rgba(0,180,216,.03); }
+    .data-table-wrap {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+
+    /* ── Create user form ───────────────────────── */
+    .create-form {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 140px auto;
+      gap: 10px;
+      align-items: end;
+    }
+    .form-field label {
+      display: block;
+      font-family: var(--font-hd);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+    /* Global input/select theming — covers all inputs regardless of wrapper */
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]),
+    select,
+    textarea {
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      color: var(--text2);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      outline: none;
+      transition: border-color .12s;
+    }
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]):focus,
+    select:focus,
+    textarea:focus { border-color: var(--accent); }
+    select option { background: var(--bg2); color: var(--text2); }
+
+    .form-field input,
+    .form-field select {
+      width: 100%;
+      padding: 8px 10px;
+    }
+
+    /* ── Shared button styles ───────────────────── */
+    .btn {
+      font-family: var(--font-hd);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: opacity .12s, background .12s;
+      white-space: nowrap;
+    }
+    .btn:hover { opacity: .85; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-danger  { background: var(--red);    color: #fff; }
+    .btn-ghost   {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border2);
+    }
+    .btn-ghost:hover { color: var(--text); border-color: var(--accent); opacity: 1; }
+
+    /* ── Pill badges ────────────────────────────── */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .04em;
+    }
+    .pill.green  { background: rgba(34,197,94,.12);  color: var(--green);  border: 1px solid rgba(34,197,94,.25); }
+    .pill.gray   { background: rgba(74,96,128,.15);  color: var(--muted);  border: 1px solid var(--border2); }
+    .pill.red    { background: rgba(239,68,68,.12);  color: var(--red);    border: 1px solid rgba(239,68,68,.25); }
+    .pill.yellow { background: rgba(234,179,8,.1);   color: var(--yellow); border: 1px solid rgba(234,179,8,.25); }
+
+    /* ── Active provider selector ───────────────── */
+    .active-provider-bar {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .active-provider-bar label {
+      font-family: var(--font-hd);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .active-provider-bar select {
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      color: var(--text2);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      padding: 7px 10px;
+      outline: none;
+      transition: border-color .12s;
+    }
+    .active-provider-bar select:focus { border-color: var(--accent); }
+    .active-provider-bar select option { background: var(--bg2); }
+    #activeStatus {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--green);
+    }
+
+    /* ── Provider cards ─────────────────────────── */
+    .provider-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 14px;
+      overflow: hidden;
+      transition: border-color .15s;
+    }
+    .provider-card:hover { border-color: var(--border2); }
+    .provider-card.configured { border-left: 3px solid var(--accent); }
+    .provider-card.not-configured { border-left: 3px solid var(--border2); }
+
+    .provider-card-head {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .provider-card-info { flex: 1; min-width: 0; }
+    .provider-card-info h4 {
+      font-family: var(--font-hd);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      color: var(--text2);
+      margin-bottom: 3px;
+    }
+    .provider-card-info .desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .provider-card-body { padding: 14px 18px; }
+    .pfield {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      gap: 8px 14px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .pfield:last-child { margin-bottom: 0; }
+    .pfield label {
+      font-family: var(--font-hd);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .pfield input[type="text"],
+    .pfield select {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      color: var(--text2);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 7px 10px;
+      outline: none;
+      transition: border-color .12s;
+    }
+    .pfield input[type="text"]:focus,
+    .pfield select:focus { border-color: var(--accent); }
+    .pfield select option { background: var(--bg2); }
+
+    .custom-model-hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 5px;
+      margin-bottom: 4px;
+      font-family: var(--font-mono);
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Usage / KV grid ────────────────────────── */
+    .kv-grid {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 6px 20px;
+      margin-bottom: 16px;
+    }
+    .kv-grid .k {
+      font-family: var(--font-hd);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+    }
+    .kv-grid .v {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text2);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .usage-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin-bottom: 14px;
+    }
+    .usage-card-title {
+      font-family: var(--font-hd);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .usage-card-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* Progress bar */
+    .progress-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .progress {
+      flex: 1;
+      height: 8px;
+      border-radius: 4px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .progress .bar {
+      height: 100%;
+      border-radius: 4px;
+      transition: width .4s ease;
+      background: var(--accent);
+    }
+    .progress .bar.warn { background: var(--yellow); }
+    .progress .bar.crit { background: var(--red); box-shadow: 0 0 8px rgba(239,68,68,.4); }
+    .pct-label {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text2);
+      min-width: 34px;
+      text-align: right;
+    }
+
+    .hint-box {
+      background: rgba(234,179,8,.07);
+      border: 1px solid rgba(234,179,8,.2);
+      color: var(--yellow);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+
+    /* ── Chain editor ───────────────────────────────── */
+    .chain-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 5px;
+      cursor: grab;
+      user-select: none;
+      transition: opacity .15s, border-color .15s;
+    }
+    .chain-row.drag-over { border-color: var(--accent); background: var(--bg3); }
+    .chain-row.dragging  { opacity: .4; cursor: grabbing; }
+    .chain-handle {
+      color: var(--muted);
+      font-size: 13px;
+      cursor: grab;
+      padding: 0 2px;
+    }
+    .chain-num {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      min-width: 18px;
+      text-align: right;
+    }
+    .chain-label {
+      flex: 1;
+      font-family: var(--font-ui);
+      font-size: 13px;
+      color: var(--text2);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .chain-btns { display: flex; gap: 4px; }
+    .chain-btn {
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      color: var(--muted);
+      border-radius: 4px;
+      padding: 3px 7px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: color .12s, border-color .12s;
+    }
+    .chain-btn:hover:not(:disabled) { color: var(--text2); border-color: var(--accent); }
+    .chain-btn:disabled { opacity: .3; cursor: default; }
+    .chain-btn.chain-rm:hover:not(:disabled) { color: var(--red); border-color: var(--red); }
+
+    /* Toggle switch */
+    .toggle-wrap { position:relative; display:inline-block; width:40px; height:22px; flex-shrink:0; }
+    .toggle-wrap input { opacity:0; width:0; height:0; }
+    .toggle-slider {
+      position:absolute; inset:0; cursor:pointer;
+      background:var(--border2); border-radius:22px; transition:.2s;
+    }
+    .toggle-slider::before {
+      content:''; position:absolute; height:16px; width:16px; left:3px; bottom:3px;
+      background:#fff; border-radius:50%; transition:.2s;
+    }
+    .toggle-wrap input:checked + .toggle-slider { background:var(--accent); }
+    .toggle-wrap input:checked + .toggle-slider::before { transform:translateX(18px); }
+
+    /* Scroll */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Top bar ────────────────────────────────────────────────── -->
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div class="brand"><div class="brand-dot"></div>NullShift</div>
+    <span class="page-title">/ Settings</span>
+  </div>
+  <div class="topbar-right">
+    <a class="btn-nav" href="/">Chat</a>
+    <a class="btn-nav" href="/logout">Log out</a>
+  </div>
+</div>
+
+<!-- ── Page ───────────────────────────────────────────────────── -->
+<div class="page">
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" data-pane="users">Users</div>
+    <div class="tab" data-pane="providers">LLM Providers</div>
+    <div class="tab" data-pane="connectors">Connectors</div>
+    <div class="tab" data-pane="rag">RAG</div>
+    <div class="tab" data-pane="vision">Vision</div>
+    <div class="tab" data-pane="usage">Usage</div>
+  </div>
+
+  <!-- ─ Users ────────────────────────────────────────────────── -->
+  <div class="pane active" id="pane-users">
+    <div class="section-title">Active users</div>
+    <div id="users" class="data-table-wrap">
+      <div style="padding:16px;font-family:var(--font-mono);font-size:12px;color:var(--muted)">Loading…</div>
+    </div>
+
+    <div class="section-title" style="margin-top:28px;">Create user</div>
+    <div class="create-form">
+      <form id="createForm">
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Username</label>
+            <input name="username" type="text" placeholder="analyst_02" required/>
+          </div>
+          <div class="form-field">
+            <label>Password</label>
+            <input type="password" name="password" placeholder="min 16 chars recommended" required/>
+          </div>
+          <div class="form-field">
+            <label>Role</label>
+            <select name="role">
+              <option value="l1">L1 Analyst</option>
+              <option value="l2">L2 Analyst</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" type="submit" style="height:36px;align-self:end;">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ─ LLM Providers ─────────────────────────────────────────── -->
+  <div class="pane" id="pane-providers">
+    <div class="section-title">Active provider</div>
+    <div class="active-provider-bar">
+      <label for="activeProvider">Route all requests to:</label>
+      <select id="activeProvider">
+        <option value="auto">Auto (chain fallback)</option>
+      </select>
+      <button class="btn btn-primary" id="saveActiveBtn">Save</button>
+      <span id="activeStatus"></span>
+    </div>
+
+    <div class="section-title" style="margin-top:24px;">Fallback chain order</div>
+    <div class="section-desc">
+      Arrange providers in the order they should be tried. Unconfigured providers are skipped automatically. Changes take effect immediately after saving.
+    </div>
+    <div id="chainEditor" style="margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <select id="addProviderSel" style="flex:1;min-width:160px;max-width:260px;"></select>
+      <button class="btn btn-ghost" id="addToChainBtn">+ Add</button>
+      <button class="btn btn-primary" id="saveChainBtn">Save chain order</button>
+      <span id="chainStatus" style="font-family:var(--font-mono);font-size:11px;color:var(--muted);"></span>
+    </div>
+
+    <div class="section-title" style="margin-top:28px;">Provider configuration</div>
+    <div class="section-desc">
+      Changes apply immediately to new requests — no restart needed. Leave key fields blank to fall back to <code>.env</code>.
+    </div>
+    <div id="providerList"></div>
+  </div>
+
+  <!-- ─ Connectors ────────────────────────────────────────────── -->
+  <div class="pane" id="pane-connectors">
+
+    <!-- SIEM -->
+    <div class="section-title">SIEM Connector</div>
+    <div class="section-desc">Change your SIEM provider or update credentials at any time without re-running setup.</div>
+
+    <div class="pfield" style="margin-top:14px;">
+      <label>Provider</label>
+      <select id="siemProviderSel" style="width:100%;max-width:280px;">
+        <option value="">— none —</option>
+        <option value="limacharlie">LimaCharlie</option>
+        <option value="wazuh">Wazuh</option>
+        <option value="splunk">Splunk</option>
+        <option value="elastic">Elastic / Elastic SIEM</option>
+        <option value="sentinel">Microsoft Sentinel</option>
+      </select>
+    </div>
+
+    <!-- LimaCharlie fields -->
+    <div id="siem-lc" class="siem-fields" style="display:none;margin-top:12px;">
+      <div class="pfield"><label>Organisation ID (OID)</label>
+        <input type="text" data-siem-field="limacharlie_oid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div class="pfield"><label>API Key</label>
+        <input type="password" data-siem-field="limacharlie_api_key" placeholder="secret API key" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div style="margin-top:6px;"><button class="btn btn-ghost" data-test-siem="limacharlie">Test connection</button>
+        <span class="siem-test-status" data-for="limacharlie" style="font-size:12px;color:var(--muted);margin-left:10px;"></span></div>
+    </div>
+
+    <!-- Wazuh fields -->
+    <div id="siem-wazuh" class="siem-fields" style="display:none;margin-top:12px;">
+      <div class="pfield"><label>Manager API URL</label>
+        <input type="text" data-siem-field="wazuh_api_url" placeholder="https://wazuh-manager:55000" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div class="pfield"><label>Indexer URL</label>
+        <input type="text" data-siem-field="wazuh_indexer_url" placeholder="https://wazuh-indexer:9200" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div class="pfield"><label>Indexer Username</label>
+        <input type="text" data-siem-field="wazuh_indexer_user" placeholder="admin" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div class="pfield"><label>Indexer Password</label>
+        <input type="password" data-siem-field="wazuh_indexer_pass" placeholder="password" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div style="margin-top:6px;"><button class="btn btn-ghost" data-test-siem="wazuh">Test connection</button>
+        <span class="siem-test-status" data-for="wazuh" style="font-size:12px;color:var(--muted);margin-left:10px;"></span></div>
+    </div>
+
+    <!-- Splunk fields -->
+    <div id="siem-splunk" class="siem-fields" style="display:none;margin-top:12px;">
+      <div class="pfield"><label>Splunk URL</label>
+        <input type="text" data-siem-field="splunk_url" placeholder="https://splunk:8089" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div class="pfield"><label>HEC / API Token</label>
+        <input type="password" data-siem-field="splunk_token" placeholder="token" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div class="pfield"><label>Index</label>
+        <input type="text" data-siem-field="splunk_index" placeholder="main" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div style="margin-top:6px;"><button class="btn btn-ghost" data-test-siem="splunk">Test connection</button>
+        <span class="siem-test-status" data-for="splunk" style="font-size:12px;color:var(--muted);margin-left:10px;"></span></div>
+    </div>
+
+    <!-- Elastic fields -->
+    <div id="siem-elastic" class="siem-fields" style="display:none;margin-top:12px;">
+      <div class="pfield"><label>Elasticsearch URL</label>
+        <input type="text" data-siem-field="elastic_url" placeholder="https://elastic:9200" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div class="pfield"><label>API Key</label>
+        <input type="password" data-siem-field="elastic_api_key" placeholder="base64 encoded key" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div class="pfield"><label>Index</label>
+        <input type="text" data-siem-field="elastic_index" placeholder=".alerts-security.alerts-default" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div style="margin-top:6px;"><button class="btn btn-ghost" data-test-siem="elastic">Test connection</button>
+        <span class="siem-test-status" data-for="elastic" style="font-size:12px;color:var(--muted);margin-left:10px;"></span></div>
+    </div>
+
+    <!-- Sentinel fields -->
+    <div id="siem-sentinel" class="siem-fields" style="display:none;margin-top:12px;">
+      <div class="pfield"><label>Workspace ID</label>
+        <input type="text" data-siem-field="sentinel_workspace_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div class="pfield"><label>Tenant ID</label>
+        <input type="text" data-siem-field="sentinel_tenant_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div class="pfield"><label>Client ID</label>
+        <input type="text" data-siem-field="sentinel_client_id" placeholder="app registration client ID" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div class="pfield"><label>Client Secret</label>
+        <input type="password" data-siem-field="sentinel_client_secret" placeholder="client secret" autocomplete="off" style="width:100%;max-width:400px;"/></div>
+      <div style="margin-top:6px;"><button class="btn btn-ghost" data-test-siem="sentinel">Test connection</button>
+        <span class="siem-test-status" data-for="sentinel" style="font-size:12px;color:var(--muted);margin-left:10px;"></span></div>
+    </div>
+
+    <div style="margin-top:14px;display:flex;gap:10px;align-items:center;">
+      <button class="btn btn-primary" id="saveSiemBtn">Save SIEM</button>
+      <span id="siemSaveStatus" style="font-size:12px;color:var(--muted);"></span>
+    </div>
+
+    <hr style="border:none;border-top:1px solid var(--border);margin:28px 0;"/>
+
+    <!-- VirusTotal -->
+    <div class="section-title">VirusTotal (Threat Intelligence)</div>
+    <div class="section-desc">
+      When set, NullShift automatically enriches IPs, domains, and file hashes
+      found in every investigation against VirusTotal — regardless of RAG status.
+      This is a dedicated TI step in the pipeline.
+    </div>
+    <div class="pfield" style="margin-top:14px;">
+      <label>API Key <span style="font-weight:400;color:var(--muted);font-size:12px;">(VirusTotal v3)</span></label>
+      <input type="password" id="vtApiKey" placeholder="Enter your VT API key"
+        autocomplete="off" style="width:100%;max-width:400px;"/>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
+      <button class="btn btn-primary" id="saveVtBtn">Save</button>
+      <button class="btn btn-ghost" id="testVtBtn">Test key</button>
+      <span id="vtSaveStatus" style="font-size:12px;color:var(--muted);"></span>
+    </div>
+
+  </div>
+
+  <!-- ─ RAG / Knowledge Base ──────────────────────────────────── -->
+  <div class="pane" id="pane-rag">
+    <div class="section-title">RAG / Knowledge Base</div>
+    <div class="section-desc">
+      Controls whether the app indexes and searches your local playbooks and
+      cybersecurity skills at startup. Requires a provider that supports
+      embeddings (OpenAI, Gemini, or Ollama).
+      <br><strong>Changes take effect immediately — no restart needed.</strong>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:16px;margin:18px 0 24px;">
+      <label style="font-weight:600;font-size:14px;" for="ragEnabledToggle">Enable RAG</label>
+      <label class="toggle-wrap">
+        <input type="checkbox" id="ragEnabledToggle" checked>
+        <span class="toggle-slider"></span>
+      </label>
+      <span id="ragEnabledLabel" style="font-family:var(--font-mono);font-size:12px;color:var(--muted);">On</span>
+    </div>
+
+    <div id="ragProviderRow">
+      <div class="section-title" style="margin-top:0;">Embedding provider</div>
+      <div class="section-desc">
+        <b>Auto</b> walks your provider chain and uses the first one that supports
+        embeddings and has a key configured.<br>
+        Picking a specific provider skips chain logic entirely.
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;">
+        <select id="ragProviderSel" style="min-width:200px;">
+          <option value="auto">Auto (follow provider chain)</option>
+          <option value="openai">OpenAI</option>
+          <option value="gemini">Gemini</option>
+          <option value="ollama">Ollama (local)</option>
+        </select>
+      </div>
+      <div id="ollamaUrlRow" style="margin-top:14px;display:none;">
+        <div class="section-title" style="margin-top:0;margin-bottom:6px;">Ollama URL <span style="font-weight:400;color:var(--muted);font-size:12px;">(required — same value as LLM Providers tab)</span></div>
+        <input type="text" id="ragOllamaUrlInput"
+          placeholder="e.g. http://localhost:11434 or http://your-tailscale-ip:11434"
+          autocomplete="off"
+          style="width:100%;max-width:480px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:13px;"/>
+      </div>
+      <div style="margin-top:14px;">
+        <div class="section-title" style="margin-top:0;margin-bottom:6px;">Embedding model <span style="font-weight:400;color:var(--muted);font-size:12px;">(optional — leave blank to use provider default)</span></div>
+        <input type="text" id="ragModelInput"
+          placeholder="e.g. nomic-embed-text, gemini-embedding-001, text-embedding-3-small"
+          autocomplete="off"
+          style="width:100%;max-width:480px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:13px;"/>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:10px;align-items:center;">
+        <button class="btn btn-primary" id="saveRagBtn">Save</button>
+        <span id="ragStatus" style="font-family:var(--font-mono);font-size:11px;color:var(--muted);"></span>
+      </div>
+    </div>
+
+    <div id="ragStatusCard" style="margin-top:24px;padding:14px 16px;background:var(--surface2);border-radius:8px;font-size:13px;line-height:1.9;">
+      <div style="font-weight:600;margin-bottom:6px;color:var(--fg);">Current status</div>
+      <div id="ragStatusBody" style="color:var(--muted);font-family:var(--font-mono);font-size:12px;">Loading…</div>
+    </div>
+
+    <div style="margin-top:16px;padding:14px 16px;background:var(--surface2);border-radius:8px;font-size:13px;line-height:1.6;color:var(--muted);">
+      <b style="color:var(--fg);">Providers with embedding support</b><br>
+      OpenAI → <code>text-embedding-3-small</code><br>
+      Gemini → <code>text-embedding-004</code> (free tier available)<br>
+      Ollama → <code>nomic-embed-text</code> (fully local, no API key needed)<br><br>
+      Claude / Groq / xAI and others are LLM-only — they cannot generate embeddings.
+    </div>
+  </div>
+
+  <!-- ─ Vision / Image Upload ─────────────────────────────────── -->
+  <div class="pane" id="pane-vision">
+    <div class="section-title">Image upload limits</div>
+    <div class="section-desc">
+      These limits apply to all users regardless of which LLM provider is active.
+      Set them based on your provider's constraints and your deployment's bandwidth.
+    </div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:16px;">
+      <div>
+        <label style="display:block;font-size:13px;color:var(--fg2);margin-bottom:6px;">Max images per message</label>
+        <input type="number" id="visionMaxImages" min="1" max="20" value="4"
+          style="width:100px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:13px;">
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;color:var(--fg2);margin-bottom:6px;">Max image size (MB)</label>
+        <input type="number" id="visionMaxSizeMb" min="1" max="20" step="0.5" value="5"
+          style="width:100px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:13px;">
+      </div>
+    </div>
+    <button class="btn btn-primary" style="margin-top:16px;" onclick="saveVisionLimits()">Save limits</button>
+    <span id="visionSaveMsg" style="margin-left:12px;font-size:12px;color:var(--green);display:none;">Saved</span>
+
+    <div class="section-title" style="margin-top:32px;">Vision support by provider</div>
+    <div class="section-desc">Providers marked ✕ will receive a text note instead of the image.</div>
+    <table style="width:100%;border-collapse:collapse;margin-top:14px;font-size:13px;">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border);">
+          <th style="text-align:left;padding:6px 10px;color:var(--fg2);">Provider</th>
+          <th style="text-align:left;padding:6px 10px;color:var(--fg2);">Vision</th>
+          <th style="text-align:left;padding:6px 10px;color:var(--fg2);">Notes</th>
+        </tr>
+      </thead>
+      <tbody id="visionCapTable"></tbody>
+    </table>
+  </div>
+
+  <!-- ─ Usage ─────────────────────────────────────────────────── -->
+  <div class="pane" id="pane-usage">
+    <div class="section-title">LLM usage telemetry</div>
+    <div class="section-desc">
+      Captured from the most recent chat request. The 5-hour subscription window is reported by the Claude Agent SDK; other providers expose rate-limit info per-response.
+    </div>
+    <div id="usageBody">
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted)">Loading…</div>
+    </div>
+    <div style="margin-top:12px;">
+      <button class="btn btn-ghost" id="refreshUsageBtn">↺ Refresh</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function getCookie(n){ return document.cookie.split('; ').find(r=>r.startsWith(n+'='))?.split('=')[1] }
+  const csrf = getCookie('csrftoken');
+
+  // ─── Tabs ────────────────────────────────────────────────────
+  document.querySelectorAll('.tab').forEach(t => {
+    t.onclick = () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      document.getElementById('pane-' + t.dataset.pane).classList.add('active');
+      if (t.dataset.pane !== 'rag') _stopRagPoller();
+      if (t.dataset.pane === 'providers') loadProviders();
+      if (t.dataset.pane === 'usage') loadUsage();
+    };
+  });
+
+  // ─── Users ───────────────────────────────────────────────────
+  async function loadUsers(){
+    const el = document.getElementById('users');
+    try {
+      const r = await fetch('/admin/users');
+      if (!r.ok) { el.innerHTML = `<div style="padding:16px;font-family:var(--font-mono);font-size:12px;color:var(--red);">Error ${r.status} — ${r.statusText}</div>`; return; }
+      const j = await r.json();
+      const rows = j.users.map(u => `
+        <tr>
+          <td>${u.id}</td>
+          <td>${u.username}</td>
+          <td>${u.role}</td>
+          <td>${u.is_active
+            ? '<span class="pill green">active</span>'
+            : '<span class="pill gray">disabled</span>'}</td>
+          <td>${u.is_active
+            ? `<button class="btn btn-danger" style="padding:4px 10px;font-size:10px;" data-id="${u.id}">Disable</button>`
+            : ''}</td>
+        </tr>
+      `).join('');
+      el.innerHTML = `
+        <table class="data-table">
+          <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      el.querySelectorAll('button[data-id]').forEach(btn => {
+        btn.onclick = async () => {
+          await fetch(`/admin/users/${btn.dataset.id}/disable`, { method: 'PATCH', headers: { 'X-CSRF-Token': csrf } });
+          loadUsers();
+        };
+      });
+    } catch(e) {
+      el.innerHTML = `<div style="padding:16px;font-family:var(--font-mono);font-size:12px;color:var(--red);">Failed to load users: ${e.message}</div>`;
+    }
+  }
+
+  document.getElementById('createForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = { username: fd.get('username'), password: fd.get('password'), role: fd.get('role') };
+    await fetch('/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: JSON.stringify(body) });
+    e.target.reset();
+    loadUsers();
+  };
+
+  // ─── Providers ───────────────────────────────────────────────
+  let _providersCache = null;
+  let _settingsCache  = null;
+  let _chainOrder     = [];   // current chain editor state (array of provider names)
+
+  async function loadProviders(){
+    const [pr, st] = await Promise.all([
+      fetch('/api/admin/providers').then(r => r.json()),
+      fetch('/api/admin/settings').then(r => r.json()),
+    ]);
+    _providersCache = pr;
+    _settingsCache  = st;
+
+    // Rebuild active-provider dropdown from catalog
+    const apSel = document.getElementById('activeProvider');
+    apSel.innerHTML = '<option value="auto">Auto (chain fallback)</option>';
+    (pr.providers || []).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.label;
+      apSel.appendChild(opt);
+    });
+    apSel.value = pr.active_provider || 'auto';
+
+    // Initialize chain editor — only show configured providers unless user saved a custom chain
+    _chainOrder = pr.user_chain || pr.chain_order || [];
+    renderChainEditor();
+    rebuildAddProviderSelect();
+    renderProviderList();
+  }
+
+  // ─── Chain editor (drag-and-drop) ───────────────────────────
+  let _dragSrc = null;
+
+  function renderChainEditor(){
+    const el = document.getElementById('chainEditor');
+    if (!_providersCache) return;
+    const labelMap = {};
+    (_providersCache.providers || []).forEach(p => { labelMap[p.name] = p.label; });
+    const configured = new Set((_providersCache.chain_order || []));
+
+    if (!_chainOrder.length) {
+      el.innerHTML = '<div style="font-family:var(--font-mono);font-size:12px;color:var(--muted);padding:8px 0;">No providers configured. Add one below.</div>';
+      return;
+    }
+
+    el.innerHTML = _chainOrder.map((name, i) => {
+      const label = labelMap[name] || name;
+      const isCfg = configured.has(name);
+      const pill = isCfg
+        ? '<span class="pill green" style="font-size:10px;">configured</span>'
+        : '<span class="pill gray" style="font-size:10px;">not configured</span>';
+      return `<div class="chain-row" draggable="true" data-name="${name}">
+        <span class="chain-handle" title="Drag to reorder">⠿</span>
+        <span class="chain-num">${i + 1}</span>
+        <span class="chain-label">${label} ${pill}</span>
+        <div class="chain-btns">
+          <button class="chain-btn chain-rm" data-chain-rm data-name="${name}">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Drag-and-drop handlers
+    el.querySelectorAll('.chain-row').forEach(row => {
+      row.addEventListener('dragstart', e => {
+        _dragSrc = row;
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', row.dataset.name);
+      });
+      row.addEventListener('dragend', () => {
+        row.classList.remove('dragging');
+        el.querySelectorAll('.chain-row').forEach(r => r.classList.remove('drag-over'));
+      });
+      row.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        el.querySelectorAll('.chain-row').forEach(r => r.classList.remove('drag-over'));
+        if (row !== _dragSrc) row.classList.add('drag-over');
+      });
+      row.addEventListener('drop', e => {
+        e.preventDefault();
+        if (!_dragSrc || _dragSrc === row) return;
+        const srcName  = _dragSrc.dataset.name;
+        const destName = row.dataset.name;
+        const si = _chainOrder.indexOf(srcName);
+        const di = _chainOrder.indexOf(destName);
+        if (si < 0 || di < 0) return;
+        _chainOrder.splice(si, 1);
+        _chainOrder.splice(di, 0, srcName);
+        renderChainEditor();
+      });
+    });
+
+    el.querySelectorAll('[data-chain-rm]').forEach(btn => {
+      btn.onclick = () => {
+        _chainOrder = _chainOrder.filter(n => n !== btn.dataset.name);
+        renderChainEditor();
+        rebuildAddProviderSelect();
+      };
+    });
+  }
+
+  function rebuildAddProviderSelect(){
+    const sel = document.getElementById('addProviderSel');
+    const inChain = new Set(_chainOrder);
+    sel.innerHTML = '';
+    (_providersCache?.providers || []).forEach(p => {
+      if (inChain.has(p.name)) return;
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.label;
+      sel.appendChild(opt);
+    });
+    sel.disabled = sel.options.length === 0;
+  }
+
+  document.getElementById('addToChainBtn').onclick = () => {
+    const sel = document.getElementById('addProviderSel');
+    const v = sel.value;
+    if (v && !_chainOrder.includes(v)) {
+      _chainOrder.push(v);
+      renderChainEditor();
+      rebuildAddProviderSelect();
+    }
+  };
+
+  document.getElementById('saveChainBtn').onclick = async () => {
+    const statusEl = document.getElementById('chainStatus');
+    statusEl.textContent = 'Saving…';
+    statusEl.style.color = 'var(--muted)';
+    try {
+      await putSettings({ provider_chain: JSON.stringify(_chainOrder) });
+      statusEl.textContent = 'Chain saved ✓';
+      statusEl.style.color = 'var(--green)';
+      setTimeout(() => { statusEl.textContent = ''; }, 3000);
+      await loadProviders();
+    } catch(e) {
+      statusEl.textContent = 'Error: ' + e.message;
+      statusEl.style.color = 'var(--red)';
+    }
+  };
+
+  // ─── Provider card list ──────────────────────────────────────
+  function renderProviderList(){
+    const stored  = _settingsCache?.settings  || {};
+    const envDefs = _settingsCache?.env_defaults || {};
+    const list = document.getElementById('providerList');
+    list.innerHTML = '';
+
+    _providersCache.providers.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'provider-card ' + (p.configured ? 'configured' : 'not-configured');
+
+      const pill = p.configured
+        ? '<span class="pill green">● configured</span>'
+        : '<span class="pill gray">○ not configured</span>';
+
+      let keyFieldHtml = '';
+      if (p.key_field) {
+        const v       = stored[p.key_field];
+        const present = v && (typeof v === 'object' ? v.present : true);
+        const suffix  = (v && typeof v === 'object') ? v.suffix : '';
+        const placeholder = present
+          ? `••••${suffix}`
+          : (envDefs[p.key_field + '_set'] ? 'using .env value' : 'paste API key here');
+        const storedPill = present
+          ? '<span class="pill green" style="margin-left:4px;">stored</span>'
+          : '<span class="pill gray" style="margin-left:4px;">not stored</span>';
+        keyFieldHtml = `
+          <div class="pfield">
+            <label>API Key ${storedPill}</label>
+            <input type="text" data-field="${p.key_field}" data-secret="1"
+              placeholder="${placeholder}" autocomplete="off" spellcheck="false"/>
+          </div>`;
+      }
+
+      let baseUrlFieldHtml = '';
+      if (p.base_url_field) {
+        const v = stored[p.base_url_field] || envDefs[p.base_url_field] || '';
+        baseUrlFieldHtml = `
+          <div class="pfield">
+            <label>Base URL</label>
+            <input type="text" data-field="${p.base_url_field}"
+              value="${v}"
+              placeholder="http://localhost:11434/v1"
+              autocomplete="off" spellcheck="false"/>
+          </div>`;
+      }
+
+      let enableFieldHtml = '';
+      if (p.enable_field) {
+        const v       = stored[p.enable_field];
+        const enabled = v === 'true' || (v == null && envDefs.claude_agent_sdk_enabled);
+        enableFieldHtml = `
+          <div class="pfield">
+            <label>Enabled</label>
+            <select data-field="${p.enable_field}">
+              <option value="true"  ${enabled  ? 'selected' : ''}>true</option>
+              <option value="false" ${!enabled ? 'selected' : ''}>false</option>
+            </select>
+          </div>`;
+      }
+
+      let modelFieldHtml = '';
+      if (p.model_field) {
+        const v          = stored[p.model_field] || '';
+        const envDefault = envDefs[p.model_field] || '';
+        const opts       = p.model_options || [];
+        const knownVals  = new Set(opts.map(o => o.value));
+        const isCustom   = v && !knownVals.has(v);
+        const defaultLabel = envDefault ? `Use default (${envDefault})` : 'Use provider default';
+        let optionsHtml  = `<option value="">${defaultLabel}</option>`;
+        opts.forEach(o => {
+          optionsHtml += `<option value="${o.value}" ${o.value === v ? 'selected' : ''}>${o.label}</option>`;
+        });
+        if (isCustom) optionsHtml += `<option value="${v}" selected>Custom: ${v}</option>`;
+        modelFieldHtml = `
+          <div class="pfield">
+            <label>Model</label>
+            <div style="width:100%">
+              <select data-field="${p.model_field}" autocomplete="off" style="width:100%;"
+                ${isCustom ? 'disabled style="width:100%;opacity:0.4;"' : 'style="width:100%;"'}>${optionsHtml}</select>
+              <div class="custom-model-hint">Or enter any model name directly — overrides the list above:</div>
+              <input type="text" data-custom-model="${p.model_field}"
+                value="${isCustom ? v : ''}"
+                placeholder="e.g. qwen2.5:14b, llama3.3:70b, deepseek-r1 …"
+                autocomplete="off" style="width:100%;margin-top:0;"
+                oninput="this.closest('.pfield').querySelector('select').disabled=this.value.trim().length>0;
+                         this.closest('.pfield').querySelector('select').style.opacity=this.value.trim().length>0?'0.4':'1';"/>
+            </div>
+          </div>`;
+      }
+
+      const clearKeyBtn = p.key_field
+        ? `<button class="btn btn-ghost" data-action="clear-key" data-field="${p.key_field}">Clear stored key</button>`
+        : '';
+
+      card.innerHTML = `
+        <div class="provider-card-head">
+          <div class="provider-card-info">
+            <h4>${p.label}</h4>
+            <div class="desc">${p.description}</div>
+          </div>
+          <div>${pill}</div>
+        </div>
+        <div class="provider-card-body">
+          ${keyFieldHtml}
+          ${baseUrlFieldHtml}
+          ${enableFieldHtml}
+          ${modelFieldHtml}
+          <div class="card-actions">
+            <button class="btn btn-primary" data-action="save" data-provider="${p.name}">Save</button>
+            ${clearKeyBtn}
+          </div>
+        </div>`;
+      list.appendChild(card);
+    });
+
+    list.querySelectorAll('button[data-action="save"]').forEach(btn => {
+      btn.onclick = () => saveProviderRow(btn.closest('.provider-card'));
+    });
+    list.querySelectorAll('button[data-action="clear-key"]').forEach(btn => {
+      btn.onclick = () => putSettings({ [btn.dataset.field]: '' }).then(loadProviders);
+    });
+  }
+
+  async function saveProviderRow(cardEl){
+    const fields  = cardEl.querySelectorAll('input[data-field], select[data-field], textarea[data-field]');
+    const updates = {};
+    fields.forEach(el => {
+      const k = el.dataset.field, v = el.value;
+      if (el.dataset.secret === '1' && !v) return;
+      updates[k] = v;
+    });
+    cardEl.querySelectorAll('[data-custom-model]').forEach(el => {
+      const v = (el.value || '').trim();
+      if (v) updates[el.dataset.customModel] = v;
+    });
+    if (!Object.keys(updates).length) return;
+
+    const btn  = cardEl.querySelector('button[data-action="save"]');
+    const orig = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+      await putSettings(updates);
+      if (btn) { btn.textContent = 'Saved ✓'; btn.style.background = '#16a34a'; }
+      await loadProviders();
+    } catch(e) {
+      if (btn) { btn.textContent = 'Error'; btn.style.background = 'var(--red)'; }
+      console.error(e);
+    } finally {
+      if (btn) setTimeout(() => { btn.disabled = false; btn.textContent = orig; btn.style.background = ''; }, 1500);
+    }
+  }
+
+  document.getElementById('saveActiveBtn').onclick = async () => {
+    const v  = document.getElementById('activeProvider').value;
+    const el = document.getElementById('activeStatus');
+    el.textContent = 'Saving…';
+    try {
+      const r = await putSettings({ active_provider: v });
+      el.textContent = `Saved — active: ${r.active_provider}`;
+      setTimeout(() => { el.textContent = ''; }, 3000);
+    } catch(e) { el.textContent = 'Error: ' + e.message; el.style.color = 'var(--red)'; }
+  };
+
+  async function putSettings(body){
+    const r = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+
+  // ─── RAG ─────────────────────────────────────────────────────
+  let _ragPoller = null;
+
+  function _stopRagPoller() {
+    if (_ragPoller) { clearInterval(_ragPoller); _ragPoller = null; }
+  }
+
+  async function _fetchRagStatus() {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 6000);
+      const r = await fetch('/api/admin/rag/status', { signal: ctrl.signal });
+      clearTimeout(t);
+      return r.ok ? await r.json() : null;
+    } catch { return null; }
+  }
+
+  async function loadRagSettings(){
+    try {
+      const [st, rs] = await Promise.all([
+        fetch('/api/admin/settings').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+        _fetchRagStatus(),
+      ]);
+      const s        = st.settings || st;
+      const enabled  = (s.rag_enabled  ?? 'true') !== 'false';
+      const provider = s.rag_embedding_provider || 'auto';
+      const model    = s.rag_embedding_model || '';
+      const ollamaUrl = s.ollama_base_url || '';
+      document.getElementById('ragEnabledToggle').checked = enabled;
+      document.getElementById('ragEnabledLabel').textContent = enabled ? 'On' : 'Off';
+      document.getElementById('ragProviderSel').value = provider;
+      document.getElementById('ragModelInput').value = model;
+      document.getElementById('ragOllamaUrlInput').value = ollamaUrl;
+      document.getElementById('ollamaUrlRow').style.display = provider === 'ollama' ? '' : 'none';
+      _validateRagModel();
+      document.getElementById('ragProviderRow').style.opacity = enabled ? '1' : '0.4';
+      document.getElementById('ragProviderRow').style.pointerEvents = enabled ? '' : 'none';
+      renderRagStatus(rs);
+      // Auto-refresh while sync is running
+      _stopRagPoller();
+      if (rs && rs.sync_state === 'running') {
+        _ragPoller = setInterval(async () => {
+          const s = await _fetchRagStatus();
+          renderRagStatus(s);
+          if (!s || s.sync_state !== 'running') _stopRagPoller();
+        }, 3000);
+      }
+    } catch(e) {
+      document.getElementById('ragStatusBody').innerHTML =
+        `<span style="color:var(--red);">Error loading RAG settings: ${e.message}</span>`;
+    }
+  }
+
+  function renderRagStatus(s){
+    const el = document.getElementById('ragStatusBody');
+    if (!s) { el.innerHTML = '<span style="color:var(--red);">Could not reach status endpoint.</span>'; return; }
+    if (!s.enabled) {
+      el.innerHTML =
+        `<span style="color:var(--yellow);">● Disabled</span><br>` +
+        `Reason: ${s.reason || 'unknown'}`;
+      return;
+    }
+    const syncColor = s.sync_state === 'running'  ? 'var(--yellow)'
+                    : s.sync_state === 'complete' ? 'var(--green)'
+                    : s.sync_state === 'skipped'  ? 'var(--cyan)'
+                    : 'var(--muted)';
+    const syncIcon  = s.sync_state === 'running'  ? '⟳'
+                    : s.sync_state === 'complete' ? '✓'
+                    : s.sync_state === 'skipped'  ? '✓'
+                    : '—';
+    el.innerHTML =
+      `<span style="color:var(--green);">● Active</span><br>` +
+      `Provider&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${s.provider || '—'}<br>` +
+      `Collection&nbsp;&nbsp;&nbsp; ${s.collection || '—'}<br>` +
+      `Files indexed&nbsp; ${s.files_indexed ?? '—'}<br>` +
+      `Chunks indexed ${s.chunks_indexed ?? '—'}<br>` +
+      `<span style="color:${syncColor};">${syncIcon} ${s.sync_progress || s.sync_state || '—'}</span>`;
+  }
+
+  document.getElementById('ragEnabledToggle').addEventListener('change', function(){
+    const on = this.checked;
+    document.getElementById('ragEnabledLabel').textContent = on ? 'On' : 'Off';
+    document.getElementById('ragProviderRow').style.opacity = on ? '1' : '0.4';
+    document.getElementById('ragProviderRow').style.pointerEvents = on ? '' : 'none';
+  });
+
+  function _validateRagModel() {
+    const provider = document.getElementById('ragProviderSel').value;
+    const model    = document.getElementById('ragModelInput').value.trim();
+    const btn      = document.getElementById('saveRagBtn');
+    const el       = document.getElementById('ragStatus');
+    const needsModel = provider === 'ollama';
+    if (needsModel && !model) {
+      btn.disabled = true;
+      el.textContent = 'Model name is required for Ollama — enter it above before saving.';
+      el.style.color = 'var(--yellow)';
+    } else {
+      btn.disabled = false;
+      if (el.textContent.startsWith('Model name')) { el.textContent = ''; }
+    }
+  }
+
+  document.getElementById('ragProviderSel').addEventListener('change', () => {
+    const p = document.getElementById('ragProviderSel').value;
+    document.getElementById('ollamaUrlRow').style.display = p === 'ollama' ? '' : 'none';
+    _validateRagModel();
+  });
+  document.getElementById('ragModelInput').addEventListener('input', _validateRagModel);
+
+  document.getElementById('saveRagBtn').onclick = async () => {
+    const el      = document.getElementById('ragStatus');
+    const provider = document.getElementById('ragProviderSel').value;
+    const model    = document.getElementById('ragModelInput').value.trim();
+    const ollamaUrl = document.getElementById('ragOllamaUrlInput').value.trim();
+    if (provider === 'ollama' && !model) {
+      el.textContent = 'Model name is required for Ollama — enter it above before saving.';
+      el.style.color = 'var(--yellow)';
+      return;
+    }
+    el.textContent = 'Saving…'; el.style.color = 'var(--muted)';
+    const payload = {
+      rag_enabled:            document.getElementById('ragEnabledToggle').checked ? 'true' : 'false',
+      rag_embedding_provider: provider,
+      rag_embedding_model:    model,
+    };
+    if (provider === 'ollama' && ollamaUrl) payload.ollama_base_url = ollamaUrl;
+    try {
+      await putSettings(payload);
+      el.textContent = 'Saved ✓ — reloaded live, no restart needed.';
+      el.style.color = 'var(--green)';
+      setTimeout(() => { el.textContent = ''; el.style.color = 'var(--muted)'; }, 4000);
+    } catch(e) { el.textContent = 'Error: ' + e.message; el.style.color = 'var(--red)'; }
+  };
+
+  document.querySelector('.tab[data-pane="rag"]').addEventListener('click', loadRagSettings);
+
+  // ─── Usage ───────────────────────────────────────────────────
+  function fmtPct(u){
+    if (u == null) return null;
+    const p = u <= 1 ? u * 100 : u;
+    return Math.max(0, Math.min(100, Math.round(p)));
+  }
+  function fmtAbsTime(v){
+    if (v == null) return '—';
+    if (typeof v === 'number') return new Date(v * 1000).toLocaleString();
+    try { return new Date(v).toLocaleString(); } catch { return String(v); }
+  }
+  function fmtRelative(epochSec){
+    if (epochSec == null) return '';
+    const ms = epochSec * 1000 - Date.now();
+    if (ms <= 0) return ' (elapsed)';
+    const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    return ` · in ${h}h ${m}m`;
+  }
+
+  async function loadUsage(){
+    const body = document.getElementById('usageBody');
+    body.innerHTML = '<div style="font-family:var(--font-mono);font-size:12px;color:var(--muted)">Loading…</div>';
+    try {
+      const j = await fetch('/api/admin/usage').then(r => r.json());
+      let html = '';
+
+      // Provider chain card
+      html += `<div class="usage-card">
+        <div class="usage-card-title">Provider chain</div>
+        <div class="kv-grid">
+          <div class="k">Active</div>
+          <div class="v"><b>${j.active_provider}</b></div>
+          <div class="k">Configured</div>
+          <div class="v">${(j.configured_providers||[]).join(' → ') || '<i style="color:var(--muted)">none</i>'}</div>
+        </div>
+      </div>`;
+
+      // Rate limit card
+      if (j.last_rate_limit) {
+        const rl  = j.last_rate_limit;
+        const pct = fmtPct(rl.utilization);
+        const barCls = pct == null ? '' : pct >= 90 ? 'crit' : pct >= 70 ? 'warn' : '';
+        const statusPill = (rl.status === 'allowed' || rl.status === 'ok')
+          ? `<span class="pill green">${rl.status}</span>`
+          : `<span class="pill red">${rl.status || 'unknown'}</span>`;
+
+        html += `<div class="usage-card">
+          <div class="usage-card-title">Rate limit · ${rl.rate_limit_type || 'unknown'}</div>
+          <div class="kv-grid">
+            <div class="k">Status</div><div class="v">${statusPill}</div>`;
+        if (pct != null) {
+          html += `<div class="k">Utilization</div>
+            <div class="v">
+              <div class="progress-wrap" style="width:100%">
+                <div class="progress"><div class="bar ${barCls}" style="width:${pct}%"></div></div>
+                <span class="pct-label">${pct}%</span>
+              </div>
+            </div>`;
+        }
+        html += `<div class="k">Resets at</div>
+          <div class="v">${fmtAbsTime(rl.resets_at)}<span style="color:var(--muted)">${fmtRelative(rl.resets_at)}</span></div>`;
+        if (rl.overage_status) {
+          const ovPill = rl.overage_status === 'allowed'
+            ? `<span class="pill green">${rl.overage_status}</span>`
+            : `<span class="pill yellow">${rl.overage_status}</span>`;
+          html += `<div class="k">Overage</div><div class="v">${ovPill}</div>`;
+          if (rl.overage_resets_at) html += `<div class="k">Overage resets at</div>
+            <div class="v">${fmtAbsTime(rl.overage_resets_at)}<span style="color:var(--muted)">${fmtRelative(rl.overage_resets_at)}</span></div>`;
+        }
+        html += `<div class="k">Captured at</div><div class="v">${fmtAbsTime(rl.captured_at)}</div>
+          </div></div>`;
+      } else {
+        html += `<div class="hint-box">No rate-limit telemetry yet. This is populated after the first chat request using the Claude Agent SDK.</div>`;
+      }
+
+      // Last call card
+      if (j.last_call?.provider) {
+        const lc = j.last_call;
+        const okPill = lc.ok
+          ? `<span class="pill green">ok</span>`
+          : `<span class="pill red">failed</span>`;
+        html += `<div class="usage-card">
+          <div class="usage-card-title">Last LLM call</div>
+          <div class="kv-grid">
+            <div class="k">Provider</div><div class="v">${lc.provider}</div>
+            <div class="k">Model</div><div class="v">${lc.model || '<span style="color:var(--muted)">default</span>'}</div>
+            <div class="k">Status</div><div class="v">${okPill}</div>
+            <div class="k">Duration</div><div class="v">${lc.duration_ms != null ? lc.duration_ms + ' ms' : '—'}</div>
+            <div class="k">When</div><div class="v">${fmtAbsTime(lc.ts)}</div>
+            ${lc.error ? `<div class="k">Error</div><div class="v" style="color:var(--red)">${lc.error}</div>` : ''}
+          </div>
+        </div>`;
+      }
+
+      body.innerHTML = html;
+    } catch(e) {
+      body.innerHTML = `<div class="hint-box" style="border-color:var(--red);color:var(--red);">Error: ${e.message}</div>`;
+    }
+  }
+
+  document.getElementById('refreshUsageBtn').onclick = loadUsage;
+
+  // ─── Vision ──────────────────────────────────────────────────
+  const VISION_CAPS = [
+    { name: 'anthropic',        label: 'Anthropic (Claude API)', supported: true,  note: 'All models — up to 20 images, 5 MB each (JPEG/PNG/GIF/WebP)' },
+    { name: 'openai',           label: 'OpenAI',                 supported: true,  note: 'gpt-5.x, gpt-4.1, gpt-4o, o3, o4-mini — up to 10 images, 20 MB each' },
+    { name: 'gemini',           label: 'Google Gemini',          supported: true,  note: 'All current models — up to 16 images per request' },
+    { name: 'groq',             label: 'Groq',                   supported: true,  note: 'Use llama-4-scout, llama-4-maverick, or qwen3-vl-32b' },
+    { name: 'xai',              label: 'xAI Grok',               supported: true,  note: 'grok-4.3 and grok-4-0709 support vision' },
+    { name: 'openrouter',       label: 'OpenRouter',             supported: true,  note: 'Depends on routed model' },
+    { name: 'qwen',             label: 'Qwen (Alibaba)',         supported: true,  note: 'qwen3-vl-plus and qwen3-vl-flash' },
+    { name: 'kimi',             label: 'Kimi (Moonshot)',        supported: true,  note: 'kimi-k2.5 supports vision' },
+    { name: 'ollama',           label: 'Ollama (local)',         supported: null,  note: 'llama4:scout, qwen3-vl, gemma3 support vision; others text-only' },
+    { name: 'claude_agent_sdk', label: 'Claude Agent SDK',       supported: false, note: 'No vision via CLI — switch to Anthropic API for image analysis' },
+    { name: 'deepseek',         label: 'DeepSeek',               supported: false, note: 'DeepSeek V4 is text-only; no vision support' },
+    { name: 'perplexity',       label: 'Perplexity',             supported: false, note: 'No vision support' },
+  ];
+
+  async function loadVisionSettings() {
+    try {
+      const r = await fetch('/api/admin/settings', { credentials: 'same-origin' });
+      const s = r.ok ? await r.json() : {};
+      document.getElementById('visionMaxImages').value = s.vision_max_images || 4;
+      document.getElementById('visionMaxSizeMb').value = s.vision_max_size_mb || 5;
+    } catch {}
+
+    const tbody = document.getElementById('visionCapTable');
+    tbody.innerHTML = '';
+    VISION_CAPS.forEach(p => {
+      const icon = p.supported === true ? '✓' : p.supported === null ? '?' : '✕';
+      const color = p.supported === true ? 'var(--green)' : p.supported === null ? 'var(--yellow)' : 'var(--red)';
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid var(--border)';
+      tr.innerHTML = `
+        <td style="padding:8px 10px;color:var(--fg);">${p.label}</td>
+        <td style="padding:8px 10px;font-weight:700;color:${color};">${icon}</td>
+        <td style="padding:8px 10px;color:var(--fg2);font-family:var(--font-mono);font-size:11px;">${p.note}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function saveVisionLimits() {
+    const imgs = parseInt(document.getElementById('visionMaxImages').value) || 4;
+    const mb   = parseFloat(document.getElementById('visionMaxSizeMb').value) || 5;
+    await putSettings({ vision_max_images: String(imgs), vision_max_size_mb: String(mb) });
+    const msg = document.getElementById('visionSaveMsg');
+    msg.style.display = 'inline';
+    setTimeout(() => msg.style.display = 'none', 2000);
+  }
+
+  document.querySelector('.tab[data-pane="vision"]').addEventListener('click', loadVisionSettings);
+
+  // ─── Connectors tab ─────────────────────────────────────────
+  const _siemFields = {
+    limacharlie: 'siem-lc',
+    wazuh:       'siem-wazuh',
+    splunk:      'siem-splunk',
+    elastic:     'siem-elastic',
+    sentinel:    'siem-sentinel',
+  };
+
+  function _showSiemFields(provider) {
+    Object.values(_siemFields).forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    if (provider && _siemFields[provider]) {
+      const el = document.getElementById(_siemFields[provider]);
+      if (el) el.style.display = '';
+    }
+  }
+
+  document.getElementById('siemProviderSel').addEventListener('change', function() {
+    _showSiemFields(this.value);
+  });
+
+  async function loadConnectors() {
+    try {
+      const st = await fetch('/api/admin/settings').then(r => r.ok ? r.json() : {}).catch(() => ({}));
+      const s = st.settings || st;
+
+      // SIEM
+      const provider = s.siem_provider || '';
+      document.getElementById('siemProviderSel').value = provider;
+      _showSiemFields(provider);
+      // Populate fields — secrets come back as {present, suffix} stubs (not strings)
+      document.querySelectorAll('[data-siem-field]').forEach(el => {
+        const key = el.dataset.siemField;
+        const v = s[key];
+        if (v === undefined || v === null) {
+          el.value = '';
+          if (el.type === 'password') el.placeholder = 'not configured';
+          return;
+        }
+        if (typeof v === 'object' && 'present' in v) {
+          // Masked secret stub — never expose the value, just signal it's there
+          el.value = '';
+          el.placeholder = v.present
+            ? `● already set${v.suffix ? ' (…' + v.suffix + ')' : ''} — paste to update`
+            : 'not configured';
+        } else {
+          el.value = v;
+        }
+      });
+
+      // VT — secret stub from API
+      const vtVal = s.vt_api_key;
+      const vtSet = !!(vtVal && (typeof vtVal === 'object' ? vtVal.present : true))
+                    || !!(st.env_defaults && st.env_defaults.vt_api_key_set);
+      const vtSuffix = (typeof vtVal === 'object' && vtVal && vtVal.suffix) ? ' (…' + vtVal.suffix + ')' : '';
+      document.getElementById('vtApiKey').value = '';
+      document.getElementById('vtApiKey').placeholder = vtSet
+        ? `● already set${vtSuffix} — paste to update`
+        : 'Enter your VT API key';
+    } catch(e) { console.error('loadConnectors', e); }
+  }
+
+  document.getElementById('saveSiemBtn').onclick = async () => {
+    const st = document.getElementById('siemSaveStatus');
+    st.textContent = 'Saving…'; st.style.color = 'var(--muted)';
+    const updates = { siem_provider: document.getElementById('siemProviderSel').value };
+    document.querySelectorAll('[data-siem-field]').forEach(el => {
+      if (el.value.trim()) updates[el.dataset.siemField] = el.value.trim();
+    });
+    try {
+      await putSettings(updates);
+      st.textContent = 'Saved ✓'; st.style.color = 'var(--green)';
+      setTimeout(() => { st.textContent = ''; }, 3000);
+    } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = 'var(--red)'; }
+  };
+
+  document.getElementById('saveVtBtn').onclick = async () => {
+    const st = document.getElementById('vtSaveStatus');
+    const key = document.getElementById('vtApiKey').value.trim();
+    if (!key) { st.textContent = 'Enter a key first'; st.style.color = 'var(--yellow)'; return; }
+    st.textContent = 'Saving…'; st.style.color = 'var(--muted)';
+    try {
+      await putSettings({ vt_api_key: key });
+      st.textContent = 'Saved ✓'; st.style.color = 'var(--green)';
+      document.getElementById('vtApiKey').value = '';
+      document.getElementById('vtApiKey').placeholder = '● already set — paste to update';
+      setTimeout(() => { st.textContent = ''; }, 3000);
+    } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = 'var(--red)'; }
+  };
+
+  document.getElementById('testVtBtn').onclick = async () => {
+    const st = document.getElementById('vtSaveStatus');
+    st.textContent = 'Testing…'; st.style.color = 'var(--muted)';
+    try {
+      const r = await fetch('/api/admin/connectors/vt/test', { headers: {'X-CSRF-Token': document.cookie.match(/csrf_token=([^;]+)/)?.[1]||''} });
+      const j = await r.json();
+      if (j.ok) { st.textContent = '✓ Key valid'; st.style.color = 'var(--green)'; }
+      else { st.textContent = '✗ ' + (j.error || 'invalid key'); st.style.color = 'var(--red)'; }
+    } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = 'var(--red)'; }
+    setTimeout(() => { st.textContent = ''; }, 4000);
+  };
+
+  // Test-connection buttons for each SIEM — use live form values, never the DB
+  document.querySelectorAll('[data-test-siem]').forEach(btn => {
+    btn.onclick = async () => {
+      const provider = btn.dataset.testSiem;
+      const statusEl = document.querySelector(`.siem-test-status[data-for="${provider}"]`);
+      const block = document.getElementById(_siemFields[provider]);
+      const payload = {};
+      if (block) {
+        block.querySelectorAll('[data-siem-field]').forEach(el => {
+          payload[el.dataset.siemField] = el.value.trim();
+        });
+      }
+      statusEl.textContent = '⟳ Testing…';
+      statusEl.style.color = 'var(--muted)';
+      btn.disabled = true;
+      try {
+        const r = await fetch(`/api/admin/connectors/siem/${provider}/test`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': document.cookie.match(/csrf_token=([^;]+)/)?.[1] || '',
+          },
+          body: JSON.stringify(payload),
+        });
+        const j = await r.json();
+        if (j.ok) {
+          statusEl.textContent = '✓ Connection successful';
+          statusEl.style.color = 'var(--green)';
+        } else {
+          statusEl.textContent = '✗ ' + (j.error || 'connection failed');
+          statusEl.style.color = 'var(--red)';
+        }
+      } catch(e) {
+        statusEl.textContent = '✗ ' + e.message;
+        statusEl.style.color = 'var(--red)';
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
+
+  document.querySelector('.tab[data-pane="connectors"]').addEventListener('click', loadConnectors);
+
+  // ─── Init ────────────────────────────────────────────────────
+  loadUsers();
+</script>
+</body>
+</html>

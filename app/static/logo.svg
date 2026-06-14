@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="NullShift logo">
+  <defs>
+    <polygon id="ns-hex" points="19.05,-11 0,-22 -19.05,-11 -19.05,11 0,22 19.05,11"/>
+  </defs>
+
+  <!-- Cluster: center + 5 surrounding hexes (NW position vacated) -->
+  <g fill="#2a3a55">
+    <use href="#ns-hex" transform="translate(110,115)"/>
+    <use href="#ns-hex" transform="translate(148,115)"/>
+    <use href="#ns-hex" transform="translate(129,82)"/>
+    <use href="#ns-hex" transform="translate(72,115)"/>
+    <use href="#ns-hex" transform="translate(91,148)"/>
+    <use href="#ns-hex" transform="translate(129,148)"/>
+  </g>
+
+  <!-- Empty slot: outlined hex showing where the displaced piece came from -->
+  <use href="#ns-hex" transform="translate(91,82)" fill="none" stroke="#00b4d8" stroke-width="1.5" opacity="0.45"/>
+
+  <!-- Motion trail: 3 dots from empty slot toward displaced hex -->
+  <g fill="#00b4d8">
+    <circle cx="86" cy="75" r="2" opacity="0.85"/>
+    <circle cx="81" cy="68" r="2" opacity="0.65"/>
+    <circle cx="76" cy="61" r="2" opacity="0.45"/>
+  </g>
+
+  <!-- Displaced cyan hex (the anomaly) -->
+  <use href="#ns-hex" transform="translate(67,52)" fill="#00b4d8"/>
+</svg>

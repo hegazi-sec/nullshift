@@ -1,0 +1,14 @@
+# Funding configuration for the GitHub "Sponsor" button on this repository.
+# Documentation: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+
+# Default — links to the maintainer's GitHub Sponsors profile.
+github: [hegazi-sec]
+
+# Additional platforms — uncomment as needed:
+# patreon: username                    # Patreon username
+# open_collective: username            # Open Collective slug
+# ko_fi: username                      # Ko-fi username
+# buy_me_a_coffee: username            # Buy Me a Coffee username
+# liberapay: username                  # Liberapay username
+# tidelift: pypi/nullshift             # Tidelift package
+# custom: ['https://paypal.me/example'] # Up to 4 custom URLs
