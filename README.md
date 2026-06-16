@@ -175,7 +175,7 @@ Each indexed skill includes step-by-step procedures, tool commands, expected out
 
 ## Contributing
 
-PRs welcome. Open against the `beta` branch, not `main`. See `CONTRIBUTING.md` for branching, code style, and commit conventions.
+PRs welcome. Fork the repo, create a feature branch in your fork, and open a PR against `main`. See `CONTRIBUTING.md` for code style, commit conventions, and the PR checklist.
 
 ## Support & Project Status
 

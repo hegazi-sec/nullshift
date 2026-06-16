@@ -13,21 +13,21 @@ First — **thank you** for taking the time to look at this. NullShift is an ope
 
 ## Branching Strategy
 
-NullShift uses a simple two-branch flow:
+NullShift's public repository is single-branch: **`main`**.
 
-| Branch | Purpose |
-|---|---|
-| `main` | Stable, release-tagged versions. **Do not target PRs here directly.** |
-| `beta` | Active development. **All PRs target this branch.** |
+The recommended contributor workflow:
 
-When `beta` is stable and well-tested, it gets merged into `main` and a new release is tagged.
+1. **Fork** this repository to your own GitHub account.
+2. **Create a feature branch** in your fork (e.g. `feature/wazuh-improvements`, `fix/dns-tunneling-detection`).
+3. **Open a Pull Request** from your feature branch to `main` here.
+
+Release tags (`v0.1.0`, etc.) live on `main`. Each tagged release is a versioned snapshot of the project.
 
 ## Development Setup
 
 ```bash
 git clone https://github.com/hegazi-sec/nullshift.git
 cd nullshift
-git checkout beta
 python setup.py        # creates the venv, installs deps, registers the CLI
 ```
 
@@ -43,12 +43,12 @@ Edit code. Save. Uvicorn's `--reload` flag picks up changes within a second.
 
 Before opening a PR, please make sure:
 
-- [ ] Your PR targets the **`beta`** branch, not `main`.
+- [ ] Your PR targets `main` and comes from a feature branch in your fork.
 - [ ] The PR description explains the **why**, not just the **what**.
 - [ ] Code changes are **scoped** — no unrelated refactors mixed in.
 - [ ] Tests pass: `pytest tests/`
 - [ ] For UI changes, include a **before / after screenshot**.
-- [ ] No secrets, `.env` files, or generated databases (`.db`, `chroma/`) committed.
+- [ ] No secrets, API keys, generated databases (`*.db`), or contents of `app/data/` or `data/chroma/` committed.
 - [ ] Commit messages follow the project style (see below).
 
 ## Code Style
