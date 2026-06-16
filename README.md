@@ -36,8 +36,8 @@ It works with any major LLM provider — Anthropic Claude, OpenAI GPT, or a full
 ## Quick Start
 
 ```bash
-git clone https://github.com/hegazi-sec/Ai-ChatBot.git
-cd Ai-ChatBot/nullshift
+git clone https://github.com/hegazi-sec/nullshift.git
+cd nullshift
 python setup.py
 ```
 
@@ -181,7 +181,7 @@ PRs welcome. Fork the repo, create a feature branch in your fork, and open a PR 
 
 This is an actively maintained project — I'm building NullShift to be a tool we can all rely on, not just a side experiment. **Your feedback shapes the roadmap.**
 
-**If anything doesn't work the way you expect**, please [open an issue](https://github.com/hegazi-sec/Ai-ChatBot/issues) on GitHub. I'll do my best to respond quickly and ship a fix.
+**If anything doesn't work the way you expect**, please [open an issue](https://github.com/hegazi-sec/nullshift/issues) on GitHub. I'll do my best to respond quickly and ship a fix.
 
 ### Connector Maturity
 
