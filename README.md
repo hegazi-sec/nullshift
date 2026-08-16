@@ -24,17 +24,17 @@ It works with any major LLM provider — Anthropic Claude, OpenAI GPT, or a full
 
 ## Highlights
 
-- 🧠 **12 LLM providers** — Claude Agent SDK (use your Claude subscription, no API key), cloud APIs, or fully local Ollama (even hosted on another machine over Tailscale).
-- 🔌 **5 SIEM connectors** — Wazuh, LimaCharlie, Splunk, Elastic, Sentinel.
-- 📚 **RAG over your own playbooks** — drop markdown files into `data/kb/` and they're indexed automatically.
-- 📋 **Structured investigation reports** — SECTION 1 (evidence) → SECTION 2 (reasoning) → SECTION 3 (verdict).
-- 🗂️ **Case management & reports** — group investigations into cases (`INC-0001`…) with severity, status, verdict, and notes; export Markdown or print-ready HTML/PDF.
-- 📥 **Webhook alert ingestion** — SIEMs push alerts straight into NullShift's inbox; one click turns an alert into a full investigation.
-- 🛡️ **Automatic IOC enrichment** — IPs, domains, and hashes in each message are checked against VirusTotal automatically.
-- 🎯 **L1 → L2 handoff mode** — generates ticket-ready summaries with one command.
-- 🔧 **Per-user temperature, conversation search, verdict tracking, debug traces.**
-- 💻 **CLI for daily ops** — `nullshift start/stop/status/logs`.
-- ⚡ **Single-command setup** — no config files, no manual steps.
+- **12 LLM providers** — Claude Agent SDK (use your Claude subscription, no API key), cloud APIs, or fully local Ollama (even hosted on another machine over Tailscale).
+- **5 SIEM connectors** — Wazuh, LimaCharlie, Splunk, Elastic, Sentinel.
+- **RAG over your own playbooks** — drop markdown files into `data/kb/` and they're indexed automatically.
+- **Structured investigation reports** — SECTION 1 (evidence) → SECTION 2 (reasoning) → SECTION 3 (verdict).
+- **Case management & reports** — group investigations into cases (`INC-0001`…) with severity, status, verdict, and notes; export Markdown or print-ready HTML/PDF.
+- **Webhook alert ingestion** — SIEMs push alerts straight into NullShift's inbox; one click turns an alert into a full investigation.
+- **Automatic IOC enrichment** — IPs, domains, and hashes in each message are checked against VirusTotal automatically.
+- **L1 → L2 handoff mode** — generates ticket-ready summaries with one command.
+- **Per-user temperature, conversation search, verdict tracking, debug traces.**
+- **CLI for daily ops** — `nullshift start/stop/status/logs`.
+- **Single-command setup** — no config files, no manual steps.
 
 ## Quick Start
 
@@ -74,13 +74,13 @@ Optional: SIEM credentials (Wazuh / LimaCharlie / Splunk / Elastic / Sentinel) a
 
 NullShift is provider-agnostic. Pick whichever works for your environment:
 
-### 🆓 Claude Agent SDK *(no API key needed)*
+### Claude Agent SDK *(no API key needed)*
 
 If you have a **Claude.ai Pro or Max subscription**, NullShift can drive Claude directly through the local **`claude` CLI** — no API key, no per-token billing. NullShift's setup wizard detects the CLI and walks you through the one-time `claude login`.
 
 Best for individual analysts and homelab SOCs running on a personal Claude subscription.
 
-### 🌐 Cloud API Keys
+### Cloud API Keys
 
 Paste a key in **Admin → LLM Providers** for any of:
 
@@ -88,11 +88,11 @@ Paste a key in **Admin → LLM Providers** for any of:
 - **OpenAI** (`gpt-4.1`, `gpt-4o`, etc.)
 - **Google Gemini, Groq, xAI, DeepSeek, Perplexity, OpenRouter, Qwen, Kimi**
 
-### 🖥️ Local Ollama *(fully offline)*
+### Local Ollama *(fully offline)*
 
 Run any Ollama-compatible model locally — `qwen2.5:14b`, `llama3.3:70b`, `deepseek-r1`, `phi4`, etc. **No API key**, no data leaves your network. Configure the Ollama URL in **Admin → LLM Providers**.
 
-> 💡 **Ollama on another machine via Tailscale.** If your GPU lives on a separate box, install Ollama there and connect to it over your Tailscale network — just point NullShift's Ollama URL at the Tailscale IP, e.g. `http://100.x.x.x:11434`. Same setup works for Tailscale Funnel, Cloudflare Tunnel, or any reachable Ollama endpoint.
+> **Ollama on another machine via Tailscale.** If your GPU lives on a separate box, install Ollama there and connect to it over your Tailscale network — just point NullShift's Ollama URL at the Tailscale IP, e.g. `http://100.x.x.x:11434`. Same setup works for Tailscale Funnel, Cloudflare Tunnel, or any reachable Ollama endpoint.
 
 ## Configuration
 
@@ -211,7 +211,7 @@ tailscale funnel status
 
 Use the public URL **without a port** in your SIEM (`https://<machine>.<tailnet>.ts.net/api/alerts/ingest?...`) — Funnel serves on 443 and forwards to your local port internally. Cloudflare Tunnel or any reverse proxy works too.
 
-> 🔒 A query-param token can appear in the SIEM's own logs — prefer the header where supported, and regenerate the token if it's ever exposed.
+> A query-param token can appear in the SIEM's own logs — prefer the header where supported, and regenerate the token if it's ever exposed.
 
 ## IOC Auto-Enrichment (VirusTotal)
 
@@ -290,8 +290,8 @@ Each indexed skill includes step-by-step procedures, tool commands, expected out
 ## Roadmap
 
 - One-line setup for additional SIEMs (CrowdStrike, Microsoft Defender for Endpoint)
-- ✅ **Case management** *(shipped)* — group multiple investigations into a single case with severity/status/verdict tracking and exportable reports
-- ✅ **Inbound webhook alert ingestion** *(shipped)* — SIEMs push alerts into NullShift's inbox
+- **Case management** *(shipped)* — group multiple investigations into a single case with severity/status/verdict tracking and exportable reports
+- **Inbound webhook alert ingestion** *(shipped)* — SIEMs push alerts into NullShift's inbox
 - Webhook notifications (Slack / Teams / email) on verdict reached
 - Outbound response actions (block IP, isolate host) from a playbook
 - Scheduled hunts (recurring queries with diff-based alerting)
@@ -311,11 +311,11 @@ This is an actively maintained project — I'm building NullShift to be a tool w
 
 | Status | Connector | Notes |
 |---|---|---|
-| ✅ **Production-ready** | **LimaCharlie** | Most thoroughly tested. Recommended for production. |
-| ✅ **Production-ready** | **Wazuh** | Most thoroughly tested. Recommended for production. |
-| 🧪 **Beta — under active testing** | **Splunk** | Functional. Updates pushed as edge cases are found. |
-| 🧪 **Beta — under active testing** | **Elasticsearch** | Functional. Updates pushed as edge cases are found. |
-| 🧪 **Beta — under active testing** | **Microsoft Sentinel** | Functional. Updates pushed as edge cases are found. |
+| **Production-ready** | **LimaCharlie** | Most thoroughly tested. Recommended for production. |
+| **Production-ready** | **Wazuh** | Most thoroughly tested. Recommended for production. |
+| **Beta — under active testing** | **Splunk** | Functional. Updates pushed as edge cases are found. |
+| **Beta — under active testing** | **Elasticsearch** | Functional. Updates pushed as edge cases are found. |
+| **Beta — under active testing** | **Microsoft Sentinel** | Functional. Updates pushed as edge cases are found. |
 
 If you're using one of the beta connectors and run into a problem, **please tell me** — that's the fastest way to get it fixed and promoted to production-ready status.
 

@@ -8,8 +8,8 @@ Only the latest minor release receives patches.
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | ✅        |
-| < 0.1   | ❌        |
+| 0.1.x   | Yes        |
+| < 0.1   | No        |
 
 ## Reporting a Vulnerability
 

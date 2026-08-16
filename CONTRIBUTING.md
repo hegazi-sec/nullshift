@@ -4,12 +4,12 @@ First — **thank you** for taking the time to look at this. NullShift is an ope
 
 ## Ways to Contribute
 
-- 🐛 **Report bugs** — open an [issue](https://github.com/hegazi-sec/nullshift/issues) with reproduction steps. The more detail, the faster the fix.
-- 💡 **Suggest features** — open an issue with the use case and the problem you're trying to solve.
-- 🔧 **Submit a pull request** — fix a bug, add a feature, improve docs, or write a test.
-- 📚 **Improve the knowledge base** — add or refine markdown playbooks in `data/kb/` for new threat scenarios.
-- 🔌 **Build a new SIEM connector** — extend the `SIEMConnector` base class in `app/connectors/`.
-- 🌍 **Translate the UI** — i18n PRs are very welcome.
+- **Report bugs** — open an [issue](https://github.com/hegazi-sec/nullshift/issues) with reproduction steps. The more detail, the faster the fix.
+- **Suggest features** — open an issue with the use case and the problem you're trying to solve.
+- **Submit a pull request** — fix a bug, add a feature, improve docs, or write a test.
+- **Improve the knowledge base** — add or refine markdown playbooks in `data/kb/` for new threat scenarios.
+- **Build a new SIEM connector** — extend the `SIEMConnector` base class in `app/connectors/`.
+- **Translate the UI** — i18n PRs are very welcome.
 
 ## Branching Strategy
 
