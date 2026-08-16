@@ -3,7 +3,7 @@ import os
 import re
 
 from app.execution.tool_runner import ToolRunner
-from app.execution.scoring import score as score_evidence
+from app.execution.scoring import ai_score_evidence
 from app.execution.report import build_report
 from app.utils.debug_trace import DebugTrace
 from app.investigation.timewindow import parse_time_window, TimeWindow, NO_TIME_SPECIFIED
@@ -480,7 +480,7 @@ def run_investigation(intent: str, message: str, time_hint: Optional[str], curre
         evidence.setdefault("errors", {})["virustotal"] = str(_vt_err)
 
     # Scoring and report
-    scores = score_evidence(evidence)
+    scores = ai_score_evidence(evidence)
     evidence["scores"] = scores
     evidence["report_markdown"] = build_report(evidence, scores)
     if debug is not None:

@@ -57,3 +57,23 @@ class ToolExecuteResponse(BaseModel):
 
 class PrefsUpdate(BaseModel):
     prefs: Dict[str, Any]
+
+
+# Incident / case tracking schemas
+class IncidentCreate(BaseModel):
+    title: str
+    severity: Optional[str] = "medium"
+    notes: Optional[str] = None
+    conversation_id: Optional[str] = None  # link this chat on creation
+
+
+class IncidentUpdate(BaseModel):
+    title: Optional[str] = None
+    severity: Optional[str] = None
+    status: Optional[str] = None
+    verdict: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class IncidentLink(BaseModel):
+    conversation_id: str

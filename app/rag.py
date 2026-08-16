@@ -33,6 +33,109 @@ CHUNK_OVERLAP = 80
 DEFAULT_TOP_K = 4
 EMBED_BATCH_SIZE = 100  # Gemini BatchEmbed limit is 100; safe for all providers
 
+# Skill folder prefixes (offensive / red-team / hardening / implementation / compliance).
+# Borderline categories kept: cloud detection, memory forensics, OT/ICS, reverse-engineering.
+_SKILL_BLOCKLIST_PREFIXES = (
+    "exploiting-", "implementing-", "hardening-", "auditing-",
+    "scanning-", "testing-", "deploying-", "configuring-",
+    "securing-", "intercepting-", "bypassing-", "executing-",
+)
+# Fragments catch offensive skills under mixed prefixes (building-*, conducting-*)
+# and implementation-focused building-* entries that don't start with a blocked prefix.
+_SKILL_BLOCKLIST_FRAGMENTS = (
+    # --- offensive / red-team (prefix-based blocked categories) ---
+    "penetration-test",                      # *-penetration-test / *-penetration-testing
+    "-red-team-",                            # *-red-team-engagement, red-team-c2-*
+    "c2-infrastructure",                     # building-c2-infrastructure-*, building-red-team-c2-*
+    "social-engineering-pretext",
+    "spearphishing-simulation",
+    "pass-the-ticket-attack",
+    "domain-persistence-with-dcsync",
+    "internal-reconnaissance-with-bloodhound",
+    "man-in-the-middle",
+    "api-security-testing",
+    # --- offensive performing-* (attack execution) ---
+    "-attack-simulation",                    # csrf/arp/supply-chain-attack-simulation
+    "-attack-test",                          # clickjacking-attack-test
+    "binary-exploitation",
+    "blind-ssrf",
+    "ssrf-vulnerability-exploitation",
+    "hash-cracking",
+    "password-cracking",
+    "packet-injection",
+    "certificate-pinning-bypass",
+    "initial-access-with-evilginx",
+    "lateral-movement-with-wmiexec",
+    "phishing-simulation-with-gophish",
+    "physical-intrusion-assessment",
+    "privilege-escalation-on-linux",
+    "privilege-escalation-assessment",
+    "performing-kerberoasting",              # avoids substring match on detecting-kerberoasting-attacks
+    "ssl-stripping-attack",
+    "vlan-hopping-attack",
+    "firewall-bypass",
+    "credential-access-with-lazagne",
+    "directory-traversal-testing",
+    "zone-transfer",
+    "arp-spoofing",
+    "web-cache-deception",
+    "web-cache-poisoning",
+    "http-parameter-pollution",
+    "second-order-sql-injection",
+    "graphql-depth-limit",
+    "graphql-introspection-attack",
+    "graphql-security-assessment",
+    "api-fuzzing",
+    "api-rate-limiting-bypass",
+    "iot-security-assessment",
+    "wireless-security-assessment-with-kismet",
+    "vulnerability-scanning-with-nessus",
+    "web-application-scanning-with-nikto",
+    "jwt-none-algorithm",
+    # --- compliance / implementation performing-* ---
+    "access-recertification",
+    "access-review-and-certification",
+    "dmarc-policy-enforcement-rollout",
+    "docker-bench-security-assessment",
+    "entitlement-review-with-sailpoint",
+    "nist-csf-maturity-assessment",
+    "post-quantum-cryptography-migration",
+    "privacy-impact-assessment",
+    "credential-rotation",
+    "soc2-type2-audit",
+    "ssl-certificate-lifecycle",
+    "ssl-tls-inspection-configuration",
+    "ssl-tls-security-assessment",
+    # --- implementation building-* ---
+    "building-vulnerability-",               # all vulnerability-management building-* skills
+    "devsecops-pipeline",
+    "identity-federation",
+    "identity-governance-lifecycle",
+    "patch-tuesday",
+    "phishing-reporting-button",
+    "role-mining-for-rbac",
+    # --- dev tooling integrations ---
+    "integrating-dast",
+    "integrating-sast",
+    # --- other implementation/ops ---
+    "managing-cloud-identity-with-okta",
+    "remediating-s3-bucket-misconfiguration",
+    "forest-trust-attack",
+    "content-security-policy-bypass",
+)
+_SKILLS_DIR = KB_PATH / "cybersecurity-skills" / "skills"
+
+
+def _is_blocked_skill(f: Path) -> bool:
+    """Return True if f is a SKILL.md that lives in a blocked cybersecurity-skill folder."""
+    if f.name != "SKILL.md" or f.parent.parent != _SKILLS_DIR:
+        return False
+    folder = f.parent.name
+    return (
+        any(folder.startswith(p) for p in _SKILL_BLOCKLIST_PREFIXES)
+        or any(frag in folder for frag in _SKILL_BLOCKLIST_FRAGMENTS)
+    )
+
 # The same default order used by llm.py when no chain is stored in DB.
 # Keep in sync with _DEFAULT_CHAIN_ORDER in llm.py.
 _DEFAULT_CHAIN_ORDER = [
@@ -419,7 +522,7 @@ class RAG:
         # Top-level files directly under KB_PATH are always indexed regardless of name.
         files = sorted(
             f for f in KB_PATH.rglob("*.md")
-            if f.parent == KB_PATH or f.name == "SKILL.md"
+            if (f.parent == KB_PATH or f.name == "SKILL.md") and not _is_blocked_skill(f)
         )
         self._files_indexed = len(existing)
         # _chunks_indexed already set from collection.count() in _init_chroma()

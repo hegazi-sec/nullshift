@@ -28,6 +28,9 @@ It works with any major LLM provider — Anthropic Claude, OpenAI GPT, or a full
 - 🔌 **5 SIEM connectors** — Wazuh, LimaCharlie, Splunk, Elastic, Sentinel.
 - 📚 **RAG over your own playbooks** — drop markdown files into `data/kb/` and they're indexed automatically.
 - 📋 **Structured investigation reports** — SECTION 1 (evidence) → SECTION 2 (reasoning) → SECTION 3 (verdict).
+- 🗂️ **Case management & reports** — group investigations into cases (`INC-0001`…) with severity, status, verdict, and notes; export Markdown or print-ready HTML/PDF.
+- 📥 **Webhook alert ingestion** — SIEMs push alerts straight into NullShift's inbox; one click turns an alert into a full investigation.
+- 🛡️ **Automatic IOC enrichment** — IPs, domains, and hashes in each message are checked against VirusTotal automatically.
 - 🎯 **L1 → L2 handoff mode** — generates ticket-ready summaries with one command.
 - 🔧 **Per-user temperature, conversation search, verdict tracking, debug traces.**
 - 💻 **CLI for daily ops** — `nullshift start/stop/status/logs`.
@@ -102,6 +105,122 @@ Almost everything is configured through the **Admin UI** at `/admin` — no rest
 
 Settings are persisted in a SQLite database (`app/data/config.db`). All changes apply immediately thanks to the settings proxy layer in `app/config.py`.
 
+## Case Management & Reports
+
+Turn one-off chats into tracked cases and hand-off-ready reports.
+
+**Create & manage a case**
+
+1. Open an investigation, then click **+ Case** in the top bar.
+2. Create a new case or attach the chat to an existing one. Each case gets a sequential number (`INC-0001`, `INC-0002`, …).
+3. Open the **Cases** tab in the sidebar to see every case with a severity dot and status badge.
+4. Click a case to set **severity** (low / medium / high / critical), **status** (open / investigating / closed), a final **verdict**, and free-form **analyst notes** — and to link or unlink multiple conversations. One case can span many chats.
+
+**Export a report**
+
+From an open case:
+
+- **Export report (HTML)** — opens a clean, print-optimized page. Use your browser's **Print → Save as PDF** for a shareable artifact.
+- **Export report (MD)** — downloads `INC-XXXX-report.md` for pasting into a ticket (TheHive, Jira, email).
+
+Reports include case metadata, analyst notes, the **IOC verdict trail** across every linked chat, and the full investigation timeline. All chat content is escaped, so nothing in a conversation can inject markup into the report.
+
+## Webhook Alert Ingestion
+
+Let your SIEM push alerts directly into NullShift instead of analysts pasting them in. Alerts land in a shared **Alerts** inbox (sidebar tab) with a live unread badge. An analyst clicks **Investigate** to auto-create a chat seeded with the alert and run it through the normal pipeline, or **Dismiss** to clear it.
+
+**1. Enable it**
+
+Admin → **Connectors** → **Webhook Alert Ingestion** → **Generate token** → **Save**. Ingestion stays disabled until a token is set.
+
+**2. Point your SIEM at the endpoint**
+
+```
+POST /api/alerts/ingest?source=<siem-name>
+```
+
+Authenticate with the token in **either**:
+
+- the `X-Webhook-Token: <token>` header *(preferred — kept out of logs)*, or
+- a `?token=<token>` query param *(for SIEMs that can't set custom headers)*
+
+The body is any JSON (≤ 128 KB). NullShift auto-extracts a title / severity / source from Wazuh, LimaCharlie, Splunk, Elastic, and generic payload shapes; anything unrecognized still ingests with the full raw payload preserved.
+
+**Quick test**
+
+```bash
+curl -X POST "http://localhost:58443/api/alerts/ingest?source=test&token=YOUR_TOKEN" \
+  -H "Content-Type: application/json" -d '{"title":"Webhook test","severity":"high"}'
+# → {"ok":true,"id":"..."}
+```
+
+**Per-SIEM setup**
+
+| SIEM | Auth method | How to connect |
+|---|---|---|
+| **Wazuh** | Header | Custom integration script (below) referenced from `ossec.conf` |
+| **Elastic** | Header | Kibana → Connectors → Webhook, add an `X-Webhook-Token` header |
+| **Sentinel** | Header | Logic App playbook → HTTP action with the header |
+| **LimaCharlie** | Query param | Output → Webhook, append `&token=` to the destination URL |
+| **Splunk** | Query param | Alert action → Webhook, append `&token=` to the URL |
+
+<details>
+<summary><b>Wazuh integration script</b></summary>
+
+Create `/var/ossec/integrations/custom-nullshift.py`:
+
+```python
+#!/usr/bin/env python3
+import sys, json, requests
+alert_file, token, hook_url = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(alert_file) as f:
+    alert = json.load(f)
+requests.post(hook_url,
+    headers={"X-Webhook-Token": token, "Content-Type": "application/json"},
+    data=json.dumps(alert), timeout=10)
+```
+
+```bash
+chmod 750 /var/ossec/integrations/custom-nullshift.py
+chown root:wazuh /var/ossec/integrations/custom-nullshift.py
+```
+
+Add to `/var/ossec/etc/ossec.conf` inside `<ossec_config>`:
+
+```xml
+<integration>
+  <name>custom-nullshift</name>
+  <hook_url>http://NULLSHIFT_HOST:58443/api/alerts/ingest?source=wazuh</hook_url>
+  <api_key>YOUR_TOKEN</api_key>
+  <level>7</level>
+  <alert_format>json</alert_format>
+</integration>
+```
+
+Then `systemctl restart wazuh-manager`. Wazuh passes the alert file, `api_key` (→ token), and `hook_url` to the script; `<level>7</level>` sends only alerts level 7 and above.
+</details>
+
+**Exposing NullShift to cloud SIEMs**
+
+If NullShift runs on your own machine and the SIEM is in the cloud (Sentinel, hosted LimaCharlie), it needs a reachable URL. Since NullShift already pairs well with Tailscale, **Tailscale Funnel** is the quickest option:
+
+```bash
+tailscale funnel --bg 58443     # serves your local :58443 publicly on https://<machine>.<tailnet>.ts.net
+tailscale funnel status
+```
+
+Use the public URL **without a port** in your SIEM (`https://<machine>.<tailnet>.ts.net/api/alerts/ingest?...`) — Funnel serves on 443 and forwards to your local port internally. Cloudflare Tunnel or any reverse proxy works too.
+
+> 🔒 A query-param token can appear in the SIEM's own logs — prefer the header where supported, and regenerate the token if it's ever exposed.
+
+## IOC Auto-Enrichment (VirusTotal)
+
+When a VirusTotal key is configured, NullShift automatically extracts IPs, domains, and file hashes from each message and enriches them against VirusTotal **before** the LLM reasons over the evidence — the analyst never has to ask.
+
+**Enable:** Admin → **Connectors** → **VirusTotal** → paste a v3 API key → **Save** → **Test key**.
+
+Enrichment is deliberately conservative: private / reserved IPs and filename look-alikes (`report.pdf`, `payload.exe`) are skipped, lookups are **capped at 4 per message** to respect the public API rate limit, and results are cached. Verdicts (`malicious` / `suspicious` / `clean`, engine counts, country, ASN owner) are attached to the evidence bundle and surfaced in the investigation.
+
 ## Architecture (Brief)
 
 ```
@@ -130,6 +249,7 @@ nullshift/
 │   ├── main.py              FastAPI routes
 │   ├── llm.py               LLM provider chain
 │   ├── rag.py               Chroma-based playbook retrieval
+│   ├── reports.py           Incident report builders (Markdown + HTML)
 │   ├── connectors/          SIEM + VirusTotal clients
 │   ├── execution/           Investigation pipeline
 │   ├── playbooks/           Playbook runner (YAML front-matter)
@@ -147,6 +267,8 @@ nullshift/
 ## Knowledge Base & Attribution
 
 NullShift ships with **four NullShift-specific top-level playbooks** in `data/kb/` covering common L1 triage scenarios — SSH brute force, port scans, malware detection, and web attacks.
+
+It also ships **SIEM query-reference knowledge bases** for LimaCharlie, Wazuh, Splunk, Elastic, and Microsoft Sentinel — each covering that platform's query syntax, field/table schema, and 60+ investigation patterns mapped to MITRE ATT&CK. RAG uses them so NullShift can generate correct, ready-to-run hunt queries for whichever SIEM you've connected.
 
 The bulk of the indexed corpus comes from the **Anthropic-Cybersecurity-Skills** project:
 
@@ -168,8 +290,10 @@ Each indexed skill includes step-by-step procedures, tool commands, expected out
 ## Roadmap
 
 - One-line setup for additional SIEMs (CrowdStrike, Microsoft Defender for Endpoint)
-- Case management — group multiple investigations into a single case file with timeline
+- ✅ **Case management** *(shipped)* — group multiple investigations into a single case with severity/status/verdict tracking and exportable reports
+- ✅ **Inbound webhook alert ingestion** *(shipped)* — SIEMs push alerts into NullShift's inbox
 - Webhook notifications (Slack / Teams / email) on verdict reached
+- Outbound response actions (block IP, isolate host) from a playbook
 - Scheduled hunts (recurring queries with diff-based alerting)
 - Multi-tenant L2 escalation queue
 

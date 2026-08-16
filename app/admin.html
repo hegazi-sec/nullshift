@@ -765,8 +765,10 @@
     <div class="section-title">VirusTotal (Threat Intelligence)</div>
     <div class="section-desc">
       When set, NullShift automatically enriches IPs, domains, and file hashes
-      found in every investigation against VirusTotal — regardless of RAG status.
-      This is a dedicated TI step in the pipeline.
+      found in each investigation against VirusTotal — regardless of RAG status.
+      Private IPs and filename look-alikes are skipped, and lookups are capped at
+      4 per message to respect the public API rate limit. Verdicts are attached to
+      the evidence bundle the analyst LLM reasons over.
     </div>
     <div class="pfield" style="margin-top:14px;">
       <label>API Key <span style="font-weight:400;color:var(--muted);font-size:12px;">(VirusTotal v3)</span></label>
@@ -777,6 +779,31 @@
       <button class="btn btn-primary" id="saveVtBtn">Save</button>
       <button class="btn btn-ghost" id="testVtBtn">Test key</button>
       <span id="vtSaveStatus" style="font-size:12px;color:var(--muted);"></span>
+    </div>
+
+    <hr style="border:none;border-top:1px solid var(--border);margin:28px 0;"/>
+
+    <!-- Webhook alert ingestion -->
+    <div class="section-title">Webhook Alert Ingestion</div>
+    <div class="section-desc">
+      Lets your SIEM push alerts directly into the NullShift alert inbox.
+      Point the SIEM webhook at <code>POST /api/alerts/ingest</code> with the
+      shared token in the <code>X-Webhook-Token</code> header. Ingestion stays
+      disabled until a token is set.
+    </div>
+    <div class="pfield" style="margin-top:14px;">
+      <label>Shared Token <span style="font-weight:400;color:var(--muted);font-size:12px;">(min 24 chars recommended)</span></label>
+      <input type="password" id="webhookToken" placeholder="not configured"
+        autocomplete="off" style="width:100%;max-width:400px;"/>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
+      <button class="btn btn-primary" id="saveWebhookBtn">Save</button>
+      <button class="btn btn-ghost" id="genWebhookBtn">Generate token</button>
+      <span id="webhookSaveStatus" style="font-size:12px;color:var(--muted);"></span>
+    </div>
+    <div class="section-desc" style="margin-top:12px;font-size:12px;">
+      Example: <code>curl -X POST https://your-host/api/alerts/ingest?source=wazuh
+      -H "X-Webhook-Token: &lt;token&gt;" -H "Content-Type: application/json" -d @alert.json</code>
     </div>
 
   </div>
@@ -1629,6 +1656,15 @@
       document.getElementById('vtApiKey').placeholder = vtSet
         ? `● already set${vtSuffix} — paste to update`
         : 'Enter your VT API key';
+
+      // Webhook token — secret stub from API
+      const whVal = s.webhook_token;
+      const whSet = !!(whVal && (typeof whVal === 'object' ? whVal.present : true));
+      const whSuffix = (typeof whVal === 'object' && whVal && whVal.suffix) ? ' (…' + whVal.suffix + ')' : '';
+      document.getElementById('webhookToken').value = '';
+      document.getElementById('webhookToken').placeholder = whSet
+        ? `● already set${whSuffix} — paste to update`
+        : 'not configured — ingestion disabled';
     } catch(e) { console.error('loadConnectors', e); }
   }
 
@@ -1670,6 +1706,34 @@
       else { st.textContent = '✗ ' + (j.error || 'invalid key'); st.style.color = 'var(--red)'; }
     } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = 'var(--red)'; }
     setTimeout(() => { st.textContent = ''; }, 4000);
+  };
+
+  document.getElementById('genWebhookBtn').onclick = () => {
+    const buf = new Uint8Array(24);
+    crypto.getRandomValues(buf);
+    const tok = btoa(String.fromCharCode(...buf)).replace(/[+/=]/g, c => ({'+':'-','/':'_','=':''}[c]));
+    const input = document.getElementById('webhookToken');
+    input.type = 'text';
+    input.value = tok;
+    document.getElementById('webhookSaveStatus').textContent = 'Copy this token into your SIEM, then press Save';
+    document.getElementById('webhookSaveStatus').style.color = 'var(--yellow)';
+  };
+
+  document.getElementById('saveWebhookBtn').onclick = async () => {
+    const st = document.getElementById('webhookSaveStatus');
+    const input = document.getElementById('webhookToken');
+    const tok = input.value.trim();
+    if (!tok) { st.textContent = 'Enter or generate a token first'; st.style.color = 'var(--yellow)'; return; }
+    if (tok.length < 16) { st.textContent = 'Token too short — use at least 16 chars'; st.style.color = 'var(--red)'; return; }
+    st.textContent = 'Saving…'; st.style.color = 'var(--muted)';
+    try {
+      await putSettings({ webhook_token: tok });
+      st.textContent = 'Saved ✓'; st.style.color = 'var(--green)';
+      input.value = '';
+      input.type = 'password';
+      input.placeholder = '● already set — paste to update';
+      setTimeout(() => { st.textContent = ''; }, 3000);
+    } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = 'var(--red)'; }
   };
 
   // Test-connection buttons for each SIEM — use live form values, never the DB

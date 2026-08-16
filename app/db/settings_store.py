@@ -115,6 +115,8 @@ ALLOWED_KEYS = frozenset({
     "sentinel_client_secret",
     # Threat Intelligence
     "vt_api_key",              # VirusTotal v3 API key
+    # Webhook alert ingestion
+    "webhook_token",           # shared secret for POST /api/alerts/ingest
     # Setup / Auth
     "setup_complete",
     "jwt_secret",
@@ -146,6 +148,8 @@ SECRET_KEYS = frozenset({
     "sentinel_client_secret",
     # Threat Intelligence
     "vt_api_key",
+    # Webhook ingestion shared secret
+    "webhook_token",
     # Runtime auth secret — never expose in API
     "jwt_secret",
 })

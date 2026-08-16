@@ -35,6 +35,19 @@ def test_parse_decision_inline_format():
     assert c == "Medium"
 
 
+def test_parse_decision_clean_report_format():
+    # investigation_report clean-report layout: '## Verdict' heading + bold labels
+    reply = (
+        "Brute-force against web-01 — likely a real attack.\n\n"
+        "## Evidence\n- Wazuh (12 events): failed SSH logins\n\n"
+        "## Assessment\nSuccess from a Tor exit = likely compromise.\n\n"
+        "## Verdict\n**Verdict:** Suspicious   **Confidence:** Medium"
+    )
+    v, c = parse_decision(reply)
+    assert v == "Suspicious"
+    assert c == "Medium"
+
+
 def test_parse_decision_no_format_returns_none():
     v, c = parse_decision("I have no opinion on this matter.")
     assert v is None and c is None

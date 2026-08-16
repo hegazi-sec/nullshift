@@ -25,10 +25,20 @@ class ToolRunner:
         "wazuh": [
             "alerts_by_ip",
             "alerts_by_rule",
+            "alerts_by_hostname",
+            "alerts_by_user",
             # Discovery/generic
             "recent_alerts",
             "top_alerts",
             "alerts_contains",
+            # Raw event hunting (no rule-fire requirement)
+            "raw_connections_by_ip",
+            "raw_connections_by_host",
+            "process_events_by_host",
+            "dns_queries_by_host",
+            "file_events_by_host",
+            "auth_events_by_host",
+            "auth_events_by_user",
             # Web/DVWA discovery & follow-ups
             "web_top_user_agents",
             "web_top_urls",
@@ -39,6 +49,9 @@ class ToolRunner:
             "web_unique_paths_high",
             "web_payload_hunt",
         ],
+        "virustotal": [
+            "lookup_ioc",   # ip, domain, or file hash — auto-detected
+        ],
         # --- New SIEM providers (share a common query vocabulary) ---
         "splunk": [
             "alerts_by_ip",
@@ -46,6 +59,13 @@ class ToolRunner:
             "recent_alerts",
             "top_alerts",
             "keyword_search",
+            "raw_connections_by_ip",
+            "raw_connections_by_host",
+            "process_events_by_host",
+            "dns_queries_by_host",
+            "file_events_by_host",
+            "auth_events_by_host",
+            "auth_events_by_user",
         ],
         "elastic": [
             "alerts_by_ip",
@@ -53,6 +73,13 @@ class ToolRunner:
             "recent_alerts",
             "top_alerts",
             "keyword_search",
+            "raw_connections_by_ip",
+            "raw_connections_by_host",
+            "process_events_by_host",
+            "dns_queries_by_host",
+            "file_events_by_host",
+            "auth_events_by_host",
+            "auth_events_by_user",
         ],
         "limacharlie": [
             "alerts_by_ip",
@@ -60,6 +87,13 @@ class ToolRunner:
             "recent_alerts",
             "top_alerts",
             "keyword_search",
+            "raw_connections_by_ip",
+            "raw_connections_by_host",
+            "process_events_by_host",
+            "dns_queries_by_host",
+            "file_events_by_host",
+            "auth_events_by_host",
+            "auth_events_by_user",
         ],
         "sentinel": [
             "alerts_by_ip",
@@ -67,6 +101,13 @@ class ToolRunner:
             "recent_alerts",
             "top_alerts",
             "keyword_search",
+            "raw_connections_by_ip",
+            "raw_connections_by_host",
+            "process_events_by_host",
+            "dns_queries_by_host",
+            "file_events_by_host",
+            "auth_events_by_host",
+            "auth_events_by_user",
         ],
     }
 
@@ -193,6 +234,18 @@ class ToolRunner:
     # Exec methods for new SIEM providers
     # ------------------------------------------------------------------
 
+    def _exec_virustotal(self, query_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        from app.connectors.virustotal import vt_enrich_ioc, vt_summarize
+        ioc = params.get("ioc") or params.get("ip") or params.get("domain") or params.get("hash")
+        if not ioc:
+            raise ValueError("Missing required param: ioc (ip, domain, or file hash)")
+        ioc = str(ioc).strip()
+        raw = vt_enrich_ioc(ioc)
+        if isinstance(raw, dict) and "error" in raw:
+            raise ValueError(raw["error"])
+        summary = vt_summarize(ioc, raw)
+        return {"result_count": 1, "summary": summary, "samples": [raw]}
+
     def _exec_siem(self, provider: str, query_id: str, params: Dict[str, Any], gte: str, lte: str) -> List[Dict[str, Any]]:
         """Generic executor for Splunk / Elastic / Sentinel / LimaCharlie using the SIEMConnector ABC."""
         conn = get_siem_connector(provider)
@@ -224,6 +277,26 @@ class ToolRunner:
             if not kw:
                 return [a.to_dict() for a in conn.recent_alerts(gte, lte, self.MAX_RESULTS)]
             return [a.to_dict() for a in conn.keyword_search(kw, gte, lte, self.MAX_RESULTS)]
+
+        # Raw hunting queries — use keyword_search on the primary identifier.
+        # Each SIEM's keyword_search does a full-text sweep across all event fields,
+        # which catches raw connection/process/auth events regardless of whether a
+        # rule fired. Connector-specific field queries can be added per-provider later.
+        _raw_param_map = {
+            "raw_connections_by_ip": "ip",
+            "raw_connections_by_host": "hostname",
+            "process_events_by_host": "hostname",
+            "dns_queries_by_host": "hostname",
+            "file_events_by_host": "hostname",
+            "auth_events_by_host": "hostname",
+            "auth_events_by_user": "username",
+        }
+        if query_id in _raw_param_map:
+            param_key = _raw_param_map[query_id]
+            value = params.get(param_key)
+            if not value:
+                raise ValueError(f"Missing required param: {param_key}")
+            return [a.to_dict() for a in conn.keyword_search([str(value)], gte, lte, self.MAX_RESULTS)]
 
         raise ValueError(f"Unsupported query_id for {provider}: {query_id}")
 
@@ -270,6 +343,44 @@ class ToolRunner:
                 try:
                     lvl = int(min_level)
                     q += f" AND rule.level:[{lvl} TO *]"
+                except Exception:
+                    pass
+            return wazuh.wazuh_search(q, limit=self.MAX_RESULTS, time_range=time_range, debug=debug)
+
+        if query_id == "alerts_by_hostname":
+            hostname = params.get("hostname")
+            if not hostname:
+                raise ValueError("Missing required param: hostname")
+            min_level = params.get("min_level")
+            contains_text = params.get("contains_text")
+            safe_host = str(hostname).replace('"', '\\"')
+            q = f'(agent.name:"{safe_host}" OR data.hostname:"{safe_host}")'
+            if min_level is not None:
+                try:
+                    q += f" AND rule.level:[{int(min_level)} TO *]"
+                except Exception:
+                    pass
+            if contains_text:
+                safe = str(contains_text).replace('"', '\\"')
+                q += f' AND (message:*{safe}* OR full_log:*{safe}*)'
+            return wazuh.wazuh_search(q, limit=self.MAX_RESULTS, time_range=time_range, debug=debug)
+
+        if query_id == "alerts_by_user":
+            username = params.get("username")
+            if not username:
+                raise ValueError("Missing required param: username")
+            min_level = params.get("min_level")
+            safe_user = str(username).replace('"', '\\"')
+            # Cover Linux (dstuser/srcuser/audit), Windows (targetUserName), and syscheck
+            q = (
+                f'(data.dstuser:"{safe_user}" OR data.srcuser:"{safe_user}"'
+                f' OR syscheck.uname_after:"{safe_user}"'
+                f' OR data.win.eventdata.targetUserName:"{safe_user}"'
+                f' OR data.audit.auid:"{safe_user}")'
+            )
+            if min_level is not None:
+                try:
+                    q += f" AND rule.level:[{int(min_level)} TO *]"
                 except Exception:
                     pass
             return wazuh.wazuh_search(q, limit=self.MAX_RESULTS, time_range=time_range, debug=debug)
@@ -369,6 +480,94 @@ class ToolRunner:
 
             return wazuh.wazuh_search(q, limit=self.MAX_RESULTS, time_range=time_range, debug=debug)
 
+        # --- Raw event hunting (no rule-fire requirement) ---
+        if query_id == "raw_connections_by_ip":
+            ip = params.get("ip")
+            if not ip:
+                raise ValueError("Missing required param: ip")
+            safe = str(ip).replace('"', '\\"')
+            q = (
+                f'(data.srcip:"{safe}" OR data.dstip:"{safe}"'
+                f' OR source.ip:"{safe}" OR destination.ip:"{safe}"'
+                f' OR network.destination.ip:"{safe}" OR network.source.ip:"{safe}")'
+            )
+            return wazuh.wazuh_search(q, limit=self.MAX_RESULTS, time_range=time_range, debug=debug)
+
+        if query_id == "raw_connections_by_host":
+            hostname = params.get("hostname")
+            if not hostname:
+                raise ValueError("Missing required param: hostname")
+            safe = str(hostname).replace('"', '\\"')
+            q = (
+                f'(agent.name:"{safe}" OR data.hostname:"{safe}")'
+                f' AND (data.srcip:* OR data.dstip:* OR source.ip:* OR destination.ip:*)'
+            )
+            return wazuh.wazuh_search(q, limit=self.MAX_RESULTS, time_range=time_range, debug=debug)
+
+        if query_id == "process_events_by_host":
+            hostname = params.get("hostname")
+            if not hostname:
+                raise ValueError("Missing required param: hostname")
+            safe = str(hostname).replace('"', '\\"')
+            q = (
+                f'(agent.name:"{safe}" OR data.hostname:"{safe}")'
+                f' AND (data.audit.execve.a0:* OR data.win.eventdata.image:*'
+                f' OR data.audit.command:* OR data.process.name:* OR data.proc.name:*)'
+            )
+            return wazuh.wazuh_search(q, limit=self.MAX_RESULTS, time_range=time_range, debug=debug)
+
+        if query_id == "dns_queries_by_host":
+            hostname = params.get("hostname")
+            if not hostname:
+                raise ValueError("Missing required param: hostname")
+            safe = str(hostname).replace('"', '\\"')
+            q = (
+                f'(agent.name:"{safe}" OR data.hostname:"{safe}")'
+                f' AND (data.dns.question.name:* OR data.dns.rrname:* OR data.dns.query:*'
+                f' OR data.network.protocol:dns)'
+            )
+            return wazuh.wazuh_search(q, limit=self.MAX_RESULTS, time_range=time_range, debug=debug)
+
+        if query_id == "file_events_by_host":
+            hostname = params.get("hostname")
+            if not hostname:
+                raise ValueError("Missing required param: hostname")
+            safe = str(hostname).replace('"', '\\"')
+            q = (
+                f'(agent.name:"{safe}" OR data.hostname:"{safe}")'
+                f' AND (syscheck.path:* OR data.file:* OR data.win.eventdata.targetFilename:*'
+                f' OR data.audit.file.name:*)'
+            )
+            return wazuh.wazuh_search(q, limit=self.MAX_RESULTS, time_range=time_range, debug=debug)
+
+        if query_id == "auth_events_by_host":
+            hostname = params.get("hostname")
+            if not hostname:
+                raise ValueError("Missing required param: hostname")
+            safe = str(hostname).replace('"', '\\"')
+            q = (
+                f'(agent.name:"{safe}" OR data.hostname:"{safe}")'
+                f' AND (data.dstuser:* OR data.win.eventdata.targetUserName:*'
+                f' OR data.win.system.eventID:(4624 OR 4625 OR 4648 OR 4768 OR 4769)'
+                f' OR data.pam.msg:* OR data.audit.key:auth)'
+            )
+            return wazuh.wazuh_search(q, limit=self.MAX_RESULTS, time_range=time_range, debug=debug)
+
+        if query_id == "auth_events_by_user":
+            username = params.get("username")
+            if not username:
+                raise ValueError("Missing required param: username")
+            safe = str(username).replace('"', '\\"')
+            q = (
+                f'(data.dstuser:"{safe}" OR data.srcuser:"{safe}"'
+                f' OR data.win.eventdata.targetUserName:"{safe}"'
+                f' OR data.win.eventdata.subjectUserName:"{safe}"'
+                f' OR data.audit.auid:"{safe}")'
+                f' AND (data.win.system.eventID:(4624 OR 4625 OR 4648 OR 4768 OR 4769)'
+                f' OR data.pam.msg:* OR data.audit.key:auth OR data.dstuser:*)'
+            )
+            return wazuh.wazuh_search(q, limit=self.MAX_RESULTS, time_range=time_range, debug=debug)
+
         # --- Web/DVWA discovery & follow-ups ---
         if query_id in {"web_top_user_agents", "web_top_urls", "web_method_breakdown", "web_recent_samples",
                         "web_login_post_burst", "web_404_spike", "web_unique_paths_high", "web_payload_hunt"}:
@@ -460,6 +659,10 @@ class ToolRunner:
             elif tname in ("splunk", "elastic", "sentinel", "limacharlie"):
                 rows = self._exec_siem(tname, qid, params or {}, gte_iso, lte_iso)
                 summary = self._summary_normalized(rows)
+            elif tname == "virustotal":
+                vt = self._exec_virustotal(qid, params or {})
+                summary = vt["summary"]
+                rows = vt["samples"]
             else:
                 raise ValueError(f"Unsupported tool: {tname}")
         except Exception as e:

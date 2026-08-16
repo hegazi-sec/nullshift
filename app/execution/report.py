@@ -42,22 +42,24 @@ def build_report(evidence: Dict[str, Any], scores: Dict[str, Any]) -> str:
         f"- Threat score: {scores.get('threat_score')} | Severity: {scores.get('severity').upper()}",
         f"- Coverage score: {scores.get('coverage_score')} | Confidence: {scores.get('confidence')}%",
     ]
+    if scores.get("reasoning"):
+        verdict.append(f"- Assessment: {scores['reasoning']}")
+    if scores.get("mitre_tactics"):
+        verdict.append(f"- MITRE Tactics: {', '.join(scores['mitre_tactics'])}")
+    if scores.get("mitre_techniques"):
+        verdict.append(f"- MITRE Techniques: {', '.join(scores['mitre_techniques'])}")
+    if scores.get("nist_function"):
+        verdict.append(f"- NIST CSF: {scores['nist_function']}")
     if scores.get("capped_any"):
         verdict.append("- Note: one or more queries hit caps; results may be partial.")
-
-    # Next Actions
-    next_actions = [
-        "Next Actions:",
-        "- Validate top talkers and destinations; confirm intent with asset owners.",
-        "- Deep dive into high-volume signatures/agents using targeted queries.",
-        "- If scan/lateral heuristics flagged, inspect east-west traffic and authentication logs.",
-        "- Consider blocking or increased monitoring for suspicious sources/destinations.",
-    ]
 
     sections = [
         "\n".join(sec_evidence),
         "\n".join(corr_lines),
         "\n".join(verdict),
-        "\n".join(next_actions),
     ]
+
+    followups = (evidence.get("scenario_detection") or {}).get("recommended_followups") or []
+    if followups:
+        sections.append("Next Actions:\n" + "\n".join(f"- {f}" for f in followups))
     return "\n\n".join(sections)

@@ -168,6 +168,32 @@ class VerdictStore:
             self.conn.commit()
         return len(rows)
 
+    def list_for_conversations(
+        self, user_id: int, conversation_ids: Sequence[str]
+    ) -> List[Dict[str, Any]]:
+        """All verdicts recorded in any of the given conversations, oldest first.
+
+        Used by incident reports to show the IOC verdict trail across every
+        chat linked to a case.
+        """
+        ids = [c for c in conversation_ids if c]
+        if not ids:
+            return []
+        placeholders = ",".join("?" for _ in ids)
+        with self.lock:
+            cur = self.conn.cursor()
+            cur.execute(
+                f"""
+                SELECT ioc_value, ioc_type, verdict, confidence,
+                       conversation_id, message_excerpt, created_at
+                FROM verdicts
+                WHERE user_id=? AND conversation_id IN ({placeholders})
+                ORDER BY created_at ASC, rowid ASC
+                """,
+                (user_id, *ids),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
     def lookup_for_iocs(
         self,
         user_id: int,

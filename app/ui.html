@@ -120,6 +120,143 @@
     .conv-search input:focus { border-color: var(--accent); }
     .conv-search input::placeholder { color: var(--muted); }
 
+    /* ── Sidebar tabs (Investigations | Cases) ──────── */
+    .side-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 8px 14px 0;
+    }
+    .side-tab {
+      flex: 1;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--muted);
+      font-family: var(--font-ui);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      padding: 6px 4px;
+      cursor: pointer;
+      transition: color .12s, border-color .12s;
+    }
+    .side-tab:hover { color: var(--text2); }
+    .side-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-count {
+      display: inline-block; min-width: 15px; padding: 0 4px; margin-left: 4px;
+      background: var(--red); color: #fff; border-radius: 8px;
+      font-size: 10px; line-height: 15px; text-align: center;
+    }
+    .alert-payload {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 5px; padding: 10px 12px; margin-top: 10px;
+      font-family: var(--font-mono); font-size: 11.5px; color: var(--text2);
+      white-space: pre-wrap; word-break: break-word;
+      max-height: 340px; overflow-y: auto;
+    }
+    .alert-meta {
+      display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px;
+      font-size: 12px; color: var(--muted);
+    }
+    .alert-meta b { color: var(--text2); font-weight: 600; }
+
+    .sev-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      margin-top: 4px; flex-shrink: 0;
+    }
+    .sev-low      { background: var(--green); }
+    .sev-medium   { background: var(--yellow); }
+    .sev-high     { background: var(--orange); }
+    .sev-critical { background: var(--red); }
+    .case-status {
+      display: inline-block; font-size: 10px; font-weight: 600;
+      letter-spacing: .05em; text-transform: uppercase;
+      padding: 1px 7px; border-radius: 8px; margin-left: 6px;
+      border: 1px solid var(--border2); color: var(--muted);
+    }
+    .case-status.st-open          { color: var(--accent);  border-color: var(--accent); }
+    .case-status.st-investigating { color: var(--yellow);  border-color: var(--yellow); }
+    .case-status.st-closed        { color: var(--muted); }
+
+    /* ── Case detail panel ──────────────────────────── */
+    .case-panel {
+      max-width: 720px; margin: 24px auto; padding: 0 18px;
+    }
+    .case-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 20px 22px;
+    }
+    .case-card h2 { margin: 0 0 2px; font-size: 17px; color: var(--text2); }
+    .case-card .case-num {
+      font-family: var(--font-mono); font-size: 12px; color: var(--accent);
+      letter-spacing: .08em;
+    }
+    .case-row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+    .case-row label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .case-panel select, .case-panel input[type=text], .case-panel textarea {
+      background: var(--bg3); border: 1px solid var(--border2); color: var(--text2);
+      border-radius: 5px; padding: 6px 9px; font-family: var(--font-ui); font-size: 13px;
+    }
+    .case-panel select:focus, .case-panel input:focus, .case-panel textarea:focus {
+      outline: none; border-color: var(--accent);
+    }
+    .case-panel textarea { width: 100%; min-height: 70px; resize: vertical; margin-top: 6px; }
+    .case-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+    .btn-case {
+      background: var(--bg3); border: 1px solid var(--border2); color: var(--text2);
+      border-radius: 5px; padding: 7px 13px; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: border-color .12s, color .12s;
+    }
+    .btn-case:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-case.danger:hover { border-color: var(--red); color: var(--red); }
+    .case-convs { margin-top: 18px; }
+    .case-convs h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 8px; }
+    .case-conv-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px; background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 5px; margin-bottom: 6px; cursor: pointer; font-size: 13px;
+      transition: border-color .12s;
+    }
+    .case-conv-item:hover { border-color: var(--accent); }
+    .case-conv-item .unlink { color: var(--muted); background: none; border: none; cursor: pointer; font-size: 12px; }
+    .case-conv-item .unlink:hover { color: var(--red); }
+
+    /* ── Add-to-case button + modal ─────────────────── */
+    .btn-topbar {
+      background: transparent; border: 1px solid var(--border2); color: var(--muted);
+      border-radius: 5px; padding: 5px 11px; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: border-color .12s, color .12s; white-space: nowrap;
+    }
+    .btn-topbar:hover { border-color: var(--accent); color: var(--accent); }
+    .case-badge {
+      font-family: var(--font-mono); font-size: 11px; color: var(--accent);
+      border: 1px solid var(--accent); border-radius: 8px; padding: 2px 8px;
+      cursor: pointer; white-space: nowrap;
+    }
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(3,8,16,.72);
+      display: none; align-items: center; justify-content: center; z-index: 100;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px;
+      width: min(420px, 92vw); max-height: 80vh; overflow-y: auto; padding: 20px;
+    }
+    .modal h3 { margin: 0 0 14px; font-size: 14px; color: var(--text2); }
+    .modal .case-choice {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 12px; border: 1px solid var(--border); border-radius: 5px;
+      margin-bottom: 6px; cursor: pointer; font-size: 13px; color: var(--text2);
+      transition: border-color .12s;
+    }
+    .modal .case-choice:hover { border-color: var(--accent); }
+    .modal input[type=text] {
+      width: 100%; background: var(--bg3); border: 1px solid var(--border2);
+      color: var(--text2); border-radius: 5px; padding: 8px 10px; font-size: 13px;
+    }
+    .modal input[type=text]:focus { outline: none; border-color: var(--accent); }
+
     .conv-list { flex: 1; overflow-y: auto; padding: 6px 0; }
     .conv-list::-webkit-scrollbar { width: 4px; }
     .conv-list::-webkit-scrollbar-track { background: transparent; }
@@ -351,6 +488,14 @@
       transition: opacity .15s;
     }
     .msg-wrap:hover .msg-time { opacity: 1; }
+
+    .msg-copy {
+      background: none; border: none; color: var(--muted); cursor: pointer;
+      font-size: 12px; padding: 2px 5px; border-radius: 3px; line-height: 1;
+      opacity: 0; transition: opacity .15s, color .12s;
+    }
+    .msg-wrap:hover .msg-copy { opacity: .7; }
+    .msg-copy:hover { opacity: 1; color: var(--accent); background: rgba(0,180,216,.08); }
 
     /* Sidebar verdict dot */
     .verdict-dot {
@@ -752,6 +897,11 @@
     </button>
   </div>
 
+  <div class="side-tabs">
+    <button class="side-tab active" id="tabChats">Investigations</button>
+    <button class="side-tab" id="tabCases">Cases</button>
+    <button class="side-tab" id="tabAlerts">Alerts<span class="tab-count" id="alertCount" style="display:none">0</span></button>
+  </div>
   <div class="conv-search">
     <input type="text" id="convSearch" placeholder="Search investigations…" autocomplete="off"/>
   </div>
@@ -780,6 +930,8 @@
   <div class="topbar">
     <div class="conv-title" id="convTitle">Select a conversation</div>
     <div class="topbar-right">
+      <span class="case-badge" id="caseBadge" style="display:none" title="Open case"></span>
+      <button class="btn-topbar" id="addToCaseBtn" style="display:none" title="Attach this investigation to a case">+ Case</button>
       <div class="status-pill" id="statusPill">
         <div class="status-dot" id="statusDot"></div>
         <span id="statusText">Connecting…</span>
@@ -829,6 +981,21 @@
   </div>
 </div>
 
+<!-- Add-to-case modal -->
+<div class="modal-overlay" id="caseModal">
+  <div class="modal">
+    <h3>Attach to case</h3>
+    <div id="caseChoices"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <input type="text" id="newCaseTitle" placeholder="New case title…"/>
+      <button class="btn-case" id="createCaseBtn">Create</button>
+    </div>
+    <div style="text-align:right;margin-top:12px">
+      <button class="btn-case" onclick="document.getElementById('caseModal').classList.remove('show')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ─── API ──────────────────────────────────────────────────────────
 const api = {
@@ -866,6 +1033,80 @@ const api = {
       body: JSON.stringify(body),
       credentials: 'same-origin'
     })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  // ── Incidents / cases ──
+  async listIncidents() {
+    const r = await fetch('/api/incidents', { credentials: 'same-origin' })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  async newIncident(payload) {
+    const r = await fetch('/api/incidents', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload), credentials: 'same-origin'
+    })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  async getIncident(id) {
+    const r = await fetch(`/api/incidents/${id}`, { credentials: 'same-origin' })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  async updateIncident(id, payload) {
+    const r = await fetch(`/api/incidents/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload), credentials: 'same-origin'
+    })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  async deleteIncident(id) {
+    const r = await fetch(`/api/incidents/${id}`, { method: 'DELETE', credentials: 'same-origin' })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  async linkConvToIncident(incId, convId) {
+    const r = await fetch(`/api/incidents/${incId}/conversations`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversation_id: convId }), credentials: 'same-origin'
+    })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  async unlinkConvFromIncident(incId, convId) {
+    const r = await fetch(`/api/incidents/${incId}/conversations/${convId}`, {
+      method: 'DELETE', credentials: 'same-origin'
+    })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  async incidentsForConv(convId) {
+    const r = await fetch(`/api/conversations/${convId}/incidents`, { credentials: 'same-origin' })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  // ── Alert inbox ──
+  async listAlerts(status) {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : ''
+    const r = await fetch(`/api/alerts${qs}`, { credentials: 'same-origin' })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  async getAlert(id) {
+    const r = await fetch(`/api/alerts/${id}`, { credentials: 'same-origin' })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  async investigateAlert(id) {
+    const r = await fetch(`/api/alerts/${id}/investigate`, { method: 'POST', credentials: 'same-origin' })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  async dismissAlert(id) {
+    const r = await fetch(`/api/alerts/${id}/dismiss`, { method: 'POST', credentials: 'same-origin' })
     if (!r.ok) throw new Error(await r.text())
     return r.json()
   }
@@ -1053,6 +1294,19 @@ function addMessage(role, content, debugTrace, timestamp, images) {
   meta.appendChild(av)
   meta.appendChild(ts)
 
+  if (role !== 'user') {
+    const copyBtn = document.createElement('button')
+    copyBtn.className = 'msg-copy'
+    copyBtn.textContent = '⎘'
+    copyBtn.title = 'Copy message'
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(content)
+      copyBtn.textContent = '✓'
+      setTimeout(() => { copyBtn.textContent = '⎘' }, 1500)
+    }
+    meta.appendChild(copyBtn)
+  }
+
   const bubble = document.createElement('div')
   bubble.className = 'bubble'
 
@@ -1227,14 +1481,365 @@ function renderConvList(items) {
   })
 }
 
-document.getElementById('convSearch').addEventListener('input', () => renderConvList(_allConvs))
+document.getElementById('convSearch').addEventListener('input', () => {
+  if (sideTab === 'cases') renderIncidentList(_allIncs)
+  else if (sideTab === 'alerts') renderAlertList(_allAlerts)
+  else renderConvList(_allConvs)
+})
 
 async function refreshList() {
   try {
-    const data = await api.listConvs()
-    renderConvList(data.conversations || [])
+    if (sideTab === 'cases') {
+      const data = await api.listIncidents()
+      renderIncidentList(data.incidents || [])
+    } else if (sideTab === 'alerts') {
+      const data = await api.listAlerts()
+      updateAlertBadge(data.new_count || 0)
+      renderAlertList(data.alerts || [])
+    } else {
+      const data = await api.listConvs()
+      renderConvList(data.conversations || [])
+    }
   } catch {}
 }
+
+// ─── Cases (incidents) ────────────────────────────────────────────
+let sideTab = 'chats'
+let _allIncs = []
+let _allAlerts = []
+let currentIncident = null
+
+const tabChatsEl  = document.getElementById('tabChats')
+const tabCasesEl  = document.getElementById('tabCases')
+const tabAlertsEl = document.getElementById('tabAlerts')
+
+function setSideTab(tab) {
+  sideTab = tab
+  tabChatsEl.classList.toggle('active', tab === 'chats')
+  tabCasesEl.classList.toggle('active', tab === 'cases')
+  tabAlertsEl.classList.toggle('active', tab === 'alerts')
+  document.getElementById('convSearch').placeholder =
+    tab === 'cases' ? 'Search cases…' : tab === 'alerts' ? 'Search alerts…' : 'Search investigations…'
+  refreshList()
+}
+tabChatsEl.onclick  = () => setSideTab('chats')
+tabCasesEl.onclick  = () => setSideTab('cases')
+tabAlertsEl.onclick = () => setSideTab('alerts')
+
+function statusBadgeHtml(status) {
+  return `<span class="case-status st-${esc(status)}">${esc(status)}</span>`
+}
+
+function renderIncidentList(items) {
+  _allIncs = items
+  const q = (document.getElementById('convSearch')?.value || '').toLowerCase().trim()
+  const filtered = q ? items.filter(it =>
+    (it.title || '').toLowerCase().includes(q) ||
+    (it.case_number || '').toLowerCase().includes(q)) : items
+  convListEl.innerHTML = ''
+  if (!filtered.length) {
+    convListEl.innerHTML = `<div style="padding:16px 14px;font-size:12px;color:var(--muted)">${q ? 'No matches' : 'No cases yet. Open an investigation and press “+ Case”.'}</div>`
+    return
+  }
+  filtered.forEach(it => {
+    const d = document.createElement('div')
+    d.className = 'conv-item' + (currentIncident === it.id ? ' active' : '')
+    d.onclick = () => openIncident(it.id)
+    d.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:6px;">
+        <span class="sev-dot sev-${esc(it.severity)}" title="${esc(it.severity)}"></span>
+        <div class="ctitle" style="flex:1">${esc(it.title || 'Untitled case')}</div>
+      </div>
+      <div class="ctime">${esc(it.case_number)} · ${it.conversation_count || 0} chat${(it.conversation_count || 0) === 1 ? '' : 's'} ${statusBadgeHtml(it.status)}</div>`
+    const btn = document.createElement('button')
+    btn.className = 'del-btn'
+    btn.textContent = '✕'
+    btn.title = 'Delete case'
+    btn.onclick = e => { e.stopPropagation(); deleteIncident(it.id) }
+    d.appendChild(btn)
+    convListEl.appendChild(d)
+  })
+}
+
+async function deleteIncident(id) {
+  if (!confirm('Delete this case? Linked conversations are kept.')) return
+  try {
+    await api.deleteIncident(id)
+    if (currentIncident === id) showWelcome()
+    refreshList()
+  } catch {}
+}
+
+// ─── Alert inbox ──────────────────────────────────────────────────
+function updateAlertBadge(count) {
+  const el = document.getElementById('alertCount')
+  el.textContent = count > 99 ? '99+' : String(count)
+  el.style.display = count > 0 ? '' : 'none'
+}
+
+function alertStatusBadgeHtml(status) {
+  const cls = status === 'new' ? 'st-open' : status === 'investigating' ? 'st-investigating' : 'st-closed'
+  return `<span class="case-status ${cls}">${esc(status)}</span>`
+}
+
+function renderAlertList(items) {
+  _allAlerts = items
+  const q = (document.getElementById('convSearch')?.value || '').toLowerCase().trim()
+  const filtered = q ? items.filter(it =>
+    (it.title || '').toLowerCase().includes(q) ||
+    (it.source || '').toLowerCase().includes(q)) : items
+  convListEl.innerHTML = ''
+  if (!filtered.length) {
+    convListEl.innerHTML = `<div style="padding:16px 14px;font-size:12px;color:var(--muted)">${q ? 'No matches' : 'No alerts. Point your SIEM webhook at POST /api/alerts/ingest.'}</div>`
+    return
+  }
+  filtered.forEach(it => {
+    const d = document.createElement('div')
+    d.className = 'conv-item'
+    d.style.opacity = it.status === 'dismissed' ? '0.5' : ''
+    d.onclick = () => openAlert(it.id)
+    d.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:6px;">
+        <span class="sev-dot sev-${esc(it.severity)}" title="${esc(it.severity)}"></span>
+        <div class="ctitle" style="flex:1">${esc(it.title || 'Untitled alert')}</div>
+      </div>
+      <div class="ctime">${esc(it.source)} · ${fmtTime(it.created_at || '')} ${alertStatusBadgeHtml(it.status)}</div>`
+    convListEl.appendChild(d)
+  })
+}
+
+async function openAlert(id) {
+  let alert_
+  try { alert_ = await api.getAlert(id) } catch { return }
+  currentIncident = null
+  currentConv = null
+  updateCaseControls()
+  convTitleEl.textContent = `Alert — ${alert_.title}`
+
+  chatEl.innerHTML = ''
+  chatEl.appendChild(welcomeEl)
+  welcomeEl.style.display = 'none'
+
+  let payloadPretty = alert_.payload_json || '{}'
+  try { payloadPretty = JSON.stringify(JSON.parse(payloadPretty), null, 2) } catch {}
+
+  const panel = document.createElement('div')
+  panel.className = 'case-panel'
+  panel.innerHTML = `
+    <div class="case-card">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="sev-dot sev-${esc(alert_.severity)}"></span>
+        <h2 style="margin:0">${esc(alert_.title)}</h2>
+      </div>
+      <div class="alert-meta">
+        <span>Source: <b>${esc(alert_.source)}</b></span>
+        <span>Severity: <b>${esc(alert_.severity)}</b></span>
+        <span>Status: <b>${esc(alert_.status)}</b></span>
+        <span>Received: <b>${fmtTime(alert_.created_at)}</b></span>
+      </div>
+      <div class="alert-payload">${esc(payloadPretty)}</div>
+      <div class="case-actions">
+        ${alert_.status !== 'dismissed' ? '<button class="btn-case" id="alertInvestigateBtn">Investigate</button>' : ''}
+        ${alert_.status === 'new' ? '<button class="btn-case danger" id="alertDismissBtn">Dismiss</button>' : ''}
+        ${alert_.conversation_id ? '<button class="btn-case" id="alertOpenConvBtn">Open investigation chat</button>' : ''}
+      </div>
+    </div>`
+  chatEl.appendChild(panel)
+
+  const invBtn = panel.querySelector('#alertInvestigateBtn')
+  if (invBtn) invBtn.onclick = async () => {
+    invBtn.disabled = true
+    try {
+      const res = await api.investigateAlert(id)
+      if (!res.conversation_id) { alert('Alert already claimed'); return }
+      setSideTab('chats')
+      await loadConversation(res.conversation_id)
+      if (res.seed_message) {
+        inputEl.value = res.seed_message
+        send()
+      }
+    } catch (e) { alert('Investigate failed: ' + e.message); invBtn.disabled = false }
+  }
+  const disBtn = panel.querySelector('#alertDismissBtn')
+  if (disBtn) disBtn.onclick = async () => {
+    try { await api.dismissAlert(id); refreshList(); openAlert(id) } catch {}
+  }
+  const openBtn = panel.querySelector('#alertOpenConvBtn')
+  if (openBtn) openBtn.onclick = () => { setSideTab('chats'); loadConversation(alert_.conversation_id) }
+}
+
+async function pollAlertBadge() {
+  try {
+    const data = await api.listAlerts('new')
+    updateAlertBadge(data.new_count || 0)
+  } catch {}
+}
+
+function showWelcome() {
+  currentIncident = null
+  currentConv = null
+  chatEl.innerHTML = ''
+  chatEl.appendChild(welcomeEl)
+  welcomeEl.style.display = 'flex'
+  convTitleEl.textContent = 'Select a conversation'
+  updateCaseControls()
+}
+
+async function openIncident(id) {
+  let inc
+  try { inc = await api.getIncident(id) } catch { return }
+  currentIncident = id
+  currentConv = null
+  updateCaseControls()
+  convTitleEl.textContent = `${inc.case_number} — ${inc.title}`
+  renderIncidentList(_allIncs)
+
+  chatEl.innerHTML = ''
+  chatEl.appendChild(welcomeEl)
+  welcomeEl.style.display = 'none'
+
+  const panel = document.createElement('div')
+  panel.className = 'case-panel'
+  const sevOpts = ['low','medium','high','critical']
+    .map(s => `<option value="${s}" ${inc.severity === s ? 'selected' : ''}>${s}</option>`).join('')
+  const stOpts = ['open','investigating','closed']
+    .map(s => `<option value="${s}" ${inc.status === s ? 'selected' : ''}>${s}</option>`).join('')
+  const convRows = (inc.conversations || []).map(c => `
+    <div class="case-conv-item" data-cid="${esc(c.conversation_id)}">
+      <span>${esc(c.title || 'Untitled investigation')}</span>
+      <button class="unlink" title="Unlink from case" data-cid="${esc(c.conversation_id)}">unlink</button>
+    </div>`).join('')
+  panel.innerHTML = `
+    <div class="case-card">
+      <div class="case-num">${esc(inc.case_number)}</div>
+      <h2>${esc(inc.title)}</h2>
+      <div class="case-row">
+        <label>Severity</label><select id="caseSev">${sevOpts}</select>
+        <label>Status</label><select id="caseStatus">${stOpts}</select>
+        <label>Verdict</label>
+        <input type="text" id="caseVerdict" placeholder="e.g. True positive — contained" value="${esc(inc.verdict || '')}" style="flex:1;min-width:160px"/>
+      </div>
+      <div style="margin-top:14px">
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Analyst notes</label>
+        <textarea id="caseNotes" placeholder="Containment steps, escalation details, ticket refs…">${esc(inc.notes || '')}</textarea>
+      </div>
+      <div class="case-actions">
+        <button class="btn-case" id="caseSaveBtn">Save changes</button>
+        <button class="btn-case" id="caseHtmlBtn">Export report (HTML)</button>
+        <button class="btn-case" id="caseMdBtn">Export report (MD)</button>
+        <button class="btn-case danger" id="caseDelBtn">Delete case</button>
+      </div>
+      <div class="case-convs">
+        <h3>Linked investigations (${(inc.conversations || []).length})</h3>
+        ${convRows || '<div style="font-size:12px;color:var(--muted)">None yet — open a chat and press “+ Case”.</div>'}
+      </div>
+      <div class="ctime" style="margin-top:14px;font-size:11px;color:var(--muted)">
+        Opened ${fmtTime(inc.created_at)}${inc.closed_at ? ' · Closed ' + fmtTime(inc.closed_at) : ''}
+      </div>
+    </div>`
+  chatEl.appendChild(panel)
+
+  panel.querySelector('#caseSaveBtn').onclick = async () => {
+    try {
+      await api.updateIncident(id, {
+        severity: panel.querySelector('#caseSev').value,
+        status: panel.querySelector('#caseStatus').value,
+        verdict: panel.querySelector('#caseVerdict').value,
+        notes: panel.querySelector('#caseNotes').value,
+      })
+      openIncident(id)
+      refreshList()
+    } catch (e) { alert('Save failed: ' + e.message) }
+  }
+  panel.querySelector('#caseHtmlBtn').onclick = () => window.open(`/api/incidents/${id}/report`, '_blank')
+  panel.querySelector('#caseMdBtn').onclick = () => { window.location = `/api/incidents/${id}/report?format=md` }
+  panel.querySelector('#caseDelBtn').onclick = () => deleteIncident(id)
+  panel.querySelectorAll('.case-conv-item').forEach(el => {
+    el.onclick = e => {
+      if (e.target.classList.contains('unlink')) return
+      setSideTab('chats')
+      loadConversation(el.dataset.cid)
+    }
+  })
+  panel.querySelectorAll('.unlink').forEach(btn => {
+    btn.onclick = async e => {
+      e.stopPropagation()
+      try { await api.unlinkConvFromIncident(id, btn.dataset.cid); openIncident(id) } catch {}
+    }
+  })
+}
+
+// ─── Add-to-case (topbar) ─────────────────────────────────────────
+const addToCaseBtn = document.getElementById('addToCaseBtn')
+const caseBadgeEl  = document.getElementById('caseBadge')
+const caseModalEl  = document.getElementById('caseModal')
+
+async function updateCaseControls() {
+  if (!currentConv) {
+    addToCaseBtn.style.display = 'none'
+    caseBadgeEl.style.display = 'none'
+    return
+  }
+  addToCaseBtn.style.display = ''
+  try {
+    const data = await api.incidentsForConv(currentConv)
+    const incs = data.incidents || []
+    if (incs.length) {
+      caseBadgeEl.textContent = incs.map(i => i.case_number).join(' ')
+      caseBadgeEl.style.display = ''
+      caseBadgeEl.onclick = () => { setSideTab('cases'); openIncident(incs[0].id) }
+    } else {
+      caseBadgeEl.style.display = 'none'
+    }
+  } catch { caseBadgeEl.style.display = 'none' }
+}
+
+addToCaseBtn.onclick = async () => {
+  if (!currentConv) return
+  const choicesEl = document.getElementById('caseChoices')
+  choicesEl.innerHTML = '<div style="font-size:12px;color:var(--muted)">Loading…</div>'
+  caseModalEl.classList.add('show')
+  try {
+    const data = await api.listIncidents()
+    const open = (data.incidents || []).filter(i => i.status !== 'closed')
+    choicesEl.innerHTML = open.length ? '' :
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">No open cases — create one below.</div>'
+    open.forEach(inc => {
+      const d = document.createElement('div')
+      d.className = 'case-choice'
+      d.innerHTML = `<span class="sev-dot sev-${esc(inc.severity)}"></span>
+        <span style="flex:1">${esc(inc.title)}</span>
+        <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">${esc(inc.case_number)}</span>`
+      d.onclick = async () => {
+        try {
+          await api.linkConvToIncident(inc.id, currentConv)
+          caseModalEl.classList.remove('show')
+          updateCaseControls()
+          if (sideTab === 'cases') refreshList()
+        } catch (e) { alert('Link failed: ' + e.message) }
+      }
+      choicesEl.appendChild(d)
+    })
+  } catch {
+    choicesEl.innerHTML = '<div style="font-size:12px;color:var(--red)">Failed to load cases</div>'
+  }
+}
+
+document.getElementById('createCaseBtn').onclick = async () => {
+  const titleInput = document.getElementById('newCaseTitle')
+  const title = titleInput.value.trim() || convTitleEl.textContent || 'Untitled case'
+  try {
+    await api.newIncident({ title, conversation_id: currentConv })
+    titleInput.value = ''
+    caseModalEl.classList.remove('show')
+    updateCaseControls()
+    if (sideTab === 'cases') refreshList()
+  } catch (e) { alert('Create failed: ' + e.message) }
+}
+
+caseModalEl.addEventListener('click', e => {
+  if (e.target === caseModalEl) caseModalEl.classList.remove('show')
+})
 
 async function deleteConversation(id) {
   if (!confirm('Delete this conversation? This cannot be undone.')) return
@@ -1246,6 +1851,7 @@ async function deleteConversation(id) {
       welcomeEl.style.display = 'flex'
       chatEl.appendChild(welcomeEl)
       convTitleEl.textContent = 'Investigation'
+      updateCaseControls()
     }
     refreshList()
   } catch { /* silent */ }
@@ -1254,6 +1860,8 @@ async function deleteConversation(id) {
 // ─── Load conversation ───────────────────────────────────────────
 async function loadConversation(id) {
   currentConv = id
+  currentIncident = null
+  updateCaseControls()
   chatEl.innerHTML = ''
   welcomeEl.style.display = 'none'
   chatEl.appendChild(welcomeEl)
@@ -1339,6 +1947,14 @@ async function send() {
   if (!currentConv) {
     const nc = await api.newConv()
     currentConv = nc.id
+    if (currentIncident) {
+      // Typing while viewing a case starts a fresh chat — clear the panel.
+      currentIncident = null
+      chatEl.innerHTML = ''
+      chatEl.appendChild(welcomeEl)
+      welcomeEl.style.display = 'none'
+    }
+    updateCaseControls()
   }
 
   addMessage('user', msg, null, null, imgs)
@@ -1433,11 +2049,13 @@ inputEl.addEventListener('input', () => {
 newChatBtn.onclick = async () => {
   const nc = await api.newConv()
   currentConv = nc.id
+  currentIncident = null
   convTitleEl.textContent = 'New Investigation'
   chatEl.innerHTML = ''
   chatEl.appendChild(welcomeEl)
   welcomeEl.style.display = ''
-  await refreshList()
+  setSideTab('chats')
+  updateCaseControls()
 }
 
 // ─── Keyboard shortcuts ──────────────────────────────────────────
@@ -1474,7 +2092,9 @@ document.addEventListener('keydown', e => {
 // ─── Init ────────────────────────────────────────────────────────
 ping()
 refreshList()
+pollAlertBadge()
 setInterval(ping, 60_000)
+setInterval(pollAlertBadge, 60_000)
 </script>
 </body>
 </html>

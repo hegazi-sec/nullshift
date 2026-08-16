@@ -1,7 +1,10 @@
 from fastapi import FastAPI, Request, HTTPException, Depends, Header
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse, Response
 from fastapi.exceptions import RequestValidationError
-from app.schemas import ChatRequest, ConversationCreate, MessageCreate, ToolExecuteRequest, PrefsUpdate
+from app.schemas import (
+    ChatRequest, ConversationCreate, MessageCreate, ToolExecuteRequest, PrefsUpdate,
+    IncidentCreate, IncidentUpdate, IncidentLink,
+)
 from app.config import settings
 from app.connectors import wazuh, virustotal
 from app.llm import (
@@ -21,6 +24,9 @@ from app.auth import router as auth_router, get_current_user, require_admin, ini
 from app.db.chat_store import store
 from app.db.investigation_state import inv_state
 from app.db.verdict_store import verdicts as verdict_store, parse_decision
+from app.db.incident_store import incidents as incident_store
+from app.db.alert_store import alerts_inbox
+from app.reports import build_incident_report_md, build_incident_report_html
 from app.db.prefs_store import prefs as prefs_store
 from app.db.summary_store import summaries as summary_store
 from app.deployment_memory import write_memory_file, get_cached_memory
@@ -159,6 +165,16 @@ def select_response_mode(user_message: str, last_assistant_message: Optional[str
     if any(p in msg for p in handoff_phrases):
         return "l2_handoff"
 
+    # L2 deep investigation — analyst explicitly wants multi-hop follow-up
+    l2_investigation_phrases = (
+        "go deeper", "deeper investigation", "investigate further", "investigate deeper",
+        "full investigation", "deep dive", "deep investigation", "l2 investigation",
+        "more thorough", "thorough investigation", "dig deeper", "follow the trail",
+        "follow up on", "chase this", "expand investigation",
+    )
+    if any(p in msg for p in l2_investigation_phrases):
+        return "l2_investigation"
+
     decision_like = any(p in msg for p in ["true positive", "false positive", "verdict", "is this", "tp", "fp"])
     analysis_like = any(p in msg for p in ["investigate", "investigation", "analyze", "analysis", "check", "review"])
     has_indicator = _has_indicator(msg)
@@ -194,6 +210,7 @@ def select_response_mode(user_message: str, last_assistant_message: Optional[str
 
 _TEMP_BY_MODE: Dict[str, float] = {
     "investigation_report": 0.1,   # evidence-faithful; lower = fewer invented facts
+    "l2_investigation": 0.1,       # multi-hop deep analysis — must stay faithful to tool results
     "l2_handoff": 0.1,             # ticket must be exact
     "clarifying_question": 0.15,   # slightly more latitude for phrasing a question
     "targeted_answer": 0.1,        # follow-up answers; was 0.4 — that was the hallucination source
@@ -426,6 +443,10 @@ def handle_chat_orchestrated(req: ChatRequest, conv_id: str, last_assistant: Opt
     if prior_verdicts:
         evidence_bundle["prior_verdicts"] = prior_verdicts
 
+    vt_hits = auto_enrich_iocs((req.message or '') + ' ' + subject_text)
+    if vt_hits:
+        evidence_bundle["vt_enrichment"] = vt_hits
+
     prior_sessions = _prime_prior_session_summaries(current_user["id"], conv_id)
     if prior_sessions:
         evidence_bundle["prior_session_summaries"] = prior_sessions
@@ -448,13 +469,29 @@ def handle_chat_orchestrated(req: ChatRequest, conv_id: str, last_assistant: Opt
         "content": f"{note}User message: {req.message}\n\nUse evidence bundle to decide minimum necessary sources."
     }
 
-    retrieved = _rag_mod.rag.retrieve(_rag_query(req.message or ""))
+    # For L2, prepend MITRE techniques from the AI scorer so RAG retrieves
+    # the right skill files rather than relying on the user's message to
+    # contain technique IDs (it usually won't).
+    if response_mode == "l2_investigation":
+        scores = evidence_bundle.get("scores") or {}
+        mitre_ids = (scores.get("mitre_techniques") or []) + (scores.get("mitre_tactics") or [])
+        active_siems = list((evidence_bundle.get("sources_queried") or {}).keys())
+        rag_seed = " ".join(active_siems + mitre_ids) + " " + (req.message or "")
+    else:
+        rag_seed = req.message or ""
+    retrieved = _rag_mod.rag.retrieve(_rag_query(rag_seed))
     if debug:
         debug.add({
             "type": "rag",
             "chunks_retrieved": len(retrieved),
             "sources": [r.split("\n")[0] for r in retrieved],
         })
+    # Auto-upgrade to L2 deep investigation when threat score is high
+    if response_mode == "investigation_report":
+        threat = (evidence_bundle.get("scores") or {}).get("threat_score", 0)
+        if threat >= 60:
+            response_mode = "l2_investigation"
+
     reply = orchestrated_llm_reply(augmented_user, conv_id, response_mode, evidence_bundle, current_user, retrieved=retrieved, debug=debug)
 
     # Record this turn's verdict for any IOCs the user mentioned, so future
@@ -1328,6 +1365,84 @@ def extract_iocs(text: str):
     domains = re.findall(r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,6}\b", text)
     return list(set(ips+domains+hashes))
 
+
+# TLDs that are really file extensions — the broad domain regex in extract_iocs
+# matches "report.pdf" or "payload.exe" as if they were domains. We skip these
+# for VT lookups so enrichment doesn't burn rate-limited requests on filenames.
+_FILE_EXT_TLDS = frozenset({
+    "exe", "dll", "sys", "bat", "cmd", "ps1", "vbs", "js", "jse", "wsf", "hta",
+    "sh", "py", "pl", "rb", "jar", "bin", "msi", "scr",
+    "txt", "log", "csv", "json", "xml", "yml", "yaml", "ini", "cfg", "conf",
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "rtf", "odt",
+    "zip", "rar", "gz", "tar", "7z",
+    "png", "jpg", "jpeg", "gif", "bmp", "svg", "ico", "webp",
+    "html", "htm", "css", "php", "asp", "aspx", "md",
+})
+
+
+def _is_private_ip(ip: str) -> bool:
+    try:
+        import ipaddress
+        addr = ipaddress.ip_address(ip)
+        return addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved or addr.is_multicast
+    except Exception:
+        return True  # unparseable → treat as not-enrichable
+
+
+def iocs_for_enrichment(text: str, limit: int = 4) -> List[str]:
+    """IOCs from `text` worth a VirusTotal lookup, noise-filtered and capped.
+
+    Drops private/reserved IPs, file-extension false positives, and hex strings
+    that aren't valid hash lengths (MD5/SHA1/SHA256). Capped at `limit` because
+    the VirusTotal public API allows only 4 requests/minute.
+    """
+    out: List[str] = []
+    seen = set()
+    for ioc in extract_iocs(text or ''):
+        low = ioc.lower()
+        if low in seen:
+            continue
+        # IPv4?
+        if re.fullmatch(r"(?:[0-9]{1,3}\.){3}[0-9]{1,3}", ioc):
+            if _is_private_ip(ioc):
+                continue
+        # hex hash? only real hash lengths
+        elif re.fullmatch(r"[a-fA-F0-9]{32,64}", ioc):
+            if len(ioc) not in (32, 40, 64):
+                continue
+        # otherwise a domain — skip file-extension look-alikes
+        else:
+            tld = low.rsplit(".", 1)[-1]
+            if tld in _FILE_EXT_TLDS:
+                continue
+        seen.add(low)
+        out.append(ioc)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def auto_enrich_iocs(text: str, limit: int = 4) -> List[Dict[str, Any]]:
+    """Run VirusTotal enrichment on noteworthy IOCs in `text`.
+
+    No-op (returns []) when no VT key is configured or nothing worth looking up
+    is found. Never raises — enrichment must not break an investigation.
+    """
+    try:
+        from app.connectors.virustotal import _get_vt_key, vt_enrich_compact
+        if not _get_vt_key():
+            return []
+        targets = iocs_for_enrichment(text, limit=limit)
+        results: List[Dict[str, Any]] = []
+        for ioc in targets:
+            summary = vt_enrich_compact(ioc)
+            if summary and "error" not in summary:
+                results.append(summary)
+        return results
+    except Exception:
+        log.exception("auto_enrich_iocs failed")
+        return []
+
 def extract_flow_id(text: str):
     if not text:
         return None
@@ -1468,6 +1583,202 @@ def api_get_messages(conversation_id: str, current_user: Dict[str, Any] = Depend
     return {"messages": conv["messages"]}
 
 
+# ─── Webhook alert ingestion ─────────────────────────────────────────────────
+
+_MAX_WEBHOOK_BYTES = 128 * 1024
+
+
+@app.post('/api/alerts/ingest')
+async def api_ingest_alert(request: Request, source: Optional[str] = None, token: Optional[str] = None):
+    """SIEM-facing webhook. Authenticated by the webhook shared secret instead
+    of JWT — SIEMs can't do interactive login. Returns 503 until an admin sets
+    webhook_token in settings.
+
+    The token is read from the X-Webhook-Token header (preferred) or, for SIEMs
+    that can't set custom headers (LimaCharlie webhook output, Splunk's built-in
+    webhook action), from a ?token= query param. The query param is less private
+    — it can appear in proxy/access logs — so prefer the header where possible.
+    """
+    import hmac as _hmac
+    import json as _json
+    configured = (settings_store.get("webhook_token") or "").strip()
+    if not configured:
+        raise HTTPException(status_code=503, detail="Webhook ingestion not configured — set webhook_token in Admin Settings")
+    provided = request.headers.get("X-Webhook-Token") or token or ""
+    if not _hmac.compare_digest(provided.encode(), configured.encode()):
+        raise HTTPException(status_code=401, detail="Invalid webhook token")
+    body = await request.body()
+    if len(body) > _MAX_WEBHOOK_BYTES:
+        raise HTTPException(status_code=413, detail="Payload too large (max 128 KB)")
+    try:
+        payload = _json.loads(body or b"{}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Body must be valid JSON")
+    if not isinstance(payload, dict):
+        payload = {"data": payload}
+    rec = alerts_inbox.ingest(payload, source_hint=source)
+    log.info("Webhook alert ingested: %s (%s, %s)", rec["id"], rec["source"], rec["severity"])
+    return {"ok": True, "id": rec["id"]}
+
+
+@app.get('/api/alerts')
+def api_list_alerts(status: Optional[str] = None, current_user: Dict[str, Any] = Depends(get_current_user)):
+    return {
+        "alerts": alerts_inbox.list(status=status),
+        "new_count": alerts_inbox.count_new(),
+    }
+
+
+@app.get('/api/alerts/{alert_id}')
+def api_get_alert(alert_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    alert = alerts_inbox.get(alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return alert
+
+
+@app.post('/api/alerts/{alert_id}/investigate')
+def api_investigate_alert(alert_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Claim an alert: create a conversation for this analyst and return a
+    seed message the UI auto-sends through the normal chat pipeline."""
+    alert = alerts_inbox.get(alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    if alert["status"] == "dismissed":
+        raise HTTPException(status_code=409, detail="Alert was dismissed")
+    if alert["status"] == "investigating" and alert.get("conversation_id"):
+        return {"conversation_id": alert["conversation_id"], "already_claimed": True, "seed_message": None}
+
+    conv = store.create_conversation_for_user(
+        current_user["id"], title=f"[Alert] {alert['title']}"[:60]
+    )
+    if not alerts_inbox.mark_investigating(alert_id, current_user["id"], conv["id"]):
+        # Raced with another analyst — drop the orphan conversation and hand
+        # back whatever conversation won the claim.
+        store.delete_conversation_for_user(current_user["id"], conv["id"])
+        latest = alerts_inbox.get(alert_id) or {}
+        return {"conversation_id": latest.get("conversation_id"), "already_claimed": True, "seed_message": None}
+
+    payload = alert.get("payload_json") or "{}"
+    if len(payload) > 4000:
+        payload = payload[:4000] + "\n… (truncated)"
+    seed = (
+        f"Investigate this alert pushed from {alert['source']}:\n"
+        f"{alert['title']} (severity: {alert['severity']}, received {alert['created_at']})\n\n"
+        f"Raw alert payload:\n```json\n{payload}\n```"
+    )
+    return {"conversation_id": conv["id"], "seed_message": seed, "already_claimed": False}
+
+
+@app.post('/api/alerts/{alert_id}/dismiss')
+def api_dismiss_alert(alert_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    if not alerts_inbox.dismiss(alert_id, current_user["id"]):
+        raise HTTPException(status_code=404, detail="Alert not found or already dismissed")
+    return {"ok": True}
+
+
+# ─── Incident / case tracking ────────────────────────────────────────────────
+
+@app.post('/api/incidents')
+def api_create_incident(payload: IncidentCreate, current_user: Dict[str, Any] = Depends(get_current_user)):
+    try:
+        inc = incident_store.create(
+            user_id=current_user["id"],
+            title=payload.title,
+            severity=payload.severity or "medium",
+            notes=payload.notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if payload.conversation_id:
+        # Verify the conversation belongs to this user before linking.
+        conv = store.get_conversation_for_user(current_user["id"], payload.conversation_id)
+        if conv:
+            incident_store.link_conversation(current_user["id"], inc["id"], payload.conversation_id)
+    return incident_store.get_for_user(current_user["id"], inc["id"])
+
+
+@app.get('/api/incidents')
+def api_list_incidents(status: Optional[str] = None, current_user: Dict[str, Any] = Depends(get_current_user)):
+    return {"incidents": incident_store.list_for_user(current_user["id"], status=status)}
+
+
+@app.get('/api/incidents/{incident_id}')
+def api_get_incident(incident_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    inc = incident_store.get_for_user(current_user["id"], incident_id)
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    return inc
+
+
+@app.patch('/api/incidents/{incident_id}')
+def api_update_incident(incident_id: str, payload: IncidentUpdate, current_user: Dict[str, Any] = Depends(get_current_user)):
+    try:
+        inc = incident_store.update_for_user(
+            current_user["id"], incident_id, payload.model_dump(exclude_unset=True)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    return inc
+
+
+@app.delete('/api/incidents/{incident_id}')
+def api_delete_incident(incident_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    if not incident_store.delete_for_user(current_user["id"], incident_id):
+        raise HTTPException(status_code=404, detail="Incident not found")
+    return {"ok": True}
+
+
+@app.post('/api/incidents/{incident_id}/conversations')
+def api_link_conversation(incident_id: str, payload: IncidentLink, current_user: Dict[str, Any] = Depends(get_current_user)):
+    conv = store.get_conversation_for_user(current_user["id"], payload.conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if not incident_store.link_conversation(current_user["id"], incident_id, payload.conversation_id):
+        raise HTTPException(status_code=404, detail="Incident not found")
+    return incident_store.get_for_user(current_user["id"], incident_id)
+
+
+@app.delete('/api/incidents/{incident_id}/conversations/{conversation_id}')
+def api_unlink_conversation(incident_id: str, conversation_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    if not incident_store.unlink_conversation(current_user["id"], incident_id, conversation_id):
+        raise HTTPException(status_code=404, detail="Link not found")
+    return {"ok": True}
+
+
+@app.get('/api/conversations/{conversation_id}/incidents')
+def api_incidents_for_conversation(conversation_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    conv = store.get_conversation_for_user(current_user["id"], conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"incidents": incident_store.incidents_for_conversation(current_user["id"], conversation_id)}
+
+
+@app.get('/api/incidents/{incident_id}/report')
+def api_incident_report(incident_id: str, format: str = "html", current_user: Dict[str, Any] = Depends(get_current_user)):
+    inc = incident_store.get_for_user(current_user["id"], incident_id)
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    conv_ids = [c["conversation_id"] for c in inc.get("conversations", [])]
+    conversations = []
+    for cid in conv_ids:
+        conv = store.get_conversation_for_user(current_user["id"], cid)
+        if conv:
+            conversations.append(conv)
+    ioc_verdicts = verdict_store.list_for_conversations(current_user["id"], conv_ids)
+    if format == "md":
+        md = build_incident_report_md(inc, conversations, ioc_verdicts)
+        return Response(
+            content=md,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{inc["case_number"]}-report.md"'},
+        )
+    html_doc = build_incident_report_html(inc, conversations, ioc_verdicts)
+    return HTMLResponse(content=html_doc)
+
+
 @app.post('/api/conversations/{conversation_id}/messages')
 def api_post_message(conversation_id: str, payload: MessageCreate, current_user: Dict[str, Any] = Depends(get_current_user)):
     if not any_provider_configured():
@@ -1527,6 +1838,11 @@ def api_post_message(conversation_id: str, payload: MessageCreate, current_user:
         )
         if prior:
             evidence["prior_verdicts"] = prior
+
+    # Auto-enrich noteworthy IOCs against VirusTotal (no-op without a VT key).
+    vt_hits = auto_enrich_iocs(payload.message or '')
+    if vt_hits:
+        evidence["vt_enrichment"] = vt_hits
 
     prior_sessions = _prime_prior_session_summaries(current_user["id"], conversation_id)
     if prior_sessions:
@@ -1680,6 +1996,10 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
         prior = verdict_store.lookup_for_iocs(current_user["id"], msg_iocs, limit_per_ioc=3, exclude_conversation_id=conversation_id)
         if prior:
             evidence["prior_verdicts"] = prior
+
+    vt_hits = auto_enrich_iocs(payload.message or '')
+    if vt_hits:
+        evidence["vt_enrichment"] = vt_hits
 
     prior_sessions = _prime_prior_session_summaries(current_user["id"], conversation_id)
     if prior_sessions:
