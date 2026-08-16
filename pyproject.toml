@@ -3,7 +3,7 @@
 
 [project]
 name = "nullshift"
-version = "0.1.0"
+version = "0.2.0"
 description = "AI-Powered Security Operations Center triage assistant"
 requires-python = ">=3.11"
 readme = "README.md"
