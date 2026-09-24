@@ -4,9 +4,13 @@
 
 const { chromium } = require('playwright');
 
-const BASE  = 'http://127.0.0.1:8765';
-const ADMIN = 'admin';
-const PASS  = 'AIslam@Hegazy234@';
+const BASE  = process.env.NULLSHIFT_E2E_BASE || 'http://127.0.0.1:8765';
+const ADMIN = process.env.NULLSHIFT_E2E_USER || 'admin';
+const PASS  = process.env.NULLSHIFT_E2E_PASS;  // never commit credentials
+if (!PASS) {
+  console.error('Set NULLSHIFT_E2E_PASS (optionally NULLSHIFT_E2E_USER, NULLSHIFT_E2E_BASE) to run the E2E suite.');
+  process.exit(2);
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 let passed = 0, failed = 0, skipped = 0;
