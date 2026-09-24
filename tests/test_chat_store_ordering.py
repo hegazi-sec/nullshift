@@ -11,11 +11,14 @@ from pathlib import Path
 import pytest
 
 from app.db.chat_store import ChatStore
+from app.db.verdict_store import VerdictStore
 
 
 @pytest.fixture
 def chat(tmp_path: Path) -> ChatStore:
-    return ChatStore(db_path=tmp_path / "test_chat.db")
+    db = tmp_path / "test_chat.db"
+    VerdictStore(db_path=db)  # conversation listing joins verdicts, which share chat.db in the app
+    return ChatStore(db_path=db)
 
 
 def test_list_conversations_newest_first_within_one_second(chat: ChatStore):

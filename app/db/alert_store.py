@@ -18,7 +18,7 @@ import json
 import sqlite3
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -70,6 +70,9 @@ def extract_alert_fields(payload: Dict[str, Any]) -> Dict[str, str]:
     if not title and payload.get("cat"):
         title = str(payload["cat"])
         source = source or "limacharlie"
+        meta = payload.get("detect_mtd")  # the D&R rule's report metadata
+        if severity is None and isinstance(meta, dict):
+            severity = meta.get("severity")
     if not title and payload.get("search_name"):
         title = str(payload["search_name"])
         source = source or "splunk"
@@ -125,6 +128,18 @@ class AlertStore:
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_alerts_status ON ingested_alerts(status, created_at)"
             )
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS idx_alerts_detect_id "
+                "ON ingested_alerts(json_extract(payload_json, '$.detect_id'))"
+            )
+            # ponytail: startup backfill for LimaCharlie alerts ingested before detect_mtd.severity
+            # was read (they defaulted to 'medium'); a no-op once fixed, delete after every install has run it
+            cur.execute(
+                "SELECT id, json_extract(payload_json, '$.detect_mtd.severity') FROM ingested_alerts "
+                "WHERE severity = 'medium' AND json_extract(payload_json, '$.detect_mtd.severity') IS NOT NULL"
+            )
+            fixes = [(normalize_severity(s), i) for i, s in cur.fetchall() if normalize_severity(s) != "medium"]
+            cur.executemany("UPDATE ingested_alerts SET severity = ? WHERE id = ?", fixes)
             self.conn.commit()
 
     @staticmethod
@@ -141,8 +156,23 @@ class AlertStore:
             raw = json.dumps(payload, default=str, ensure_ascii=False)
         except Exception:
             raw = "{}"
+        # LimaCharlie detections carry a stable detect_id: the webhook and the
+        # inbox refresh pull can both deliver one, so the second is a no-op.
+        detect_id = payload.get("detect_id") if isinstance(payload, dict) else None
         with self.lock:
             cur = self.conn.cursor()
+            if detect_id:
+                cur.execute(
+                    """
+                    SELECT id, source, title, severity, status, created_at
+                    FROM ingested_alerts
+                    WHERE json_extract(payload_json, '$.detect_id')=? LIMIT 1
+                    """,
+                    (str(detect_id),),
+                )
+                row = cur.fetchone()
+                if row:
+                    return {**dict(row), "duplicate": True}
             cur.execute(
                 """
                 INSERT INTO ingested_alerts(id, source, title, severity, payload_json,
@@ -187,6 +217,47 @@ class AlertStore:
             cur = self.conn.cursor()
             cur.execute("SELECT COUNT(*) FROM ingested_alerts WHERE status='new'")
             return int(cur.fetchone()[0])
+
+    def stats(self, hours: int, buckets: int = 24) -> Dict[str, Any]:
+        """Dashboard aggregates for alerts received in the last `hours`, plus the
+        all-time backlog (new / investigating) that the inbox badge counts."""
+        # ponytail: recomputed on every call and the UI polls each second; fine at
+        # thousands of rows, pre-aggregate per hour if the inbox reaches millions
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        bucket_s = hours * 3600 / buckets
+        win = "FROM ingested_alerts WHERE created_at >= ?"
+        host = ("COALESCE(json_extract(payload_json, '$.routing.hostname'),"  # LimaCharlie
+                " json_extract(payload_json, '$.agent.name'),"                # Wazuh
+                " json_extract(payload_json, '$.host.name'))")                # Elastic ECS
+
+        def q(sql: str, *args: Any) -> List[sqlite3.Row]:
+            return self.conn.execute(sql, args).fetchall()
+
+        with self.lock:
+            volume = [0] * buckets
+            for b, n in q(f"SELECT CAST((julianday(created_at) - julianday(?)) * 86400 / ? AS INT), COUNT(*) "
+                          f"{win} GROUP BY 1", since, bucket_s, since):
+                volume[min(max(int(b), 0), buckets - 1)] += n
+            return {
+                "since": since,
+                "bucket_s": bucket_s,
+                "volume": volume,
+                "total": q(f"SELECT COUNT(*) {win}", since)[0][0],
+                "by_severity": {s: n for s, n in q(f"SELECT severity, COUNT(*) {win} GROUP BY severity", since)},
+                "top_rules": [dict(r) for r in q(
+                    f"SELECT title AS name, COUNT(*) AS n {win} GROUP BY title ORDER BY n DESC LIMIT 6", since)],
+                "top_hosts": [dict(r) for r in q(
+                    f"SELECT {host} AS name, COUNT(*) AS n {win} GROUP BY name HAVING name IS NOT NULL "
+                    f"ORDER BY n DESC LIMIT 6", since)],
+                "recent": [dict(r) for r in q(
+                    f"SELECT id, source, title, severity, status, created_at {win} "
+                    f"ORDER BY created_at DESC LIMIT 8", since)],
+                # Arrival -> last status change (investigate or dismiss).
+                "triage_s": q(f"SELECT AVG((julianday(updated_at) - julianday(created_at)) * 86400) {win} "
+                              f"AND status != 'new'", since)[0][0],
+                "backlog": {s: n for s, n in q(
+                    "SELECT status, COUNT(*) FROM ingested_alerts WHERE status != 'dismissed' GROUP BY status")},
+            }
 
     def get(self, alert_id: str) -> Optional[Dict[str, Any]]:
         with self.lock:

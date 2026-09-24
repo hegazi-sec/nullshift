@@ -909,6 +909,8 @@ def chat_with_history(
         messages.append({"role": "system", "content": f"DEPLOYMENT_MEMORY:\n{deployment_memory}"})
     if response_mode:
         messages.append({"role": "system", "content": f"RESPONSE_MODE: {response_mode}"})
+    # ui_* prefs (e.g. the dashboard layout) are display-only; keep them out of the prompt.
+    user_prefs = {k: v for k, v in (user_prefs or {}).items() if not k.startswith("ui_")}
     if user_prefs:
         try:
             prefs_text = json.dumps(user_prefs, ensure_ascii=False)
@@ -1181,14 +1183,16 @@ def validate_and_retry_if_needed(
     # Retry with a stricter prompt that quotes the playbook directly
     retry_history = list(history_messages)
     last = retry_history[-1]
+    note = (
+        "\n\nYour previous response was too generic and did not use the playbook. "
+        "You MUST answer using ONLY the specific steps below — do not add anything not in the playbook:\n\n"
+        f"{playbook_text}"
+    )
+    content = last.get("content", "")
     retry_history[-1] = {
         "role": last.get("role", "user"),
-        "content": (
-            last.get("content", "") +
-            "\n\nYour previous response was too generic and did not use the playbook. "
-            "You MUST answer using ONLY the specific steps below — do not add anything not in the playbook:\n\n"
-            f"{playbook_text}"
-        ),
+        # Screenshot turns carry a list of content blocks; the note becomes one more text block.
+        "content": content + [{"type": "text", "text": note}] if isinstance(content, list) else content + note,
     }
     try:
         retried = chat_with_history(

@@ -102,11 +102,27 @@
 
     /* Search */
     .conv-search {
+      display: flex;
+      gap: 6px;
       padding: 6px 10px;
       border-bottom: 1px solid var(--border);
     }
+    .btn-refresh {
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: var(--rad);
+      color: var(--text2);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 0 9px;
+      cursor: pointer;
+      transition: border-color .12s, color .12s;
+    }
+    .btn-refresh:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .btn-refresh:disabled { opacity: .6; cursor: default; }
     .conv-search input {
       width: 100%;
+      min-width: 0;
       background: var(--bg3);
       border: 1px solid var(--border2);
       border-radius: var(--rad);
@@ -221,6 +237,80 @@
     .case-conv-item:hover { border-color: var(--accent); }
     .case-conv-item .unlink { color: var(--muted); background: none; border: none; cursor: pointer; font-size: 12px; }
     .case-conv-item .unlink:hover { color: var(--red); }
+
+    /* ── Dashboard ──────────────────────────────────── */
+    .dash { width: 100%; max-width: 1180px; margin: 0 auto; padding: 4px 0 24px; }
+    .dash-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .dash-range { display: inline-flex; border: 1px solid var(--border2); border-radius: 5px; overflow: hidden; }
+    .dash-range button {
+      background: transparent; border: none; color: var(--muted); cursor: pointer;
+      font-family: var(--font-mono); font-size: 11px; padding: 5px 11px;
+    }
+    .dash-range button + button { border-left: 1px solid var(--border2); }
+    .dash-range button[aria-pressed="true"] { background: var(--bg3); color: var(--accent); }
+    .dash-live { margin-right: auto; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+    .dash-live::before { content: '●'; margin-right: 5px; color: var(--green); }
+    .dash-live.off::before { color: var(--red); }
+    .dash-tray { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .dash-tray:empty { display: none; }
+    .dash-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 12px; transition: opacity .15s;
+    }
+    .dash-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 14px 16px; min-width: 0;
+    }
+    .dash-card.wide { grid-column: 1 / -1; }
+    .dash.editing .dash-card { border-color: var(--accent2); }
+    .dash-card header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+    .dash-card h3 { margin: 0; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .dash-edit { display: none; gap: 4px; }
+    .dash.editing .dash-edit { display: inline-flex; }
+    .dash-edit button {
+      min-width: 24px; height: 22px; background: var(--bg3); border: 1px solid var(--border2);
+      border-radius: 4px; color: var(--text2); font-size: 10px; cursor: pointer;
+    }
+    .dash-edit button:hover { border-color: var(--accent); color: var(--accent); }
+    .dash-empty { padding: 12px 0; font-size: 12px; color: var(--muted); }
+    .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px 0; }
+    .kpi { padding: 2px 12px; border-left: 1px solid var(--border); }
+    .kpi-label { font-size: 11px; color: var(--muted); }
+    .kpi-value { margin-top: 2px; font-size: 24px; font-weight: 600; color: var(--text2); }
+    .vchart { display: flex; align-items: flex-end; gap: 2px; height: 120px; border-bottom: 1px solid var(--border2); }
+    .vcol {
+      flex: 1; height: 100%; display: flex; flex-direction: column;
+      justify-content: flex-end; align-items: center; outline: none; border-radius: 3px;
+    }
+    .vcol:focus-visible { box-shadow: inset 0 0 0 1px var(--accent2); }
+    .vbar { width: 100%; max-width: 24px; background: var(--accent); border-radius: 4px 4px 0 0; transition: filter .12s; }
+    .vcol:hover .vbar, .vcol:focus-visible .vbar { filter: brightness(1.3); }
+    .vpeak { margin-bottom: 2px; font-family: var(--font-mono); font-size: 10px; color: var(--text2); }
+    .vaxis { display: flex; justify-content: space-between; margin-top: 5px; font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
+    .hbar-row { padding: 4px 0; font-size: 12px; }
+    .hbar-label { display: block; margin-bottom: 3px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hbar-row.inline { display: grid; grid-template-columns: 72px 1fr; align-items: center; gap: 10px; }
+    .hbar-row.inline .hbar-label { margin: 0; }
+    .hbar-track { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .hbar { height: 8px; background: var(--accent); border-radius: 0 4px 4px 0; }
+    .hbar-val { font-family: var(--font-mono); font-size: 11px; color: var(--text); font-variant-numeric: tabular-nums; }
+    .dash-item {
+      display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 7px 2px;
+      background: none; border: none; border-bottom: 1px solid var(--border);
+      color: var(--text2); font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+    }
+    .dash-item:last-child { border-bottom: none; }
+    .dash-item:hover .dash-item-title { color: var(--accent); }
+    .dash-item .case-status { align-self: center; }
+    .dash-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .dash-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dash-item-meta { font-size: 11px; color: var(--muted); }
+    .dash-tip {
+      position: fixed; display: none; transform: translate(-50%, calc(-100% - 6px)); z-index: 60;
+      background: var(--bg3); border: 1px solid var(--border2); border-radius: 5px;
+      padding: 5px 8px; font-size: 11px; color: var(--muted); white-space: nowrap; pointer-events: none;
+    }
+    .dash-tip b { margin-right: 5px; color: var(--text2); }
 
     /* ── Add-to-case button + modal ─────────────────── */
     .btn-topbar {
@@ -842,6 +932,15 @@
       background: rgba(0,0,0,.75); border: none; color: #fff;
       font-size: 9px; cursor: pointer; border-radius: 2px; padding: 1px 4px; line-height: 1;
     }
+    .file-chip {
+      display: flex; align-items: center; gap: 8px; align-self: center; height: 30px; padding: 0 4px 0 8px;
+      background: var(--bg3); border: 1px solid var(--border2); border-radius: 4px;
+      font-family: var(--font-mono); font-size: 11px; color: var(--text2);
+    }
+    .file-chip .kind { color: var(--accent); font-weight: 600; }
+    .file-chip .size { color: var(--muted); }
+    .file-chip .rm { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 10px; padding: 4px 6px; }
+    .file-chip .rm:hover { color: var(--red); }
     .bubble-images { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
     .bubble-image {
       max-width: 220px; max-height: 160px; border-radius: 4px;
@@ -904,6 +1003,7 @@
   </div>
   <div class="conv-search">
     <input type="text" id="convSearch" placeholder="Search investigations…" autocomplete="off"/>
+    <button class="btn-refresh" id="alertSyncBtn" style="display:none" title="Pull alerts the SIEM webhook missed (last 24h)">Refresh</button>
   </div>
   <div class="conv-list" id="convList"></div>
 
@@ -930,6 +1030,7 @@
   <div class="topbar">
     <div class="conv-title" id="convTitle">Select a conversation</div>
     <div class="topbar-right">
+      <button class="btn-topbar" id="dashBtn" title="Live SOC dashboard">Dashboard</button>
       <span class="case-badge" id="caseBadge" style="display:none" title="Open case"></span>
       <button class="btn-topbar" id="addToCaseBtn" style="display:none" title="Attach this investigation to a case">+ Case</button>
       <div class="status-pill" id="statusPill">
@@ -956,7 +1057,7 @@
   </div>
 
   <!-- Input -->
-  <input type="file" id="imageInput" accept="image/*" multiple style="display:none">
+  <input type="file" id="imageInput" accept="image/*,.csv,text/csv" multiple style="display:none">
   <div class="input-area">
     <div id="imgPreviewStrip" class="img-preview-strip" style="display:none"></div>
     <div class="input-toolbar">
@@ -968,7 +1069,7 @@
         <input type="range" id="tempSlider" min="0" max="0.5" step="0.05" value="0.2"
           style="width:72px;accent-color:var(--accent,#7c6af7);cursor:pointer;vertical-align:middle;"/>
       </label>
-      <button class="btn-attach" id="attachBtn" title="Attach screenshot (max 4 images, 5 MB each)">
+      <button class="btn-attach" id="attachBtn" title="Attach screenshots (max 4, 5 MB each) or CSV files (max 3, 5 MB each)">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
           <path d="M13.5 8.5l-5 5a3.5 3.5 0 0 1-5-5l6-6a2 2 0 0 1 3 3l-6 6a.5.5 0 0 1-.7-.7l5-5"/>
         </svg>
@@ -1107,6 +1208,11 @@ const api = {
   },
   async dismissAlert(id) {
     const r = await fetch(`/api/alerts/${id}/dismiss`, { method: 'POST', credentials: 'same-origin' })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  },
+  async syncAlerts() {
+    const r = await fetch('/api/alerts/sync', { method: 'POST', credentials: 'same-origin' })
     if (!r.ok) throw new Error(await r.text())
     return r.json()
   }
@@ -1495,7 +1601,9 @@ async function refreshList() {
     } else if (sideTab === 'alerts') {
       const data = await api.listAlerts()
       updateAlertBadge(data.new_count || 0)
-      renderAlertList(data.alerts || [])
+      // Polled every second: only touch the DOM when the inbox actually changed.
+      const sig = JSON.stringify(data.alerts)
+      if (sig !== _alertsSig) { _alertsSig = sig; renderAlertList(data.alerts || []) }
     } else {
       const data = await api.listConvs()
       renderConvList(data.conversations || [])
@@ -1507,17 +1615,21 @@ async function refreshList() {
 let sideTab = 'chats'
 let _allIncs = []
 let _allAlerts = []
+let _alertsSig = null
 let currentIncident = null
 
 const tabChatsEl  = document.getElementById('tabChats')
 const tabCasesEl  = document.getElementById('tabCases')
 const tabAlertsEl = document.getElementById('tabAlerts')
+const alertSyncBtn = document.getElementById('alertSyncBtn')
 
 function setSideTab(tab) {
   sideTab = tab
+  _alertsSig = null
   tabChatsEl.classList.toggle('active', tab === 'chats')
   tabCasesEl.classList.toggle('active', tab === 'cases')
   tabAlertsEl.classList.toggle('active', tab === 'alerts')
+  alertSyncBtn.style.display = tab === 'alerts' ? '' : 'none'
   document.getElementById('convSearch').placeholder =
     tab === 'cases' ? 'Search cases…' : tab === 'alerts' ? 'Search alerts…' : 'Search investigations…'
   refreshList()
@@ -1525,6 +1637,14 @@ function setSideTab(tab) {
 tabChatsEl.onclick  = () => setSideTab('chats')
 tabCasesEl.onclick  = () => setSideTab('cases')
 tabAlertsEl.onclick = () => setSideTab('alerts')
+alertSyncBtn.onclick = async () => {
+  alertSyncBtn.disabled = true
+  alertSyncBtn.textContent = 'Syncing…'
+  try { await api.syncAlerts() } catch (e) { alert('Refresh failed: ' + e.message) }
+  alertSyncBtn.disabled = false
+  alertSyncBtn.textContent = 'Refresh'
+  refreshList()
+}
 
 function statusBadgeHtml(status) {
   return `<span class="case-status st-${esc(status)}">${esc(status)}</span>`
@@ -1674,6 +1794,257 @@ async function pollAlertBadge() {
     updateAlertBadge(data.new_count || 0)
   } catch {}
 }
+
+// ─── Dashboard ────────────────────────────────────────────────────
+// Layout (order, hidden widgets, time range) is saved per analyst in /api/me/prefs as ui_dashboard.
+const DASH_WIDGETS = {
+  kpis:     { title: 'Overview', wide: true },
+  volume:   { title: 'Alert volume', wide: true },
+  severity: { title: 'Alerts by severity' },
+  rules:    { title: 'Top detection rules' },
+  hosts:    { title: 'Top hosts' },
+  recent:   { title: 'Recent alerts' },
+  cases:    { title: 'My open cases' },
+  verdicts: { title: 'My IOC verdicts' },
+}
+const DASH_RANGES = { 1: '1h', 24: '24h', 168: '7d', 720: '30d' }
+const SEV_COLOR = { critical: 'red', high: 'orange', medium: 'yellow', low: 'green' }
+let dashLayout = null
+let dashData = null
+let dashSig = null
+let dashEditing = false
+let dashLoading = false
+
+const dashEl = document.createElement('div')
+dashEl.className = 'dash'
+dashEl.innerHTML = `
+  <div class="dash-bar">
+    <div class="dash-range" role="group" aria-label="Time range">
+      ${Object.entries(DASH_RANGES).map(([h, l]) => `<button data-hours="${h}">${l}</button>`).join('')}
+    </div>
+    <span class="dash-live" id="dashLive">Loading…</span>
+    <button class="btn-topbar" id="dashCustomizeBtn">Customize</button>
+  </div>
+  <div class="dash-tray" id="dashTray"></div>
+  <div class="dash-grid" id="dashGrid"></div>`
+const dashGrid = dashEl.querySelector('#dashGrid')
+const dashTip = document.createElement('div')
+dashTip.className = 'dash-tip'
+dashTip.setAttribute('role', 'tooltip')
+document.body.appendChild(dashTip)
+
+function fmtCount(n) {
+  return n < 10000 ? n.toLocaleString() : new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(n)
+}
+function fmtAlertTime(t) {
+  const d = new Date(t)
+  return d.toLocaleString([], d.toDateString() === new Date().toDateString()
+    ? { hour: '2-digit', minute: '2-digit' }
+    : { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+function fmtDur(s) {
+  if (s == null) return '—'
+  return s < 90 ? `${Math.round(s)}s` : s < 5400 ? `${Math.round(s / 60)}m` : s < 172800 ? `${(s / 3600).toFixed(1)}h` : `${Math.round(s / 86400)}d`
+}
+
+// Horizontal bars, one hue unless a row brings its own; value sits at the bar tip.
+// Long labels (rules, hosts) go above the bar; short ones can sit inline.
+function dashBars(rows, empty, inline = false) {
+  if (!rows.some(r => r.n)) return `<div class="dash-empty">${empty}</div>`
+  const max = Math.max(...rows.map(r => r.n))
+  return rows.map(r => `
+    <div class="hbar-row${inline ? ' inline' : ''}">
+      <span class="hbar-label" title="${esc(r.name)}">${esc(r.name)}</span>
+      <span class="hbar-track">
+        <span class="hbar" style="width:${r.n ? Math.max(r.n / max * 85, 1) : 0}%${r.color ? `;background:var(--${r.color})` : ''}"></span>
+        <span class="hbar-val">${fmtCount(r.n)}</span>
+      </span>
+    </div>`).join('')
+}
+
+function dashItem(attr, id, severity, title, meta, badge) {
+  return `
+    <button class="dash-item" ${attr}="${esc(id)}">
+      <span class="sev-dot sev-${esc(severity)}"></span>
+      <span class="dash-item-text">
+        <span class="dash-item-title">${esc(title)}</span>
+        <span class="dash-item-meta">${esc(meta)}</span>
+      </span>
+      ${badge}
+    </button>`
+}
+
+const DASH_RENDER = {
+  kpis: d => {
+    const a = d.alerts, r = DASH_RANGES[d.hours]
+    return `<div class="kpi-row">${[
+      [`Alerts (${r})`, fmtCount(a.total)],
+      ['Unacknowledged', fmtCount(a.backlog.new || 0)],
+      ['Investigating', fmtCount(a.backlog.investigating || 0)],
+      ['My open cases', fmtCount(d.cases_open)],
+      [`Avg time to triage (${r})`, fmtDur(a.triage_s)],
+    ].map(([l, v]) => `<div class="kpi"><div class="kpi-label">${l}</div><div class="kpi-value">${v}</div></div>`).join('')}</div>`
+  },
+  volume: d => {
+    const v = d.alerts.volume, max = Math.max(...v)
+    if (!max) return '<div class="dash-empty">No alerts in this window</div>'
+    const t0 = Date.parse(d.alerts.since), step = d.alerts.bucket_s * 1000
+    const fmt = t => d.hours <= 24
+      ? new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit' })
+    const peak = v.indexOf(max)
+    return `<div class="vchart">${v.map((n, i) => {
+      const when = `${fmt(t0 + i * step)} – ${fmt(t0 + (i + 1) * step)}`
+      const label = `${n} alert${n === 1 ? '' : 's'}`
+      return `<div class="vcol" tabindex="0" role="img" aria-label="${esc(label)}, ${esc(when)}" data-v="${esc(label)}" data-l="${esc(when)}">
+        ${i === peak ? `<span class="vpeak">${fmtCount(n)}</span>` : ''}
+        <div class="vbar" style="height:${n / max * 85}%"></div>
+      </div>`
+    }).join('')}</div>
+    <div class="vaxis"><span>${esc(fmt(t0))}</span><span>${esc(fmt(t0 + 12 * step))}</span><span>now</span></div>`
+  },
+  severity: d => dashBars(Object.keys(SEV_COLOR).map(s => ({ name: s, n: d.alerts.by_severity[s] || 0, color: SEV_COLOR[s] })), 'No alerts in this window', true),
+  rules:    d => dashBars(d.alerts.top_rules, 'No alerts in this window'),
+  hosts:    d => dashBars(d.alerts.top_hosts, 'No host names in these alerts'),
+  verdicts: d => dashBars(d.verdicts, 'No verdicts in this window'),
+  recent:   d => d.alerts.recent.map(a => dashItem('data-alert', a.id, a.severity, a.title,
+                   `${a.severity} · ${a.source} · ${fmtAlertTime(a.created_at)}`, alertStatusBadgeHtml(a.status))).join('')
+                 || '<div class="dash-empty">No alerts in this window</div>',
+  cases:    d => d.cases.map(c => dashItem('data-inc', c.id, c.severity, `${c.case_number} — ${c.title}`,
+                   c.severity, statusBadgeHtml(c.status))).join('')
+                 || '<div class="dash-empty">No open cases</div>',
+}
+
+function renderDashChrome() {
+  dashEl.classList.toggle('editing', dashEditing)
+  dashEl.querySelectorAll('.dash-range button').forEach(b =>
+    b.setAttribute('aria-pressed', String(+b.dataset.hours === dashLayout.hours)))
+  dashEl.querySelector('#dashCustomizeBtn').textContent = dashEditing ? 'Done' : 'Customize'
+  dashEl.querySelector('#dashTray').innerHTML = dashEditing
+    ? dashLayout.hidden.map(id => `<button class="btn-case" data-show="${id}">+ ${esc(DASH_WIDGETS[id].title)}</button>`).join('')
+      + '<button class="btn-case" data-reset="1">Reset layout</button>'
+    : ''
+}
+
+function renderDashGrid() {
+  dashTip.style.display = 'none'
+  if (!dashData) return
+  const visible = dashLayout.order.filter(id => !dashLayout.hidden.includes(id))
+  dashGrid.innerHTML = visible.map(id => {
+    const t = esc(DASH_WIDGETS[id].title)
+    return `
+      <section class="dash-card${DASH_WIDGETS[id].wide ? ' wide' : ''}" aria-label="${t}">
+        <header>
+          <h3>${t}</h3>
+          <span class="dash-edit">
+            <button data-move="${id}" data-dir="-1" aria-label="Move ${t} earlier">◀</button>
+            <button data-move="${id}" data-dir="1" aria-label="Move ${t} later">▶</button>
+            <button data-hide="${id}" aria-label="Hide ${t}">✕</button>
+          </span>
+        </header>
+        ${DASH_RENDER[id](dashData)}
+      </section>`
+  }).join('') || '<div class="dash-empty">Every widget is hidden. Click Customize to add some back.</div>'
+}
+
+function saveDashLayout() {
+  fetch('/api/me/prefs', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ prefs: { ui_dashboard: dashLayout } }),  // ui_* prefs stay out of the LLM prompt
+  }).catch(() => {})
+}
+
+async function loadDashboard() {
+  if (dashLoading) return
+  dashLoading = true
+  const live = dashEl.querySelector('#dashLive')
+  try {
+    const r = await fetch(`/api/dashboard?hours=${dashLayout.hours}`, { credentials: 'same-origin' })
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    const data = await r.json()
+    if (data.hours !== dashLayout.hours) return  // range changed mid-flight; next tick fetches the new one
+    updateAlertBadge(data.alerts.backlog.new || 0)
+    live.textContent = `Live · ${new Date().toLocaleTimeString()}`
+    live.classList.remove('off')
+    const sig = JSON.stringify(data)
+    if (sig !== dashSig) { dashSig = sig; dashData = data; renderDashGrid() }
+    dashGrid.style.opacity = ''
+  } catch {
+    live.textContent = 'Offline, retrying…'
+    live.classList.add('off')
+  } finally {
+    dashLoading = false
+  }
+}
+
+async function showDashboard() {
+  currentIncident = null
+  currentConv = null
+  updateCaseControls()
+  convTitleEl.textContent = 'Dashboard'
+  chatEl.innerHTML = ''
+  chatEl.appendChild(welcomeEl)
+  welcomeEl.style.display = 'none'
+  chatEl.appendChild(dashEl)
+  if (!dashLayout) {
+    let saved = {}
+    try { saved = (await (await fetch('/api/me/prefs', { credentials: 'same-origin' })).json()).prefs?.ui_dashboard || {} } catch {}
+    const known = Object.keys(DASH_WIDGETS)
+    const order = (saved.order || []).filter(id => known.includes(id))
+    dashLayout = {
+      order: [...order, ...known.filter(id => !order.includes(id))],  // widgets added later land at the end
+      hidden: (saved.hidden || []).filter(id => known.includes(id)),
+      hours: DASH_RANGES[saved.hours] ? saved.hours : 24,
+    }
+  }
+  renderDashChrome()
+  renderDashGrid()
+  loadDashboard()
+}
+
+dashEl.addEventListener('click', e => {
+  const b = e.target.closest('button')
+  if (!b) return
+  const { hours, show, hide, move, dir, reset, alert: alertId, inc } = b.dataset
+  if (alertId) { setSideTab('alerts'); openAlert(alertId); return }
+  if (inc) { setSideTab('cases'); openIncident(inc); return }
+  if (b.id === 'dashCustomizeBtn') dashEditing = !dashEditing
+  else if (hours) { dashLayout.hours = +hours; dashGrid.style.opacity = '.5'; loadDashboard() }
+  else if (show) dashLayout.hidden = dashLayout.hidden.filter(id => id !== show)
+  else if (hide) dashLayout.hidden.push(hide)
+  else if (reset) dashLayout = { order: Object.keys(DASH_WIDGETS), hidden: [], hours: dashLayout.hours }
+  else if (move) {
+    const visible = dashLayout.order.filter(id => !dashLayout.hidden.includes(id))
+    const other = visible[visible.indexOf(move) + +dir]
+    if (!other) return
+    const o = dashLayout.order, i = o.indexOf(move), j = o.indexOf(other)
+    ;[o[i], o[j]] = [o[j], o[i]]
+  }
+  else return
+  saveDashLayout()
+  renderDashChrome()
+  renderDashGrid()
+  if (move) dashGrid.querySelector(`[data-move="${move}"][data-dir="${dir}"]`)?.focus()
+})
+
+function showDashTip(e) {
+  const t = e.target.closest?.('[data-v]')
+  if (!t) return
+  const v = document.createElement('b')
+  v.textContent = t.dataset.v
+  dashTip.replaceChildren(v, t.dataset.l)
+  const r = (t.querySelector('.vbar') || t).getBoundingClientRect()
+  dashTip.style.left = `${Math.min(Math.max(r.left + r.width / 2, 90), innerWidth - 90)}px`
+  dashTip.style.top = `${r.top}px`
+  dashTip.style.display = 'block'
+}
+dashEl.addEventListener('pointerover', showDashTip)
+dashEl.addEventListener('focusin', showDashTip)
+dashEl.addEventListener('pointerout', () => { dashTip.style.display = 'none' })
+dashEl.addEventListener('focusout', () => { dashTip.style.display = 'none' })
+document.getElementById('dashBtn').onclick = showDashboard
 
 function showWelcome() {
   currentIncident = null
@@ -1883,11 +2254,28 @@ async function loadConversation(id) {
 
 // ─── Send ────────────────────────────────────────────────────────
 let pendingImages = []
+let pendingFiles = []  // CSV uploads: { name, content, size }
+const MAX_CSV_FILES = 3, MAX_CSV_MB = 5  // mirrors the server-side limits
+
+function fmtBytes(n) {
+  return n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`
+}
 
 function renderPreviewStrip() {
   const strip = document.getElementById('imgPreviewStrip')
   strip.innerHTML = ''
-  strip.style.display = pendingImages.length ? 'flex' : 'none'
+  strip.style.display = pendingImages.length || pendingFiles.length ? 'flex' : 'none'
+  pendingFiles.forEach((f, i) => {
+    const chip = document.createElement('div')
+    chip.className = 'file-chip'
+    const kind = Object.assign(document.createElement('span'), { className: 'kind', textContent: 'CSV' })
+    const size = Object.assign(document.createElement('span'), { className: 'size', textContent: fmtBytes(f.size) })
+    const rm = Object.assign(document.createElement('button'), { className: 'rm', textContent: '✕' })
+    rm.setAttribute('aria-label', `Remove ${f.name}`)
+    rm.onclick = () => { pendingFiles.splice(i, 1); renderPreviewStrip() }
+    chip.append(kind, f.name, size, rm)
+    strip.appendChild(chip)
+  })
   pendingImages.forEach((src, i) => {
     const thumb = document.createElement('div')
     thumb.className = 'img-thumb'
@@ -1908,7 +2296,7 @@ let visionCfg = { supported: null, provider_note: '', max_images: 4, max_size_mb
 function applyVisionHint(cfg) {
   visionCfg = cfg
   const btn = document.getElementById('attachBtn')
-  btn.title = cfg.provider_note || 'Attach screenshot'
+  btn.title = `${cfg.provider_note || 'Attach screenshot'} · CSV files (max ${MAX_CSV_FILES}, ${MAX_CSV_MB} MB each) are analyzed as data`
   if (cfg.supported === false) {
     btn.style.borderColor = 'var(--orange)'
     btn.style.color = 'var(--orange)'
@@ -1923,7 +2311,17 @@ function applyVisionHint(cfg) {
 
 document.getElementById('attachBtn').onclick = () => document.getElementById('imageInput').click()
 document.getElementById('imageInput').onchange = e => {
+  let csvCount = pendingFiles.length  // counted up front: the reads below finish asynchronously
   Array.from(e.target.files || []).forEach(file => {
+    if (/\.csv$/i.test(file.name) || file.type === 'text/csv') {
+      if (csvCount >= MAX_CSV_FILES) { alert(`Max ${MAX_CSV_FILES} CSV files per message`); return }
+      if (file.size > MAX_CSV_MB * 1024 * 1024) { alert(`${file.name} is too large (max ${MAX_CSV_MB} MB)`); return }
+      csvCount++
+      const reader = new FileReader()
+      reader.onload = ev => { pendingFiles.push({ name: file.name, content: ev.target.result, size: file.size }); renderPreviewStrip() }
+      reader.readAsText(file)
+      return
+    }
     if (pendingImages.length >= visionCfg.max_images) {
       alert(`Max ${visionCfg.max_images} images per message (set by admin)`); return
     }
@@ -1940,15 +2338,16 @@ document.getElementById('imageInput').onchange = e => {
 async function send() {
   const msg = inputEl.value.trim()
   const imgs = [...pendingImages]
-  if ((!msg && !imgs.length) || sending) return
+  const files = pendingFiles.map(({ name, content }) => ({ name, content }))
+  if ((!msg && !imgs.length && !files.length) || sending) return
   sending = true
   sendBtn.disabled = true
 
   if (!currentConv) {
     const nc = await api.newConv()
     currentConv = nc.id
-    if (currentIncident) {
-      // Typing while viewing a case starts a fresh chat — clear the panel.
+    if (currentIncident || dashEl.isConnected) {
+      // Typing while viewing a case or the dashboard starts a fresh chat — clear the panel.
       currentIncident = null
       chatEl.innerHTML = ''
       chatEl.appendChild(welcomeEl)
@@ -1957,10 +2356,11 @@ async function send() {
     updateCaseControls()
   }
 
-  addMessage('user', msg, null, null, imgs)
+  addMessage('user', [msg, ...files.map(f => `[Attached CSV: ${f.name}]`)].filter(Boolean).join('\n'), null, null, imgs)
   inputEl.value = ''
   inputEl.style.height = 'auto'
   pendingImages = []
+  pendingFiles = []
   renderPreviewStrip()
   setStatus('thinking', 'Analysing…')
   showTyping()
@@ -1969,6 +2369,7 @@ async function send() {
     // Use streaming endpoint for status updates
     const body = { message: msg, debug: !!debugToggle.checked }
     if (imgs.length) body.images = imgs
+    if (files.length) body.files = files
     const resp = await fetch(`/api/conversations/${currentConv}/messages/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2094,7 +2495,21 @@ ping()
 refreshList()
 pollAlertBadge()
 setInterval(ping, 60_000)
-setInterval(pollAlertBadge, 60_000)
+
+// Live refresh every 1s: alert badge, the Alerts inbox list and the dashboard.
+// Skipped while the tab is hidden or the previous tick is still in flight.
+let _tickBusy = false
+setInterval(async () => {
+  if (document.hidden || _tickBusy) return
+  _tickBusy = true
+  try {
+    if (dashEl.isConnected) await loadDashboard()  // also updates the badge
+    else if (sideTab !== 'alerts') await pollAlertBadge()
+    if (sideTab === 'alerts') await refreshList()
+  } finally {
+    _tickBusy = false
+  }
+}, 1000)
 </script>
 </body>
 </html>

@@ -32,13 +32,23 @@ from app.db.summary_store import summaries as summary_store
 from app.deployment_memory import write_memory_file, get_cached_memory
 import re
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
+from app.utils import csv_context as csv_ctx
 
-class _SuppressPing(logging.Filter):
+class _AccessLogFilter(logging.Filter):
+    # UI polling (ping every 60s, alert inbox + dashboard every 1s) would flood the access log,
+    # and SIEM webhooks that can't send headers put the shared secret in ?token=.
+    _POLLS = re.compile(r'"GET /api/(?:ping|alerts|dashboard)(?:\?\S*)? HTTP')
+    _TOKEN = re.compile(r'(token=)[^&\s]+')
+
     def filter(self, record: logging.LogRecord) -> bool:
-        return "GET /api/ping" not in record.getMessage()
+        if self._POLLS.search(record.getMessage()):
+            return False
+        if isinstance(record.args, tuple) and any(isinstance(a, str) and "token=" in a for a in record.args):
+            record.args = tuple(self._TOKEN.sub(r"\1REDACTED", a) if isinstance(a, str) else a for a in record.args)
+        return True
 
-logging.getLogger("uvicorn.access").addFilter(_SuppressPing())
+logging.getLogger("uvicorn.access").addFilter(_AccessLogFilter())
 from app.utils.debug_trace import DebugTrace
 
 def _rag_query(message: str) -> str:
@@ -1629,6 +1639,46 @@ def api_list_alerts(status: Optional[str] = None, current_user: Dict[str, Any] =
     }
 
 
+@app.get('/api/dashboard')
+def api_dashboard(hours: int = 24, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Dashboard aggregates. Alerts are the shared inbox; cases and verdicts are
+    this analyst's own, same scoping as their list endpoints."""
+    hours = max(1, min(hours, 720))
+    alerts = alerts_inbox.stats(hours)
+    open_cases = [
+        {k: c.get(k) for k in ("id", "case_number", "title", "severity", "status")}
+        for c in incident_store.list_for_user(current_user["id"]) if c.get("status") != "closed"
+    ]
+    return {
+        "hours": hours,
+        "alerts": alerts,
+        "verdicts": verdict_store.counts_since(current_user["id"], alerts["since"]),
+        "cases_open": len(open_cases),
+        "cases": open_cases[:8],
+    }
+
+
+@app.post('/api/alerts/sync')
+def api_sync_alerts(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Inbox Refresh button: pull recent LimaCharlie detections so anything the
+    webhook missed (NullShift or the tunnel down) still lands. Ingest dedupes
+    on detect_id, so re-pulling what the webhook already delivered is a no-op."""
+    # ponytail: LimaCharlie only, fixed 24h window; add a since-last-sync cursor if outages outlast a day
+    if (settings.SIEM_PROVIDER or "").lower().strip() != "limacharlie":
+        return {"added": 0, "pulled": 0, "note": "Pull refresh is only available for LimaCharlie"}
+    from app.connectors import get_siem_connector
+    conn = get_siem_connector("limacharlie")
+    if not conn.is_available():
+        raise HTTPException(status_code=503, detail="LimaCharlie credentials are not configured")
+    try:
+        rows = conn.search("", "now-24h", "now", limit=200)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"LimaCharlie pull failed: {e}")
+    added = sum(not alerts_inbox.ingest(r, source_hint="limacharlie").get("duplicate") for r in rows)
+    log.info("Alert inbox refresh by %s: pulled %d, added %d", current_user.get("username"), len(rows), added)
+    return {"added": added, "pulled": len(rows)}
+
+
 @app.get('/api/alerts/{alert_id}')
 def api_get_alert(alert_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     alert = alerts_inbox.get(alert_id)
@@ -1779,6 +1829,45 @@ def api_incident_report(incident_id: str, format: str = "html", current_user: Di
     return HTMLResponse(content=html_doc)
 
 
+def _validate_images(payload: MessageCreate) -> None:
+    """Enforce the admin-configured screenshot limits before any work starts."""
+    if not payload.images:
+        return
+    max_imgs = int(settings_store.get("vision_max_images") or 4)
+    max_mb = float(settings_store.get("vision_max_size_mb") or 5)
+    if len(payload.images) > max_imgs:
+        raise HTTPException(status_code=400, detail=f"Too many images (admin limit: {max_imgs})")
+    for img in payload.images:
+        if not img.startswith("data:image/"):
+            raise HTTPException(status_code=400, detail="Images must be base64 data:image/... URLs")
+        if len(img.split(",", 1)[-1]) * 0.75 / (1024 * 1024) > max_mb:
+            raise HTTPException(status_code=400, detail=f"Image too large (admin limit: {max_mb} MB)")
+
+
+def _csv_attachments(payload: MessageCreate) -> Tuple[str, str]:
+    """Validate uploaded CSVs and return (history markers, LLM blocks).
+
+    Markers are short lines saved with the user message; blocks carry the
+    profiled data and are sent to the LLM for this turn only."""
+    files = payload.files or []
+    if len(files) > csv_ctx.MAX_FILES:
+        raise HTTPException(status_code=400, detail=f"Too many CSV files (max {csv_ctx.MAX_FILES} per message)")
+    markers, blocks = [], []
+    for f in files:
+        name = csv_ctx.safe_name(f.name)
+        if not name.lower().endswith(".csv"):
+            raise HTTPException(status_code=400, detail=f"Only .csv files can be attached: {name}")
+        if len(f.content) > csv_ctx.MAX_CHARS:
+            raise HTTPException(status_code=400, detail=f"{name} is too large (max 5 MB)")
+        try:
+            marker, block = csv_ctx.csv_context(name, f.content)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        markers.append(marker)
+        blocks.append(block)
+    return "".join("\n" + m for m in markers), "".join("\n\n" + b for b in blocks)
+
+
 @app.post('/api/conversations/{conversation_id}/messages')
 def api_post_message(conversation_id: str, payload: MessageCreate, current_user: Dict[str, Any] = Depends(get_current_user)):
     if not any_provider_configured():
@@ -1787,33 +1876,24 @@ def api_post_message(conversation_id: str, payload: MessageCreate, current_user:
     conv = store.get_conversation_for_user(current_user["id"], conversation_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    _validate_images(payload)
+    csv_markers, csv_blocks = _csv_attachments(payload)
 
     # Store user message (scoped write)
     try:
-        store.add_message_for_user(current_user["id"], conversation_id, 'user', payload.message)
+        store.add_message_for_user(current_user["id"], conversation_id, 'user', ((payload.message or '') + csv_markers).strip())
     except PermissionError:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    # Validate images against admin-configured limits
-    if payload.images:
-        max_imgs = int(settings_store.get("vision_max_images") or 4)
-        max_mb = float(settings_store.get("vision_max_size_mb") or 5)
-        if len(payload.images) > max_imgs:
-            return JSONResponse(status_code=400, content={"error": f"Too many images (admin limit: {max_imgs})"})
-        for img in payload.images:
-            b64 = img.split(",", 1)[1] if "," in img else img
-            size_mb = len(b64) * 0.75 / (1024 * 1024)
-            if size_mb > max_mb:
-                return JSONResponse(status_code=400, content={"error": f"Image too large (admin limit: {max_mb} MB)"})
-
     # Build history for LLM
+    user_text = (payload.message or ("Analyze the attached CSV file(s)." if csv_blocks else "")) + csv_blocks
     if payload.images:
-        user_content: Any = [{"type": "text", "text": payload.message or ""}]
+        user_content: Any = [{"type": "text", "text": user_text}]
         for img in payload.images:
             user_content.append({"type": "image_url", "image_url": {"url": img}})
         history = conv["messages"] + [{"role": "user", "content": user_content}]
     else:
-        history = conv["messages"] + [{"role": "user", "content": payload.message}]
+        history = conv["messages"] + [{"role": "user", "content": user_text}]
 
     # Response-mode routing (unified with /chat — workflow-stage based, not
     # legacy intent). route_intent() still drives run_investigation below for
@@ -1854,7 +1934,8 @@ def api_post_message(conversation_id: str, payload: MessageCreate, current_user:
     # Retrieve playbook snippets via RAG (no-op if disabled).
     # When the user sends images without text, fall back to a generic SOC query
     # so playbook snippets are still injected into the LLM context.
-    rag_text = payload.message or ("security screenshot evidence analysis" if payload.images else "")
+    rag_text = payload.message or ("security screenshot evidence analysis" if payload.images
+                                   else "security log CSV analysis" if csv_blocks else "")
     retrieved = _rag_mod.rag.retrieve(_rag_query(rag_text))
 
     # Call LLM with full history and strict prompt
@@ -1939,6 +2020,8 @@ async def api_stream_message(conversation_id: str, payload: MessageCreate, curre
     conv = store.get_conversation_for_user(current_user["id"], conversation_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    _validate_images(payload)  # reject bad uploads before the stream opens
+    csv_markers, csv_blocks = _csv_attachments(payload)
 
     async def generate():
         loop = asyncio.get_event_loop()
@@ -1953,7 +2036,7 @@ async def api_stream_message(conversation_id: str, payload: MessageCreate, curre
             await asyncio.sleep(0)
 
             result = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: _do_message_work(conversation_id, payload, current_user)),
+                loop.run_in_executor(None, lambda: _do_message_work(conversation_id, payload, current_user, csv_markers, csv_blocks)),
                 timeout=180.0,
             )
 
@@ -1972,13 +2055,14 @@ async def api_stream_message(conversation_id: str, payload: MessageCreate, curre
     )
 
 
-def _do_message_work(conversation_id: str, payload: MessageCreate, current_user: Dict[str, Any]) -> Dict[str, Any]:
+def _do_message_work(conversation_id: str, payload: MessageCreate, current_user: Dict[str, Any],
+                     csv_markers: str = "", csv_blocks: str = "") -> Dict[str, Any]:
     """Shared logic for both streaming and non-streaming message endpoints."""
     import json as _json
     conv = store.get_conversation_for_user(current_user["id"], conversation_id)
 
     try:
-        store.add_message_for_user(current_user["id"], conversation_id, 'user', payload.message or '')
+        store.add_message_for_user(current_user["id"], conversation_id, 'user', ((payload.message or '') + csv_markers).strip())
     except PermissionError:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -2008,12 +2092,19 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
     user_prefs_early = prefs_store.get_all(current_user["id"]) if current_user else {}
     temperature = _temperature_for_mode(mode, user_prefs_early)
 
-    rag_text = payload.message or ("security screenshot evidence analysis" if getattr(payload, 'images', None) else "")
+    rag_text = payload.message or ("security screenshot evidence analysis" if getattr(payload, 'images', None)
+                                   else "security log CSV analysis" if csv_blocks else "")
     retrieved = _rag_mod.rag.retrieve(_rag_query(rag_text))
     if debug:
         debug.add({"type": "rag", "chunks_retrieved": len(retrieved), "sources": [r.split("\n")[0] for r in retrieved]})
 
-    aug_user = {"role": "user", "content": f"User message: {payload.message}\n\nUse evidence bundle to decide minimum necessary sources."}
+    user_msg = payload.message or ("Analyze the attached CSV file(s)." if csv_blocks else "")
+    user_text = f"User message: {user_msg}{csv_blocks}\n\nUse evidence bundle to decide minimum necessary sources."
+    user_content: Any = user_text
+    if payload.images:  # same OpenAI-style blocks as the non-streaming endpoint; each provider adapts them
+        user_content = [{"type": "text", "text": user_text}] + [
+            {"type": "image_url", "image_url": {"url": img}} for img in payload.images]
+    aug_user = {"role": "user", "content": user_content}
     reply_md = orchestrated_llm_reply(aug_user, conversation_id, mode, evidence, current_user, retrieved=retrieved, debug=debug)
     reply_md = _strip_html_from_llm(reply_md)
     # Safety net: any mode other than investigation_report must not show
@@ -2045,7 +2136,7 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
             pass
 
     if conv.get('title') in (None, '', 'New chat'):
-        snippet = (payload.message or '').strip().split('\n', 1)[0][:60]
+        snippet = (payload.message or csv_markers).strip().split('\n', 1)[0][:60]
         try:
             store.set_title_if_empty_for_user(current_user["id"], conversation_id, snippet or 'New chat')
         except PermissionError:

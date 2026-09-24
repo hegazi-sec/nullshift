@@ -194,6 +194,21 @@ class VerdictStore:
             )
             return [dict(r) for r in cur.fetchall()]
 
+    def counts_since(self, user_id: int, since: str) -> List[Dict[str, Any]]:
+        """Dashboard tally of this analyst's verdicts since `since`: [{name, n}]."""
+        with self.lock:
+            cur = self.conn.cursor()
+            cur.execute(
+                """
+                SELECT COALESCE(verdict, 'Unknown') AS name, COUNT(*) AS n
+                FROM verdicts
+                WHERE user_id=? AND created_at >= ?
+                GROUP BY name ORDER BY n DESC
+                """,
+                (user_id, since),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
     def lookup_for_iocs(
         self,
         user_id: int,

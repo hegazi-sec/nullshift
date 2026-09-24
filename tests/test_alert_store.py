@@ -35,6 +35,16 @@ def test_extract_limacharlie_shape():
     fields = extract_alert_fields({"cat": "suspicious-process", "detect": {"event": {}}})
     assert fields["title"] == "suspicious-process"
     assert fields["source"] == "limacharlie"
+    assert fields["severity"] == "medium"  # no rule metadata -> default
+    assert extract_alert_fields({"cat": "x", "detect_mtd": {"severity": "info"}})["severity"] == "low"
+    assert extract_alert_fields({"cat": "x", "detect_mtd": {"severity": "critical"}})["severity"] == "critical"
+
+
+def test_startup_backfills_limacharlie_severity(tmp_path: Path):
+    db = tmp_path / "chat.db"
+    old = AlertStore(db_path=db).ingest({"cat": "x", "detect_mtd": {"severity": "high"}})
+    AlertStore(db_path=db).conn.execute("UPDATE ingested_alerts SET severity='medium'").connection.commit()
+    assert AlertStore(db_path=db).get(old["id"])["severity"] == "high"  # re-opening runs the backfill
 
 
 def test_extract_splunk_shape():
@@ -94,3 +104,25 @@ def test_list_filter_by_status(store: AlertStore):
     store.dismiss(b["id"], user_id=1)
     assert [x["title"] for x in store.list(status="new")] == ["A"]
     assert [x["title"] for x in store.list(status="dismissed")] == ["B"]
+
+
+def test_ingest_dedupes_limacharlie_detect_id(store: AlertStore):
+    first = store.ingest({"cat": "x", "detect_id": "d-1"})
+    again = store.ingest({"cat": "x", "detect_id": "d-1"})
+    assert again["duplicate"] and again["id"] == first["id"]
+    assert not store.ingest({"cat": "x"}).get("duplicate")  # no detect_id: never deduped
+    assert len(store.list()) == 2
+
+
+def test_stats_aggregates_window(store: AlertStore):
+    a = store.ingest({"cat": "rule-a", "routing": {"hostname": "web-01"}})
+    store.ingest({"cat": "rule-a", "routing": {"hostname": "web-01"}})
+    store.ingest({"rule": {"description": "rule-b", "level": 12}, "agent": {"name": "db-01"}})
+    store.dismiss(a["id"], user_id=1)
+    s = store.stats(24)
+    assert s["total"] == 3 and sum(s["volume"]) == 3 and len(s["volume"]) == 24
+    assert s["top_rules"][0] == {"name": "rule-a", "n": 2}
+    assert s["top_hosts"] == [{"name": "web-01", "n": 2}, {"name": "db-01", "n": 1}]
+    assert s["by_severity"] == {"medium": 2, "high": 1}
+    assert s["backlog"] == {"new": 2}
+    assert s["triage_s"] is not None and len(s["recent"]) == 3

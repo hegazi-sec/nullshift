@@ -32,10 +32,16 @@ class ConversationCreate(BaseModel):
     title: Optional[str] = None
 
 
+class Attachment(BaseModel):
+    name: str
+    content: str  # file text, read client-side
+
+
 class MessageCreate(BaseModel):
     message: str = ""
     debug: Optional[bool] = False
     images: Optional[List[str]] = None  # base64 data URLs, e.g. "data:image/png;base64,..."
+    files: Optional[List[Attachment]] = None  # CSV uploads for analysis
 
 
 # Tool execution schemas (admin/debug endpoint and internal typing)
