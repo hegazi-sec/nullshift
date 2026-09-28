@@ -77,6 +77,12 @@ def list_users() -> List[Dict[str, Any]]:
         return [dict(r) for r in cur.fetchall()]
 
 
+def set_password(username: str, password_hash: str) -> bool:
+    with get_conn() as conn:
+        cur = conn.execute("UPDATE users SET password_hash = ? WHERE username = ?", (password_hash, username))
+        return cur.rowcount > 0
+
+
 def disable_user(user_id: int) -> None:
     with get_conn() as conn:
         conn.execute("UPDATE users SET is_active = 0 WHERE id = ?", (user_id,))

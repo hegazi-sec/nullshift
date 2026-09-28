@@ -9,6 +9,7 @@ Usage:
     nullshift logs      Stream live server logs (Ctrl+C to exit)
     nullshift setup     Run the configuration wizard
     nullshift update    Pull latest from GitHub, refresh dependencies, restart
+    nullshift passwd    Set a user's password (nullshift passwd [username], default admin)
 """
 from __future__ import annotations
 import os
@@ -316,6 +317,29 @@ def cmd_update() -> None:
 
 # ── entry point ───────────────────────────────────────────────────────────────
 
+def cmd_passwd() -> None:
+    """nullshift passwd [username] — set a user's password (default user: admin)."""
+    import getpass
+    sys.path.insert(0, str(BASE))
+    os.chdir(BASE)
+    from app.auth import get_password_hash
+    from app.db import user_store
+
+    username = sys.argv[2] if len(sys.argv) > 2 else 'admin'
+    if not user_store.get_user_by_username(username):
+        print(_red(f'✗ No user named {username!r}'))
+        sys.exit(1)
+    pw = getpass.getpass(f'  New password for {username} (min 16 chars): ')
+    if len(pw) < 16:
+        print(_red('✗ Password must be at least 16 characters'))
+        sys.exit(1)
+    if getpass.getpass('  Repeat it: ') != pw:
+        print(_red('✗ Passwords do not match'))
+        sys.exit(1)
+    user_store.set_password(username, get_password_hash(pw))
+    print(f'{_green("✓")} Password updated for {username}. Sessions already signed in stay valid until they expire.')
+
+
 COMMANDS = {
     'start':   cmd_start,
     'stop':    cmd_stop,
@@ -324,6 +348,7 @@ COMMANDS = {
     'logs':    cmd_logs,
     'setup':   cmd_setup,
     'update':  cmd_update,
+    'passwd':  cmd_passwd,
 }
 
 
@@ -339,6 +364,7 @@ def main() -> None:
         print(f'    {_cyan("logs")}    Stream live server logs  (Ctrl+C to exit)')
         print(f'    {_cyan("setup")}   Run the configuration wizard')
         print(f'    {_cyan("update")}  Pull latest from GitHub, refresh dependencies, restart')
+        print(f'    {_cyan("passwd")}  Set a user\'s password  (nullshift passwd [username], default admin)')
         print()
         sys.exit(0 if len(sys.argv) < 2 else 1)
 
