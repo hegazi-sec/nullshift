@@ -46,7 +46,7 @@ Before opening a PR, please make sure:
 - [ ] Your PR targets `main` and comes from a feature branch in your fork.
 - [ ] The PR description explains the **why**, not just the **what**.
 - [ ] Code changes are **scoped** — no unrelated refactors mixed in.
-- [ ] Tests pass: `pytest tests/`
+- [ ] You ran the app and checked the change works end to end.
 - [ ] For UI changes, include a **before / after screenshot**.
 - [ ] No secrets, API keys, generated databases (`*.db`), or contents of `app/data/` or `data/chroma/` committed.
 - [ ] Commit messages follow the project style (see below).

@@ -258,7 +258,6 @@ nullshift/
 │   └── *.html               UI pages (chat, admin, login, setup)
 ├── data/
 │   └── kb/                  Markdown playbooks (RAG corpus)
-├── tests/                   pytest unit tests
 ├── setup.py                 Interactive setup wizard
 ├── cli.py                   Daemon management CLI
 └── requirements.txt

@@ -12,6 +12,9 @@ dist/
 build/
 .pytest_cache/
 
+# Test suite lives in the development repo only
+tests/
+
 # Environment & secrets (optional escape hatch for Docker/CI deployments)
 .env
 .env.*

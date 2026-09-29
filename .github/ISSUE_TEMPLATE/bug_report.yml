@@ -1,0 +1,47 @@
+name: Bug report
+description: Something in NullShift doesn't work the way it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing NullShift. **Found a security vulnerability? Don't file it here** — report it privately under Security → Report a vulnerability.
+        Please remove API keys, passwords, hostnames, IPs and alert data from anything you paste.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. See …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: e.g. 42d414e
+  - type: dropdown
+    id: setup
+    attributes:
+      label: How you run it
+      options: [uvicorn / nullshift CLI, Docker, Other]
+  - type: input
+    id: env
+    attributes:
+      label: OS, browser, LLM provider, SIEM
+      placeholder: e.g. macOS 15, Chrome 140, Anthropic API, LimaCharlie
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Server log lines or a browser console error, with secrets removed.
+      render: text
