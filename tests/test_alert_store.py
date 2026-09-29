@@ -126,3 +126,37 @@ def test_stats_aggregates_window(store: AlertStore):
     assert s["by_severity"] == {"medium": 2, "high": 1}
     assert s["backlog"] == {"new": 2}
     assert s["triage_s"] is not None and len(s["recent"]) == 3
+
+
+def test_paging_and_count(store: AlertStore):
+    ids = [store.ingest({"title": f"alert {i}"})["id"] for i in range(3)]
+    store.dismiss(ids[0], user_id=1)
+    assert [x["id"] for x in store.list(limit=2, offset=1)] == [x["id"] for x in store.list()[1:]]
+    assert store.list(limit=2, offset=3) == []
+    assert (store.count(), store.count("new"), store.count("dismissed")) == (3, 2, 1)
+
+
+def test_reclaim_after_deleted_chat_and_detach(store: AlertStore):
+    a = store.ingest({"title": "A"})["id"]
+    assert store.mark_investigating(a, 1, "conv-1")
+    assert not store.mark_investigating(a, 2, "conv-2")  # first analyst wins
+    assert not store.mark_investigating(a, 2, "conv-2", stale_conversation_id="conv-x")
+    assert store.mark_investigating(a, 2, "conv-2", stale_conversation_id="conv-1")  # conv-1 was deleted
+    assert store.detach_conversation("conv-2") == 1
+    got = store.get(a)
+    assert (got["status"], got["claimed_by"], got["conversation_id"]) == ("new", None, None)
+    assert store.detach_conversation("conv-2") == 0
+
+
+def test_reclaim_an_investigating_alert_with_no_conversation(store: AlertStore):
+    # An agent's case_closed undone after its triage chat was deleted: 'investigating', no link.
+    a = store.ingest({"title": "A"})["id"]
+    store.set_agent_outcome([a], "dismissed", "Investigator agent: false positive", "conv-1")
+    store.detach_conversation("conv-1")
+    store.set_agent_outcome([a], "investigating", "Agent decision undone by admin")
+    assert store.get(a)["conversation_id"] is None
+    assert not store.mark_investigating(a, 1, "conv-2")  # not 'new'
+    assert store.mark_investigating(a, 1, "conv-2", reclaim=True)
+    assert not store.mark_investigating(a, 2, "conv-3", reclaim=True)  # linked now: first analyst wins
+    got = store.get(a)
+    assert (got["status"], got["claimed_by"], got["conversation_id"]) == ("investigating", 1, "conv-2")

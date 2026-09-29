@@ -25,8 +25,16 @@
       --font-ui:  'Chakra Petch', monospace;
       --font-hd:  'Chakra Petch', monospace;
       --font-mono:'JetBrains Mono', monospace;
+      /* One field system: every text box, select and textarea shares these */
+      --field-w:   560px;
+      --field-h:   36px;
+      --label-w:   180px;
+      --field-gap: 16px;
+      --pad-y:     18px;
+      --pad-x:     20px;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    [hidden] { display: none !important; }
 
     body {
       font-family: var(--font-ui);
@@ -106,8 +114,14 @@
       gap: 2px;
       border-bottom: 1px solid var(--border);
       margin-bottom: 24px;
+      overflow-x: auto;
+      scrollbar-width: thin;
     }
     .tab {
+      background: none;
+      border: 0;
+      white-space: nowrap;
+      flex-shrink: 0;
       font-family: var(--font-hd);
       font-size: 11px;
       font-weight: 600;
@@ -122,6 +136,7 @@
     }
     .tab:hover { color: var(--text2); }
     .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
     .pane { display: none; }
     .pane.active { display: block; }
@@ -194,55 +209,99 @@
       background: var(--bg2);
       border: 1px solid var(--border);
       border-radius: 8px;
-      overflow: hidden;
+      overflow-x: auto;   /* long usernames / narrow screens scroll instead of clipping Actions */
       margin-bottom: 24px;
     }
+    .data-table-wrap .data-table { margin-bottom: 0; }
 
-    /* ── Create user form ───────────────────────── */
-    .create-form {
+    /* ── Form panels and fields ─────────────────── */
+    /* Every form section sits in a panel with the same inset, so label and
+       field columns line up (and have the same width) across all tabs. */
+    .panel {
       background: var(--bg2);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 20px;
+      padding: var(--pad-y) var(--pad-x);
+      margin-bottom: 14px;
     }
-    .form-grid {
+    .field {
       display: grid;
-      grid-template-columns: 1fr 1fr 140px auto;
-      gap: 10px;
-      align-items: end;
+      grid-template-columns: var(--label-w) minmax(0, var(--field-w));
+      column-gap: var(--field-gap);
+      row-gap: 6px;
+      align-items: start;
+      margin-bottom: 12px;
     }
-    .form-field label {
-      display: block;
+    .field > label,
+    .field > .field-label {
+      grid-column: 1;
+      min-height: var(--field-h);
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px 6px;
       font-family: var(--font-hd);
       font-size: 10px;
       font-weight: 600;
       letter-spacing: .1em;
+      line-height: 1.4;
       text-transform: uppercase;
       color: var(--muted);
-      margin-bottom: 5px;
+      overflow-wrap: anywhere;
     }
-    /* Global input/select theming — covers all inputs regardless of wrapper */
-    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]),
+    .field > :not(label):not(.field-label) { grid-column: 2; min-width: 0; }
+    .hint {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+    .hint code {
+      font-size: 11px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      padding: 0 4px;
+      border-radius: 3px;
+      color: #7dd3fc;
+    }
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="hidden"]),
     select,
     textarea {
+      display: block;
+      width: 100%;
+      max-width: var(--field-w);
+      height: var(--field-h);
+      padding: 8px 10px;
       background: var(--bg3);
       border: 1px solid var(--border2);
       border-radius: 6px;
       color: var(--text2);
-      font-family: var(--font-ui);
-      font-size: 13px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 18px;
       outline: none;
       transition: border-color .12s;
     }
-    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]):focus,
-    select:focus,
-    textarea:focus { border-color: var(--accent); }
+    textarea { height: auto; min-height: 72px; resize: vertical; }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    input:disabled, select:disabled, textarea:disabled { opacity: .4; cursor: not-allowed; }
+    .plain-fieldset:disabled :disabled { opacity: 1; }  /* the fieldset already dims */
     select option { background: var(--bg2); color: var(--text2); }
-
-    .form-field input,
-    .form-field select {
-      width: 100%;
-      padding: 8px 10px;
+    /* Button rows start at the field column */
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 10px;
+      margin-top: 4px;
+      margin-left: calc(var(--label-w) + var(--field-gap));
+    }
+    .panel > .field:last-child { margin-bottom: 0; }
+    .status {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--muted);
     }
 
     /* ── Shared button styles ───────────────────── */
@@ -260,6 +319,8 @@
       white-space: nowrap;
     }
     .btn:hover { opacity: .85; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-sm { padding: 4px 10px; font-size: 10px; }
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-danger  { background: var(--red);    color: #fff; }
     .btn-ghost   {
@@ -286,45 +347,7 @@
     .pill.red    { background: rgba(239,68,68,.12);  color: var(--red);    border: 1px solid rgba(239,68,68,.25); }
     .pill.yellow { background: rgba(234,179,8,.1);   color: var(--yellow); border: 1px solid rgba(234,179,8,.25); }
 
-    /* ── Active provider selector ───────────────── */
-    .active-provider-bar {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px 20px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-    }
-    .active-provider-bar label {
-      font-family: var(--font-hd);
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      color: var(--muted);
-      white-space: nowrap;
-    }
-    .active-provider-bar select {
-      background: var(--bg3);
-      border: 1px solid var(--border2);
-      border-radius: 6px;
-      color: var(--text2);
-      font-family: var(--font-ui);
-      font-size: 13px;
-      padding: 7px 10px;
-      outline: none;
-      transition: border-color .12s;
-    }
-    .active-provider-bar select:focus { border-color: var(--accent); }
-    .active-provider-bar select option { background: var(--bg2); }
-    #activeStatus {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--green);
-    }
+    #activeStatus, #chainStatus { font-family: var(--font-mono); font-size: 11px; }
 
     /* ── Provider cards ─────────────────────────── */
     .provider-card {
@@ -339,8 +362,11 @@
     .provider-card.configured { border-left: 3px solid var(--accent); }
     .provider-card.not-configured { border-left: 3px solid var(--border2); }
 
+    /* The 3px left border is 2px wider than a panel's, so the left padding
+       is 2px narrower: fields line up with the other panels. */
+    .provider-card-head,
+    .provider-card-body { padding: 14px var(--pad-x) 14px calc(var(--pad-x) - 2px); }
     .provider-card-head {
-      padding: 14px 18px;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: flex-start;
@@ -360,66 +386,13 @@
       color: var(--muted);
       line-height: 1.5;
     }
-
-    .provider-card-body { padding: 14px 18px; }
-    .pfield {
-      display: grid;
-      grid-template-columns: 130px 1fr;
-      gap: 8px 14px;
-      align-items: center;
-      margin-bottom: 10px;
-    }
-    .pfield:last-child { margin-bottom: 0; }
-    .pfield label {
-      font-family: var(--font-hd);
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      color: var(--muted);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .pfield input[type="text"],
-    .pfield select {
-      width: 100%;
-      background: var(--bg3);
-      border: 1px solid var(--border2);
-      border-radius: 6px;
-      color: var(--text2);
-      font-family: var(--font-mono);
-      font-size: 12px;
-      padding: 7px 10px;
-      outline: none;
-      transition: border-color .12s;
-    }
-    .pfield input[type="text"]:focus,
-    .pfield select:focus { border-color: var(--accent); }
-    .pfield select option { background: var(--bg2); }
-
-    .custom-model-hint {
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 5px;
-      margin-bottom: 4px;
-      font-family: var(--font-mono);
-    }
-
-    .card-actions {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-top: 14px;
-      padding-top: 14px;
-      border-top: 1px solid var(--border);
-    }
+    .provider-card-body { padding-top: var(--pad-y); padding-bottom: var(--pad-y); }
 
     /* ── Usage / KV grid ────────────────────────── */
     .kv-grid {
       display: grid;
-      grid-template-columns: 180px 1fr;
-      gap: 6px 20px;
+      grid-template-columns: var(--label-w) minmax(0, 1fr);
+      gap: 6px var(--field-gap);
       margin-bottom: 16px;
     }
     .kv-grid .k {
@@ -445,7 +418,7 @@
       background: var(--bg2);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 18px 20px;
+      padding: var(--pad-y) var(--pad-x);
       margin-bottom: 14px;
     }
     .usage-card-title {
@@ -514,16 +487,16 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 8px 12px;
-      background: var(--bg2);
+      padding: 6px 8px 6px 12px;
+      background: var(--bg3);
       border: 1px solid var(--border);
       border-radius: 6px;
-      margin-bottom: 5px;
+      margin-bottom: 6px;
       cursor: grab;
       user-select: none;
       transition: opacity .15s, border-color .15s;
     }
-    .chain-row.drag-over { border-color: var(--accent); background: var(--bg3); }
+    .chain-row.drag-over { border-color: var(--accent); }
     .chain-row.dragging  { opacity: .4; cursor: grabbing; }
     .chain-handle {
       color: var(--muted);
@@ -540,12 +513,14 @@
     }
     .chain-label {
       flex: 1;
+      min-width: 0;
       font-family: var(--font-ui);
       font-size: 13px;
       color: var(--text2);
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
-      gap: 8px;
+      gap: 4px 8px;
     }
     .chain-btns { display: flex; gap: 4px; }
     .chain-btn {
@@ -553,12 +528,16 @@
       border: 1px solid var(--border2);
       color: var(--muted);
       border-radius: 4px;
-      padding: 3px 7px;
+      min-width: 26px;
+      height: 26px;
+      padding: 0 6px;
       font-size: 11px;
+      line-height: 1;
       cursor: pointer;
       transition: color .12s, border-color .12s;
     }
     .chain-btn:hover:not(:disabled) { color: var(--text2); border-color: var(--accent); }
+    .chain-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .chain-btn:disabled { opacity: .3; cursor: default; }
     .chain-btn.chain-rm:hover:not(:disabled) { color: var(--red); border-color: var(--red); }
 
@@ -575,6 +554,51 @@
     }
     .toggle-wrap input:checked + .toggle-slider { background:var(--accent); }
     .toggle-wrap input:checked + .toggle-slider::before { transform:translateX(18px); }
+    .toggle-wrap input:focus-visible + .toggle-slider { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .toggle-row { min-height: var(--field-h); display: flex; align-items: center; gap: 10px; }
+    #chainEditor .chain-row:last-child { margin-bottom: 0; }
+
+    /* Inline status / error lines */
+    .form-status {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--muted);
+      margin: -14px 0 20px;
+      line-height: 1.5;
+    }
+    .form-status:empty { display: none; }
+    .card-status { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+    .load-error {
+      padding: 12px 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--red);
+    }
+    .plain-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+    .plain-fieldset:disabled { opacity: .4; }
+    .info-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: var(--pad-y) var(--pad-x);
+      font-size: 13px;
+    }
+
+    /* Under 640px: labels stack above their fields and the tab bar scrolls */
+    @media (max-width: 639px) {
+      :root { --pad-y: 14px; --pad-x: 14px; }
+      .topbar { padding: 10px 16px; gap: 10px; }
+      .page { padding: 20px 16px 48px; }
+      .tab { padding: 10px 12px; }
+      .field { grid-template-columns: minmax(0, 1fr); }
+      .field > label, .field > .field-label { min-height: 0; }
+      .field > :not(label):not(.field-label) { grid-column: 1; }
+      .actions { margin-left: 0; }
+      .kv-grid { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+      .kv-grid .k { margin-top: 6px; }
+      .provider-card-head { flex-wrap: wrap; }
+      .chain-handle { display: none; }  /* no drag on touch screens; ▲/▼ reorder */
+    }
 
     /* Scroll */
     ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -600,70 +624,87 @@
 <div class="page">
 
   <!-- Tabs -->
-  <div class="tabs">
-    <div class="tab active" data-pane="users">Users</div>
-    <div class="tab" data-pane="providers">LLM Providers</div>
-    <div class="tab" data-pane="connectors">Connectors</div>
-    <div class="tab" data-pane="rag">RAG</div>
-    <div class="tab" data-pane="vision">Vision</div>
-    <div class="tab" data-pane="usage">Usage</div>
+  <div class="tabs" role="tablist" aria-label="Settings sections">
+    <button type="button" class="tab active" role="tab" id="tab-users" aria-selected="true" aria-controls="pane-users" data-pane="users">Users</button>
+    <button type="button" class="tab" role="tab" id="tab-providers" aria-selected="false" aria-controls="pane-providers" data-pane="providers">LLM Providers</button>
+    <button type="button" class="tab" role="tab" id="tab-connectors" aria-selected="false" aria-controls="pane-connectors" data-pane="connectors">Connectors</button>
+    <button type="button" class="tab" role="tab" id="tab-rag" aria-selected="false" aria-controls="pane-rag" data-pane="rag">RAG</button>
+    <button type="button" class="tab" role="tab" id="tab-vision" aria-selected="false" aria-controls="pane-vision" data-pane="vision">Vision</button>
+    <button type="button" class="tab" role="tab" id="tab-usage" aria-selected="false" aria-controls="pane-usage" data-pane="usage">Usage</button>
   </div>
 
   <!-- ─ Users ────────────────────────────────────────────────── -->
-  <div class="pane active" id="pane-users">
-    <div class="section-title">Active users</div>
+  <div class="pane active" id="pane-users" role="tabpanel" aria-labelledby="tab-users">
+    <div class="section-title">Users</div>
     <div id="users" class="data-table-wrap">
       <div style="padding:16px;font-family:var(--font-mono);font-size:12px;color:var(--muted)">Loading…</div>
     </div>
+    <div id="usersStatus" class="form-status" role="status"></div>
 
     <div class="section-title" style="margin-top:28px;">Create user</div>
-    <div class="create-form">
-      <form id="createForm">
-        <div class="form-grid">
-          <div class="form-field">
-            <label>Username</label>
-            <input name="username" type="text" placeholder="analyst_02" required/>
-          </div>
-          <div class="form-field">
-            <label>Password</label>
-            <input type="password" name="password" placeholder="min 16 chars recommended" required/>
-          </div>
-          <div class="form-field">
-            <label>Role</label>
-            <select name="role">
-              <option value="l1">L1 Analyst</option>
-              <option value="l2">L2 Analyst</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <button class="btn btn-primary" type="submit" style="height:36px;align-self:end;">Create</button>
-        </div>
-      </form>
-    </div>
+    <form id="createForm" class="panel">
+      <div class="field">
+        <label for="newUsername">Username</label>
+        <input id="newUsername" name="username" type="text" placeholder="analyst_02" required maxlength="64"
+          pattern="[A-Za-z0-9._@\-]{1,64}" title="Letters, digits and . _ @ - only" autocomplete="off"/>
+        <div class="hint">Letters, digits and . _ @ - only.</div>
+      </div>
+      <div class="field">
+        <label for="newPassword">Password</label>
+        <input id="newPassword" type="password" name="password" placeholder="••••••••" required minlength="16"
+          autocomplete="new-password"/>
+        <div class="hint">At least 16 characters.</div>
+      </div>
+      <div class="field">
+        <label for="newRole">Role</label>
+        <select id="newRole" name="role">
+          <option value="l1">L1 Analyst</option>
+          <option value="l2">L2 Analyst</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">Create user</button>
+        <span id="createStatus" class="status" role="status"></span>
+      </div>
+    </form>
   </div>
 
   <!-- ─ LLM Providers ─────────────────────────────────────────── -->
-  <div class="pane" id="pane-providers">
+  <div class="pane" id="pane-providers" role="tabpanel" aria-labelledby="tab-providers">
     <div class="section-title">Active provider</div>
-    <div class="active-provider-bar">
-      <label for="activeProvider">Route all requests to:</label>
-      <select id="activeProvider">
-        <option value="auto">Auto (chain fallback)</option>
-      </select>
-      <button class="btn btn-primary" id="saveActiveBtn">Save</button>
-      <span id="activeStatus"></span>
+    <div class="panel">
+      <div class="field">
+        <label for="activeProvider">Route requests to</label>
+        <select id="activeProvider">
+          <option value="auto">Auto (chain fallback)</option>
+        </select>
+        <div class="hint">Auto tries the fallback chain below, in order.</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="saveActiveBtn">Save</button>
+        <span id="activeStatus" role="status"></span>
+      </div>
     </div>
 
-    <div class="section-title" style="margin-top:24px;">Fallback chain order</div>
+    <div class="section-title" style="margin-top:28px;">Fallback chain order</div>
     <div class="section-desc">
-      Arrange providers in the order they should be tried. Unconfigured providers are skipped automatically. Changes take effect immediately after saving.
+      Arrange providers in the order they should be tried. Providers that are not configured are skipped, and providers left out of the chain are never tried. Changes take effect immediately after saving.
     </div>
-    <div id="chainEditor" style="margin-bottom:10px;"></div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <select id="addProviderSel" style="flex:1;min-width:160px;max-width:260px;"></select>
-      <button class="btn btn-ghost" id="addToChainBtn">+ Add</button>
-      <button class="btn btn-primary" id="saveChainBtn">Save chain order</button>
-      <span id="chainStatus" style="font-family:var(--font-mono);font-size:11px;color:var(--muted);"></span>
+    <div class="panel">
+      <div class="field">
+        <span class="field-label" id="chainEditorLabel">Try in order</span>
+        <div id="chainEditor" role="group" aria-labelledby="chainEditorLabel"></div>
+      </div>
+      <div class="field">
+        <label for="addProviderSel">Add provider</label>
+        <select id="addProviderSel"></select>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost" id="addToChainBtn">+ Add to chain</button>
+        <button class="btn btn-primary" id="saveChainBtn">Save chain order</button>
+        <span id="chainStatus" role="status"></span>
+      </div>
     </div>
 
     <div class="section-title" style="margin-top:28px;">Provider configuration</div>
@@ -674,95 +715,122 @@
   </div>
 
   <!-- ─ Connectors ────────────────────────────────────────────── -->
-  <div class="pane" id="pane-connectors">
+  <div class="pane" id="pane-connectors" role="tabpanel" aria-labelledby="tab-connectors">
 
     <!-- SIEM -->
     <div class="section-title">SIEM Connector</div>
     <div class="section-desc">Change your SIEM provider or update credentials at any time without re-running setup.</div>
+    <div class="panel">
+      <div class="field">
+        <label for="siemProviderSel">Provider</label>
+        <select id="siemProviderSel">
+          <option value="">— none —</option>
+          <option value="limacharlie">LimaCharlie</option>
+          <option value="wazuh">Wazuh</option>
+          <option value="splunk">Splunk</option>
+          <option value="elastic">Elastic / Elastic SIEM</option>
+          <option value="sentinel">Microsoft Sentinel</option>
+        </select>
+      </div>
 
-    <div class="pfield" style="margin-top:14px;">
-      <label>Provider</label>
-      <select id="siemProviderSel" style="width:100%;max-width:280px;">
-        <option value="">— none —</option>
-        <option value="limacharlie">LimaCharlie</option>
-        <option value="wazuh">Wazuh</option>
-        <option value="splunk">Splunk</option>
-        <option value="elastic">Elastic / Elastic SIEM</option>
-        <option value="sentinel">Microsoft Sentinel</option>
-      </select>
+      <div id="siem-lc" class="siem-fields" style="display:none;">
+        <div class="field">
+          <label for="siem_limacharlie_oid">Organisation ID (OID)</label>
+          <input id="siem_limacharlie_oid" type="text" data-siem-field="limacharlie_oid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off"/>
+        </div>
+        <div class="field">
+          <label for="siem_limacharlie_api_key">API key</label>
+          <input id="siem_limacharlie_api_key" type="password" data-siem-field="limacharlie_api_key" placeholder="secret API key" autocomplete="off"/>
+        </div>
+      </div>
+
+      <div id="siem-wazuh" class="siem-fields" style="display:none;">
+        <div class="field">
+          <label for="siem_wazuh_api_url">Manager API URL</label>
+          <input id="siem_wazuh_api_url" type="text" data-siem-field="wazuh_api_url" placeholder="https://wazuh-manager:55000" autocomplete="off"/>
+        </div>
+        <div class="field">
+          <label for="siem_wazuh_indexer_url">Indexer URL</label>
+          <input id="siem_wazuh_indexer_url" type="text" data-siem-field="wazuh_indexer_url" placeholder="https://wazuh-indexer:9200" autocomplete="off"/>
+        </div>
+        <div class="field">
+          <label for="siem_wazuh_indexer_user">Indexer username</label>
+          <input id="siem_wazuh_indexer_user" type="text" data-siem-field="wazuh_indexer_user" placeholder="admin" autocomplete="off"/>
+        </div>
+        <div class="field">
+          <label for="siem_wazuh_indexer_pass">Indexer password</label>
+          <input id="siem_wazuh_indexer_pass" type="password" data-siem-field="wazuh_indexer_pass" placeholder="password" autocomplete="off"/>
+        </div>
+      </div>
+
+      <div id="siem-splunk" class="siem-fields" style="display:none;">
+        <div class="field">
+          <label for="siem_splunk_url">Splunk URL</label>
+          <input id="siem_splunk_url" type="text" data-siem-field="splunk_url" placeholder="https://splunk:8089" autocomplete="off"/>
+        </div>
+        <div class="field">
+          <label for="siem_splunk_token">HEC / API token</label>
+          <input id="siem_splunk_token" type="password" data-siem-field="splunk_token" placeholder="token" autocomplete="off"/>
+        </div>
+        <div class="field">
+          <label for="siem_splunk_index">Index</label>
+          <input id="siem_splunk_index" type="text" data-siem-field="splunk_index" placeholder="main" autocomplete="off"/>
+        </div>
+      </div>
+
+      <div id="siem-elastic" class="siem-fields" style="display:none;">
+        <div class="field">
+          <label for="siem_elastic_url">Elasticsearch URL</label>
+          <input id="siem_elastic_url" type="text" data-siem-field="elastic_url" placeholder="https://elastic:9200" autocomplete="off"/>
+        </div>
+        <div class="field">
+          <label for="siem_elastic_api_key">API key</label>
+          <input id="siem_elastic_api_key" type="password" data-siem-field="elastic_api_key" placeholder="base64 encoded key" autocomplete="off"/>
+        </div>
+        <div class="field">
+          <label for="siem_elastic_index">Index</label>
+          <input id="siem_elastic_index" type="text" data-siem-field="elastic_index" placeholder=".alerts-security.alerts-default" autocomplete="off"/>
+        </div>
+      </div>
+
+      <div id="siem-sentinel" class="siem-fields" style="display:none;">
+        <div class="field">
+          <label for="siem_sentinel_workspace_id">Workspace ID</label>
+          <input id="siem_sentinel_workspace_id" type="text" data-siem-field="sentinel_workspace_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off"/>
+        </div>
+        <div class="field">
+          <label for="siem_sentinel_tenant_id">Tenant ID</label>
+          <input id="siem_sentinel_tenant_id" type="text" data-siem-field="sentinel_tenant_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off"/>
+        </div>
+        <div class="field">
+          <label for="siem_sentinel_client_id">Client ID</label>
+          <input id="siem_sentinel_client_id" type="text" data-siem-field="sentinel_client_id" placeholder="app registration client ID" autocomplete="off"/>
+        </div>
+        <div class="field">
+          <label for="siem_sentinel_client_secret">Client secret</label>
+          <input id="siem_sentinel_client_secret" type="password" data-siem-field="sentinel_client_secret" placeholder="client secret" autocomplete="off"/>
+        </div>
+      </div>
+
+      <!-- Only the selected provider's Test button and result are shown -->
+      <div class="actions">
+        <button class="btn btn-primary" id="saveSiemBtn">Save SIEM</button>
+        <button class="btn btn-ghost" data-test-siem="limacharlie" hidden>Test connection</button>
+        <button class="btn btn-ghost" data-test-siem="wazuh" hidden>Test connection</button>
+        <button class="btn btn-ghost" data-test-siem="splunk" hidden>Test connection</button>
+        <button class="btn btn-ghost" data-test-siem="elastic" hidden>Test connection</button>
+        <button class="btn btn-ghost" data-test-siem="sentinel" hidden>Test connection</button>
+        <span id="siemSaveStatus" class="status" role="status"></span>
+        <span class="siem-test-status status" data-for="limacharlie" role="status" hidden></span>
+        <span class="siem-test-status status" data-for="wazuh" role="status" hidden></span>
+        <span class="siem-test-status status" data-for="splunk" role="status" hidden></span>
+        <span class="siem-test-status status" data-for="elastic" role="status" hidden></span>
+        <span class="siem-test-status status" data-for="sentinel" role="status" hidden></span>
+      </div>
     </div>
-
-    <!-- LimaCharlie fields -->
-    <div id="siem-lc" class="siem-fields" style="display:none;margin-top:12px;">
-      <div class="pfield"><label>Organisation ID (OID)</label>
-        <input type="text" data-siem-field="limacharlie_oid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div class="pfield"><label>API Key</label>
-        <input type="password" data-siem-field="limacharlie_api_key" placeholder="secret API key" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div style="margin-top:6px;"><button class="btn btn-ghost" data-test-siem="limacharlie">Test connection</button>
-        <span class="siem-test-status" data-for="limacharlie" style="font-size:12px;color:var(--muted);margin-left:10px;"></span></div>
-    </div>
-
-    <!-- Wazuh fields -->
-    <div id="siem-wazuh" class="siem-fields" style="display:none;margin-top:12px;">
-      <div class="pfield"><label>Manager API URL</label>
-        <input type="text" data-siem-field="wazuh_api_url" placeholder="https://wazuh-manager:55000" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div class="pfield"><label>Indexer URL</label>
-        <input type="text" data-siem-field="wazuh_indexer_url" placeholder="https://wazuh-indexer:9200" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div class="pfield"><label>Indexer Username</label>
-        <input type="text" data-siem-field="wazuh_indexer_user" placeholder="admin" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div class="pfield"><label>Indexer Password</label>
-        <input type="password" data-siem-field="wazuh_indexer_pass" placeholder="password" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div style="margin-top:6px;"><button class="btn btn-ghost" data-test-siem="wazuh">Test connection</button>
-        <span class="siem-test-status" data-for="wazuh" style="font-size:12px;color:var(--muted);margin-left:10px;"></span></div>
-    </div>
-
-    <!-- Splunk fields -->
-    <div id="siem-splunk" class="siem-fields" style="display:none;margin-top:12px;">
-      <div class="pfield"><label>Splunk URL</label>
-        <input type="text" data-siem-field="splunk_url" placeholder="https://splunk:8089" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div class="pfield"><label>HEC / API Token</label>
-        <input type="password" data-siem-field="splunk_token" placeholder="token" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div class="pfield"><label>Index</label>
-        <input type="text" data-siem-field="splunk_index" placeholder="main" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div style="margin-top:6px;"><button class="btn btn-ghost" data-test-siem="splunk">Test connection</button>
-        <span class="siem-test-status" data-for="splunk" style="font-size:12px;color:var(--muted);margin-left:10px;"></span></div>
-    </div>
-
-    <!-- Elastic fields -->
-    <div id="siem-elastic" class="siem-fields" style="display:none;margin-top:12px;">
-      <div class="pfield"><label>Elasticsearch URL</label>
-        <input type="text" data-siem-field="elastic_url" placeholder="https://elastic:9200" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div class="pfield"><label>API Key</label>
-        <input type="password" data-siem-field="elastic_api_key" placeholder="base64 encoded key" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div class="pfield"><label>Index</label>
-        <input type="text" data-siem-field="elastic_index" placeholder=".alerts-security.alerts-default" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div style="margin-top:6px;"><button class="btn btn-ghost" data-test-siem="elastic">Test connection</button>
-        <span class="siem-test-status" data-for="elastic" style="font-size:12px;color:var(--muted);margin-left:10px;"></span></div>
-    </div>
-
-    <!-- Sentinel fields -->
-    <div id="siem-sentinel" class="siem-fields" style="display:none;margin-top:12px;">
-      <div class="pfield"><label>Workspace ID</label>
-        <input type="text" data-siem-field="sentinel_workspace_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div class="pfield"><label>Tenant ID</label>
-        <input type="text" data-siem-field="sentinel_tenant_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div class="pfield"><label>Client ID</label>
-        <input type="text" data-siem-field="sentinel_client_id" placeholder="app registration client ID" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div class="pfield"><label>Client Secret</label>
-        <input type="password" data-siem-field="sentinel_client_secret" placeholder="client secret" autocomplete="off" style="width:100%;max-width:400px;"/></div>
-      <div style="margin-top:6px;"><button class="btn btn-ghost" data-test-siem="sentinel">Test connection</button>
-        <span class="siem-test-status" data-for="sentinel" style="font-size:12px;color:var(--muted);margin-left:10px;"></span></div>
-    </div>
-
-    <div style="margin-top:14px;display:flex;gap:10px;align-items:center;">
-      <button class="btn btn-primary" id="saveSiemBtn">Save SIEM</button>
-      <span id="siemSaveStatus" style="font-size:12px;color:var(--muted);"></span>
-    </div>
-
-    <hr style="border:none;border-top:1px solid var(--border);margin:28px 0;"/>
 
     <!-- VirusTotal -->
-    <div class="section-title">VirusTotal (Threat Intelligence)</div>
+    <div class="section-title" style="margin-top:28px;">VirusTotal (Threat Intelligence)</div>
     <div class="section-desc">
       When set, NullShift automatically enriches IPs, domains, and file hashes
       found in each investigation against VirusTotal — regardless of RAG status.
@@ -770,38 +838,40 @@
       4 per message to respect the public API rate limit. Verdicts are attached to
       the evidence bundle the analyst LLM reasons over.
     </div>
-    <div class="pfield" style="margin-top:14px;">
-      <label>API Key <span style="font-weight:400;color:var(--muted);font-size:12px;">(VirusTotal v3)</span></label>
-      <input type="password" id="vtApiKey" placeholder="Enter your VT API key"
-        autocomplete="off" style="width:100%;max-width:400px;"/>
+    <div class="panel">
+      <div class="field">
+        <label for="vtApiKey">API key</label>
+        <input type="password" id="vtApiKey" placeholder="Enter your VT API key" autocomplete="off"/>
+        <div class="hint">VirusTotal v3 API key. Test key checks the key in the field, or the saved key when the field is empty.</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="saveVtBtn">Save</button>
+        <button class="btn btn-ghost" id="testVtBtn">Test key</button>
+        <span id="vtSaveStatus" class="status" role="status"></span>
+      </div>
     </div>
-    <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
-      <button class="btn btn-primary" id="saveVtBtn">Save</button>
-      <button class="btn btn-ghost" id="testVtBtn">Test key</button>
-      <span id="vtSaveStatus" style="font-size:12px;color:var(--muted);"></span>
-    </div>
-
-    <hr style="border:none;border-top:1px solid var(--border);margin:28px 0;"/>
 
     <!-- Webhook alert ingestion -->
-    <div class="section-title">Webhook Alert Ingestion</div>
+    <div class="section-title" style="margin-top:28px;">Webhook Alert Ingestion</div>
     <div class="section-desc">
       Lets your SIEM push alerts directly into the NullShift alert inbox.
       Point the SIEM webhook at <code>POST /api/alerts/ingest</code> with the
       shared token in the <code>X-Webhook-Token</code> header. Ingestion stays
       disabled until a token is set.
     </div>
-    <div class="pfield" style="margin-top:14px;">
-      <label>Shared Token <span style="font-weight:400;color:var(--muted);font-size:12px;">(min 24 chars recommended)</span></label>
-      <input type="password" id="webhookToken" placeholder="not configured"
-        autocomplete="off" style="width:100%;max-width:400px;"/>
+    <div class="panel">
+      <div class="field">
+        <label for="webhookToken">Shared token</label>
+        <input type="password" id="webhookToken" placeholder="not configured" autocomplete="off"/>
+        <div class="hint">At least 24 characters recommended. Generate token makes a random one.</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="saveWebhookBtn">Save</button>
+        <button class="btn btn-ghost" id="genWebhookBtn">Generate token</button>
+        <span id="webhookSaveStatus" class="status" role="status"></span>
+      </div>
     </div>
-    <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
-      <button class="btn btn-primary" id="saveWebhookBtn">Save</button>
-      <button class="btn btn-ghost" id="genWebhookBtn">Generate token</button>
-      <span id="webhookSaveStatus" style="font-size:12px;color:var(--muted);"></span>
-    </div>
-    <div class="section-desc" style="margin-top:12px;font-size:12px;">
+    <div class="section-desc" style="font-size:12px;">
       Example: <code>curl -X POST https://your-host/api/alerts/ingest?source=wazuh
       -H "X-Webhook-Token: &lt;token&gt;" -H "Content-Type: application/json" -d @alert.json</code>
     </div>
@@ -809,7 +879,7 @@
   </div>
 
   <!-- ─ RAG / Knowledge Base ──────────────────────────────────── -->
-  <div class="pane" id="pane-rag">
+  <div class="pane" id="pane-rag" role="tabpanel" aria-labelledby="tab-rag">
     <div class="section-title">RAG / Knowledge Base</div>
     <div class="section-desc">
       Controls whether the app indexes and searches your local playbooks and
@@ -818,102 +888,107 @@
       <br><strong>Changes take effect immediately — no restart needed.</strong>
     </div>
 
-    <div style="display:flex;align-items:center;gap:16px;margin:18px 0 24px;">
-      <label style="font-weight:600;font-size:14px;" for="ragEnabledToggle">Enable RAG</label>
-      <label class="toggle-wrap">
-        <input type="checkbox" id="ragEnabledToggle" checked>
-        <span class="toggle-slider"></span>
-      </label>
-      <span id="ragEnabledLabel" style="font-family:var(--font-mono);font-size:12px;color:var(--muted);">On</span>
-    </div>
+    <div class="panel">
+      <div class="field">
+        <label for="ragEnabledToggle">Enable RAG</label>
+        <div class="toggle-row">
+          <label class="toggle-wrap">
+            <input type="checkbox" id="ragEnabledToggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+          <span id="ragEnabledLabel" class="status">On</span>
+        </div>
+      </div>
 
-    <div id="ragProviderRow">
-      <div class="section-title" style="margin-top:0;">Embedding provider</div>
-      <div class="section-desc">
-        <b>Auto</b> walks your provider chain and uses the first one that supports
-        embeddings and has a key configured.<br>
-        Picking a specific provider skips chain logic entirely.
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;">
-        <select id="ragProviderSel" style="min-width:200px;">
-          <option value="auto">Auto (follow provider chain)</option>
-          <option value="openai">OpenAI</option>
-          <option value="gemini">Gemini</option>
-          <option value="ollama">Ollama (local)</option>
-        </select>
-      </div>
-      <div id="ollamaUrlRow" style="margin-top:14px;display:none;">
-        <div class="section-title" style="margin-top:0;margin-bottom:6px;">Ollama URL <span style="font-weight:400;color:var(--muted);font-size:12px;">(required — same value as LLM Providers tab)</span></div>
-        <input type="text" id="ragOllamaUrlInput"
-          placeholder="e.g. http://localhost:11434 or http://your-tailscale-ip:11434"
-          autocomplete="off"
-          style="width:100%;max-width:480px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:13px;"/>
-      </div>
-      <div style="margin-top:14px;">
-        <div class="section-title" style="margin-top:0;margin-bottom:6px;">Embedding model <span style="font-weight:400;color:var(--muted);font-size:12px;">(optional — leave blank to use provider default)</span></div>
-        <input type="text" id="ragModelInput"
-          placeholder="e.g. nomic-embed-text, gemini-embedding-001, text-embedding-3-small"
-          autocomplete="off"
-          style="width:100%;max-width:480px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:13px;"/>
-      </div>
-      <div style="margin-top:12px;display:flex;gap:10px;align-items:center;">
+      <fieldset id="ragProviderRow" class="plain-fieldset">
+        <div class="field">
+          <label for="ragProviderSel">Embedding provider</label>
+          <select id="ragProviderSel">
+            <option value="auto">Auto (follow provider chain)</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Gemini</option>
+            <option value="ollama">Ollama (local)</option>
+          </select>
+          <div class="hint">Auto walks your provider chain and uses the first one that supports embeddings and has a key configured. Picking a provider skips the chain.</div>
+        </div>
+        <div class="field" id="ollamaUrlRow" style="display:none;">
+          <label for="ragOllamaUrlInput">Ollama URL</label>
+          <input type="text" id="ragOllamaUrlInput"
+            placeholder="http://localhost:11434"
+            autocomplete="off"/>
+          <div class="hint">Required. Same value as the Ollama card on the LLM Providers tab.</div>
+        </div>
+        <div class="field">
+          <label for="ragModelInput">Embedding model</label>
+          <input type="text" id="ragModelInput"
+            placeholder="e.g. nomic-embed-text, text-embedding-3-small"
+            autocomplete="off"/>
+          <div class="hint">Optional. Leave blank to use the provider default (required for Ollama).</div>
+        </div>
+      </fieldset>
+      <div class="actions">
         <button class="btn btn-primary" id="saveRagBtn">Save</button>
-        <span id="ragStatus" style="font-family:var(--font-mono);font-size:11px;color:var(--muted);"></span>
+        <span id="ragStatus" class="status" role="status"></span>
       </div>
     </div>
 
-    <div id="ragStatusCard" style="margin-top:24px;padding:14px 16px;background:var(--surface2);border-radius:8px;font-size:13px;line-height:1.9;">
-      <div style="font-weight:600;margin-bottom:6px;color:var(--fg);">Current status</div>
+    <div id="ragStatusCard" class="info-card" style="margin-top:24px;line-height:1.9;">
+      <div style="font-weight:600;margin-bottom:6px;color:var(--text2);">Current status</div>
       <div id="ragStatusBody" style="color:var(--muted);font-family:var(--font-mono);font-size:12px;">Loading…</div>
     </div>
 
-    <div style="margin-top:16px;padding:14px 16px;background:var(--surface2);border-radius:8px;font-size:13px;line-height:1.6;color:var(--muted);">
-      <b style="color:var(--fg);">Providers with embedding support</b><br>
+    <div class="info-card section-desc" style="margin-top:16px;margin-bottom:0;">
+      <b style="color:var(--text2);">Providers with embedding support</b><br>
       OpenAI → <code>text-embedding-3-small</code><br>
-      Gemini → <code>text-embedding-004</code> (free tier available)<br>
+      Gemini → <code>gemini-embedding-001</code> (free tier available)<br>
       Ollama → <code>nomic-embed-text</code> (fully local, no API key needed)<br><br>
       Claude / Groq / xAI and others are LLM-only — they cannot generate embeddings.
     </div>
   </div>
 
   <!-- ─ Vision / Image Upload ─────────────────────────────────── -->
-  <div class="pane" id="pane-vision">
+  <div class="pane" id="pane-vision" role="tabpanel" aria-labelledby="tab-vision">
     <div class="section-title">Image upload limits</div>
     <div class="section-desc">
       These limits apply to all users regardless of which LLM provider is active.
       Set them based on your provider's constraints and your deployment's bandwidth.
     </div>
-    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:16px;">
-      <div>
-        <label style="display:block;font-size:13px;color:var(--fg2);margin-bottom:6px;">Max images per message</label>
-        <input type="number" id="visionMaxImages" min="1" max="20" value="4"
-          style="width:100px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:13px;">
+    <div class="panel">
+      <div class="field">
+        <label for="visionMaxImages">Max images per message</label>
+        <input type="number" id="visionMaxImages" min="1" max="20" step="1" value="4">
+        <div class="hint">Whole number from 1 to 20.</div>
       </div>
-      <div>
-        <label style="display:block;font-size:13px;color:var(--fg2);margin-bottom:6px;">Max image size (MB)</label>
-        <input type="number" id="visionMaxSizeMb" min="1" max="20" step="0.5" value="5"
-          style="width:100px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:13px;">
+      <div class="field">
+        <label for="visionMaxSizeMb">Max image size (MB)</label>
+        <input type="number" id="visionMaxSizeMb" min="0.5" max="20" step="0.5" value="5">
+        <div class="hint">From 0.5 to 20 MB, in steps of 0.5.</div>
+      </div>
+      <div class="actions">
+        <!-- Enabled once the stored limits have loaded, so a failed load can't save the placeholders over them -->
+        <button class="btn btn-primary" id="saveVisionBtn" disabled>Save limits</button>
+        <span id="visionSaveMsg" class="status" role="status"></span>
       </div>
     </div>
-    <button class="btn btn-primary" style="margin-top:16px;" onclick="saveVisionLimits()">Save limits</button>
-    <span id="visionSaveMsg" style="margin-left:12px;font-size:12px;color:var(--green);display:none;">Saved</span>
 
     <div class="section-title" style="margin-top:32px;">Vision support by provider</div>
     <div class="section-desc">Providers marked ✕ will receive a text note instead of the image.</div>
+    <div style="overflow-x:auto;">
     <table style="width:100%;border-collapse:collapse;margin-top:14px;font-size:13px;">
       <thead>
         <tr style="border-bottom:1px solid var(--border);">
-          <th style="text-align:left;padding:6px 10px;color:var(--fg2);">Provider</th>
-          <th style="text-align:left;padding:6px 10px;color:var(--fg2);">Vision</th>
-          <th style="text-align:left;padding:6px 10px;color:var(--fg2);">Notes</th>
+          <th style="text-align:left;padding:6px 10px;color:var(--text);">Provider</th>
+          <th style="text-align:left;padding:6px 10px;color:var(--text);">Vision</th>
+          <th style="text-align:left;padding:6px 10px;color:var(--text);">Notes</th>
         </tr>
       </thead>
       <tbody id="visionCapTable"></tbody>
     </table>
+    </div>
   </div>
 
   <!-- ─ Usage ─────────────────────────────────────────────────── -->
-  <div class="pane" id="pane-usage">
+  <div class="pane" id="pane-usage" role="tabpanel" aria-labelledby="tab-usage">
     <div class="section-title">LLM usage telemetry</div>
     <div class="section-desc">
       Captured from the most recent chat request. The 5-hour subscription window is reported by the Claude Agent SDK; other providers expose rate-limit info per-response.
@@ -929,96 +1004,208 @@
 
 <script>
   function getCookie(n){ return document.cookie.split('; ').find(r=>r.startsWith(n+'='))?.split('=')[1] }
-  const csrf = getCookie('csrftoken');
+
+  // Server data (usernames, provider errors, model names, RAG status) is
+  // escaped before it goes into innerHTML.
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // Every admin call goes through api(): an expired session goes to /login,
+  // and any other failure throws with the server's `detail` so it can be shown.
+  async function api(url, opts = {}){
+    const r = await fetch(url, opts);
+    if (r.status === 401) {
+      location.href = '/login';
+      throw new Error('Session expired — redirecting to login');
+    }
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const d = j.detail;
+      throw new Error(typeof d === 'string' ? d : d ? JSON.stringify(d) : `HTTP ${r.status}`);
+    }
+    return j;
+  }
+  // Every state-changing call echoes the csrftoken cookie in X-CSRF-Token.
+  // Read it per call: each GET /admin issues a new one, so a value cached at
+  // load goes stale as soon as Settings is opened in another tab.
+  function send(method, body){
+    const opts = { method, headers: { 'X-CSRF-Token': getCookie('csrftoken') || '' } };
+    if (body !== undefined) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    return opts;
+  }
+  const STATUS_COLORS = { ok: 'var(--green)', err: 'var(--red)', warn: 'var(--yellow)' };
+  function setStatus(el, text, kind){
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = STATUS_COLORS[kind] || 'var(--muted)';
+  }
 
   // ─── Tabs ────────────────────────────────────────────────────
+  // Editable panes load once, on first open. Re-opening a tab must not rebuild
+  // its inputs from the server, or unsaved edits (typed keys, chain order, a
+  // generated webhook token) are silently thrown away. A loader removes its
+  // pane from _loaded when it fails, so the next open retries.
+  const _loaded  = new Set();
+  const _loaders = {
+    providers:  () => loadProviders(),
+    connectors: () => loadConnectors(),
+    rag:        () => loadRagSettings(),
+    vision:     () => loadVisionSettings(),
+  };
   document.querySelectorAll('.tab').forEach(t => {
     t.onclick = () => {
-      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      const failed = _loaders[t.dataset.pane] && !_loaded.has(t.dataset.pane);  // clicking again retries
+      if (t.classList.contains('active') && !failed) return;
+      document.querySelectorAll('.tab').forEach(x => { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
       document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
       t.classList.add('active');
-      document.getElementById('pane-' + t.dataset.pane).classList.add('active');
-      if (t.dataset.pane !== 'rag') _stopRagPoller();
-      if (t.dataset.pane === 'providers') loadProviders();
-      if (t.dataset.pane === 'usage') loadUsage();
+      t.setAttribute('aria-selected', 'true');
+      t.scrollIntoView({ block: 'nearest', inline: 'nearest' });  // the tab bar scrolls on phones
+      const pane = t.dataset.pane;
+      document.getElementById('pane-' + pane).classList.add('active');
+      if (pane !== 'rag') _stopRagPoller();
+      if (_loaders[pane] && !_loaded.has(pane)) { _loaded.add(pane); _loaders[pane](); }
+      else if (pane === 'rag') refreshRagStatus();  // status only; the form keeps its edits
+      if (pane === 'users') loadUsers();            // read-only table; the create form is untouched
+      if (pane === 'usage') loadUsage();            // read-only telemetry
     };
   });
 
   // ─── Users ───────────────────────────────────────────────────
   async function loadUsers(){
     const el = document.getElementById('users');
+    const st = document.getElementById('usersStatus');
     try {
-      const r = await fetch('/admin/users');
-      if (!r.ok) { el.innerHTML = `<div style="padding:16px;font-family:var(--font-mono);font-size:12px;color:var(--red);">Error ${r.status} — ${r.statusText}</div>`; return; }
-      const j = await r.json();
-      const rows = j.users.map(u => `
+      const j = await api('/admin/users');
+      const rows = (j.users || []).map(u => {
+        const self = u.id === j.me;
+        // No Disable on your own row: the server refuses it anyway (it would
+        // end your session and could leave no admin at all).
+        const action = self
+          ? '<span style="color:var(--muted)">—</span>'
+          : u.is_active
+            ? `<button class="btn btn-danger btn-sm" data-user-action="disable" data-id="${esc(u.id)}" data-name="${esc(u.username)}">Disable</button>`
+            : `<button class="btn btn-ghost btn-sm" data-user-action="enable" data-id="${esc(u.id)}" data-name="${esc(u.username)}">Enable</button>`;
+        return `
         <tr>
-          <td>${u.id}</td>
-          <td>${u.username}</td>
-          <td>${u.role}</td>
+          <td>${esc(u.id)}</td>
+          <td>${esc(u.username)}${self ? ' <span class="pill gray">you</span>' : ''}</td>
+          <td>${esc(u.role)}</td>
           <td>${u.is_active
             ? '<span class="pill green">active</span>'
             : '<span class="pill gray">disabled</span>'}</td>
-          <td>${u.is_active
-            ? `<button class="btn btn-danger" style="padding:4px 10px;font-size:10px;" data-id="${u.id}">Disable</button>`
-            : ''}</td>
-        </tr>
-      `).join('');
+          <td>${action}</td>
+        </tr>`;
+      }).join('');
       el.innerHTML = `
         <table class="data-table">
           <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>`;
-      el.querySelectorAll('button[data-id]').forEach(btn => {
+      el.querySelectorAll('button[data-user-action]').forEach(btn => {
         btn.onclick = async () => {
-          await fetch(`/admin/users/${btn.dataset.id}/disable`, { method: 'PATCH', headers: { 'X-CSRF-Token': csrf } });
+          const act = btn.dataset.userAction, name = btn.dataset.name;
+          if (act === 'disable' &&
+              !confirm(`Disable ${name}? They are signed out at once and cannot log in until re-enabled.`)) return;
+          btn.disabled = true;
+          try {
+            await api(`/admin/users/${encodeURIComponent(btn.dataset.id)}/${act}`, send('PATCH'));
+            setStatus(st, `${name} ${act}d ✓`, 'ok');
+          } catch(e) {
+            setStatus(st, `Could not ${act} ${name}: ${e.message}`, 'err');
+          }
           loadUsers();
         };
       });
     } catch(e) {
-      el.innerHTML = `<div style="padding:16px;font-family:var(--font-mono);font-size:12px;color:var(--red);">Failed to load users: ${e.message}</div>`;
+      el.innerHTML = `<div class="load-error">Failed to load users: ${esc(e.message)}</div>`;
     }
   }
 
   document.getElementById('createForm').onsubmit = async (e) => {
     e.preventDefault();
+    const st = document.getElementById('createStatus');
     const fd = new FormData(e.target);
-    const body = { username: fd.get('username'), password: fd.get('password'), role: fd.get('role') };
-    await fetch('/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: JSON.stringify(body) });
-    e.target.reset();
-    loadUsers();
+    const body = { username: fd.get('username').trim(), password: fd.get('password'), role: fd.get('role') };
+    setStatus(st, 'Creating…');
+    try {
+      await api('/admin/users', send('POST', body));
+      e.target.reset();  // only on success, so a rejected form keeps what was typed
+      setStatus(st, `Created ${body.username} ✓`, 'ok');
+      loadUsers();
+    } catch(err) {
+      setStatus(st, 'Error: ' + err.message, 'err');
+    }
   };
 
   // ─── Providers ───────────────────────────────────────────────
   let _providersCache = null;
   let _settingsCache  = null;
-  let _chainOrder     = [];   // current chain editor state (array of provider names)
+  let _chainOrder     = [];     // current chain editor state (array of provider names)
+  let _chainDirty     = false;  // unsaved chain edits survive the reload after a card save
 
-  async function loadProviders(){
-    const [pr, st] = await Promise.all([
-      fetch('/api/admin/providers').then(r => r.json()),
-      fetch('/api/admin/settings').then(r => r.json()),
-    ]);
+  const providerLabel = n => (_providersCache?.providers || []).find(p => p.name === n)?.label || n;
+  const chainText = names => (names || []).map(providerLabel).join(' → ') || 'none';
+
+  // skip: passed to _unsavedCardEdits, for the card or field just saved; the
+  // rest of what was typed survives the re-render. A reload after a save that
+  // fails throws and leaves the rendered cards alone, so the caller can say so.
+  async function loadProviders(skip){
+    let pr, st;
+    try {
+      [pr, st] = await Promise.all([api('/api/admin/providers'), api('/api/admin/settings')]);
+    } catch(e) {
+      if (_providersCache) throw e;
+      _loaded.delete('providers');
+      document.getElementById('chainEditor').innerHTML =
+        `<div class="load-error" style="padding-left:0;">Could not load providers: ${esc(e.message)}</div>`;
+      document.getElementById('providerList').innerHTML = '';
+      return;
+    }
+    // An unsaved "Route requests to" choice also survives a card or chain save
+    const apSel = document.getElementById('activeProvider');
+    const pendingActive = _providersCache && apSel.value !== (_providersCache.active_provider || 'auto')
+      ? apSel.value : null;
     _providersCache = pr;
     _settingsCache  = st;
+    // `configured` = has a key / URL / SDK switch, whether or not the chain uses it
+    const configured = new Set((pr.providers || []).filter(p => p.configured).map(p => p.name));
 
-    // Rebuild active-provider dropdown from catalog
-    const apSel = document.getElementById('activeProvider');
+    // Rebuild active-provider dropdown from catalog. Routing everything to a
+    // provider with no credentials fails every request, so those are disabled.
     apSel.innerHTML = '<option value="auto">Auto (chain fallback)</option>';
     (pr.providers || []).forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.name;
-      opt.textContent = p.label;
+      opt.textContent = p.configured ? p.label : `${p.label} (not configured)`;
+      opt.disabled = !p.configured && p.name !== pr.active_provider;
       apSel.appendChild(opt);
     });
     apSel.value = pr.active_provider || 'auto';
+    if (pendingActive && [...apSel.options].some(o => o.value === pendingActive && !o.disabled)) {
+      apSel.value = pendingActive;
+    }
 
-    // Initialize chain editor — only show configured providers unless user saved a custom chain
-    _chainOrder = pr.user_chain || pr.chain_order || [];
+    // Chain editor — the saved chain, else the default order limited to configured providers
+    if (!_chainDirty) {
+      _chainOrder = Array.isArray(pr.user_chain)
+        ? [...pr.user_chain]
+        : (pr.default_chain || []).filter(n => configured.has(n));
+    }
     renderChainEditor();
     rebuildAddProviderSelect();
-    renderProviderList();
+    renderProviderList(skip);
   }
+
+  // Reload after a successful write. Returns '' or, when the reload failed,
+  // why the list on screen is out of date (the save itself went through).
+  async function reloadProviders(skip){
+    try { await loadProviders(skip); return ''; }
+    catch(e) { return `the list could not refresh: ${e.message}`; }
+  }
+  const saveWarning = (r, stale) => [r.warning, stale].filter(Boolean).join('; ');
 
   // ─── Chain editor (drag-and-drop) ───────────────────────────
   let _dragSrc = null;
@@ -1026,27 +1213,31 @@
   function renderChainEditor(){
     const el = document.getElementById('chainEditor');
     if (!_providersCache) return;
-    const labelMap = {};
-    (_providersCache.providers || []).forEach(p => { labelMap[p.name] = p.label; });
-    const configured = new Set((_providersCache.chain_order || []));
+    const configured = new Set((_providersCache.providers || []).filter(p => p.configured).map(p => p.name));
 
     if (!_chainOrder.length) {
-      el.innerHTML = '<div style="font-family:var(--font-mono);font-size:12px;color:var(--muted);padding:8px 0;">No providers configured. Add one below.</div>';
+      el.innerHTML = '<div class="hint" style="min-height:var(--field-h);display:flex;align-items:center;">No providers in the chain. Add one below.</div>';
       return;
     }
 
+    // The last row can't be removed: an empty chain routes nowhere
+    const last = _chainOrder.length === 1;
     el.innerHTML = _chainOrder.map((name, i) => {
-      const label = labelMap[name] || name;
-      const isCfg = configured.has(name);
-      const pill = isCfg
+      const label = esc(providerLabel(name));
+      const pill = configured.has(name)
         ? '<span class="pill green" style="font-size:10px;">configured</span>'
         : '<span class="pill gray" style="font-size:10px;">not configured</span>';
-      return `<div class="chain-row" draggable="true" data-name="${name}">
-        <span class="chain-handle" title="Drag to reorder">⠿</span>
+      const rmAttrs = last
+        ? 'disabled title="Keep at least one provider in the chain"'
+        : `title="Remove from chain" aria-label="Remove ${label} from chain"`;
+      return `<div class="chain-row" draggable="true" data-name="${esc(name)}">
+        <span class="chain-handle" title="Drag to reorder" aria-hidden="true">⠿</span>
         <span class="chain-num">${i + 1}</span>
         <span class="chain-label">${label} ${pill}</span>
         <div class="chain-btns">
-          <button class="chain-btn chain-rm" data-chain-rm data-name="${name}">✕</button>
+          <button class="chain-btn" data-chain-move="up" data-name="${esc(name)}" aria-label="Move ${label} up" title="Move up" ${i === 0 ? 'disabled' : ''}>▲</button>
+          <button class="chain-btn" data-chain-move="down" data-name="${esc(name)}" aria-label="Move ${label} down" title="Move down" ${i === _chainOrder.length - 1 ? 'disabled' : ''}>▼</button>
+          <button class="chain-btn chain-rm" data-chain-rm data-name="${esc(name)}" ${rmAttrs}>✕</button>
         </div>
       </div>`;
     }).join('');
@@ -1079,13 +1270,34 @@
         if (si < 0 || di < 0) return;
         _chainOrder.splice(si, 1);
         _chainOrder.splice(di, 0, srcName);
+        _chainDirty = true;
         renderChainEditor();
       });
     });
 
+    // Keyboard reordering. Focus stays on the moved row: on the same arrow,
+    // or on the other one once the row reaches the top or bottom.
+    el.querySelectorAll('[data-chain-move]').forEach(btn => {
+      btn.onclick = () => {
+        const name = btn.dataset.name, dir = btn.dataset.chainMove;
+        const i = _chainOrder.indexOf(name), j = dir === 'up' ? i - 1 : i + 1;
+        if (i < 0 || j < 0 || j >= _chainOrder.length) return;
+        [_chainOrder[i], _chainOrder[j]] = [_chainOrder[j], _chainOrder[i]];
+        _chainDirty = true;
+        renderChainEditor();
+        const arrow = d => el.querySelector(`[data-chain-move="${d}"][data-name="${CSS.escape(name)}"]`);
+        const same = arrow(dir);
+        (same && !same.disabled ? same : arrow(dir === 'up' ? 'down' : 'up'))?.focus();
+        setStatus(document.getElementById('chainStatus'),
+                  `${providerLabel(name)} moved to position ${j + 1} (not saved yet)`);
+      };
+    });
+
     el.querySelectorAll('[data-chain-rm]').forEach(btn => {
       btn.onclick = () => {
+        if (_chainOrder.length <= 1) return;
         _chainOrder = _chainOrder.filter(n => n !== btn.dataset.name);
+        _chainDirty = true;
         renderChainEditor();
         rebuildAddProviderSelect();
       };
@@ -1100,7 +1312,7 @@
       if (inChain.has(p.name)) return;
       const opt = document.createElement('option');
       opt.value = p.name;
-      opt.textContent = p.label;
+      opt.textContent = p.configured ? p.label : `${p.label} (not configured)`;
       sel.appendChild(opt);
     });
     sel.disabled = sel.options.length === 0;
@@ -1111,6 +1323,7 @@
     const v = sel.value;
     if (v && !_chainOrder.includes(v)) {
       _chainOrder.push(v);
+      _chainDirty = true;
       renderChainEditor();
       rebuildAddProviderSelect();
     }
@@ -1118,30 +1331,69 @@
 
   document.getElementById('saveChainBtn').onclick = async () => {
     const statusEl = document.getElementById('chainStatus');
-    statusEl.textContent = 'Saving…';
-    statusEl.style.color = 'var(--muted)';
+    if (!_chainOrder.length) { setStatus(statusEl, 'Add at least one provider before saving', 'err'); return; }
+    setStatus(statusEl, 'Saving…');
     try {
-      await putSettings({ provider_chain: JSON.stringify(_chainOrder) });
-      statusEl.textContent = 'Chain saved ✓';
-      statusEl.style.color = 'var(--green)';
-      setTimeout(() => { statusEl.textContent = ''; }, 3000);
-      await loadProviders();
+      const r = await putSettings({ provider_chain: JSON.stringify(_chainOrder) });
+      _chainDirty = false;
+      const warn = saveWarning(r, await reloadProviders());
+      setStatus(statusEl, warn ? `Chain saved — ${warn}` : `Chain saved ✓ — requests try: ${chainText(r.effective_chain)}`,
+                warn ? 'warn' : 'ok');
     } catch(e) {
-      statusEl.textContent = 'Error: ' + e.message;
-      statusEl.style.color = 'var(--red)';
+      setStatus(statusEl, 'Error: ' + e.message, 'err');
     }
   };
 
   // ─── Provider card list ──────────────────────────────────────
-  function renderProviderList(){
+  const cardStatus = name => document.querySelector(`.provider-card[data-provider="${name}"] .card-status`);
+
+  // Values typed into a card but not saved yet, as [provider, selector, value].
+  // A select counts as edited when it differs from the option the server marked.
+  // skip: a provider name drops that whole card (it was just saved);
+  // [provider, field] drops only that one field.
+  const CARD_INPUTS = 'input[data-field], select[data-field], input[data-custom-model]';
+  function _unsavedCardEdits(skip){
+    const [skipCard, skipField] = Array.isArray(skip) ? skip : [skip, null];
+    const edits = [];
+    document.querySelectorAll('#providerList .provider-card').forEach(card => {
+      if (card.dataset.provider === skipCard && !skipField) return;
+      card.querySelectorAll(CARD_INPUTS).forEach(el => {
+        if (card.dataset.provider === skipCard && el.dataset.field === skipField) return;
+        const initial = el.tagName === 'SELECT'
+          ? ([...el.options].find(o => o.defaultSelected) || el.options[0] || {}).value
+          : el.defaultValue;
+        if (el.value === initial) return;
+        const sel = el.dataset.customModel
+          ? `input[data-custom-model="${CSS.escape(el.dataset.customModel)}"]`
+          : `${el.tagName.toLowerCase()}[data-field="${CSS.escape(el.dataset.field)}"]`;
+        edits.push([card.dataset.provider, sel, el.value]);
+      });
+    });
+    return edits;
+  }
+
+  // A custom model name overrides the dropdown, so the dropdown is disabled
+  function _syncCustomModel(input){
+    const sel = input.closest('.provider-card')
+      ?.querySelector(`select[data-field="${CSS.escape(input.dataset.customModel)}"]`);
+    if (sel) sel.disabled = input.value.trim().length > 0;
+  }
+  document.getElementById('providerList').addEventListener('input', e => {
+    if (e.target.matches('[data-custom-model]')) _syncCustomModel(e.target);
+  });
+
+  function renderProviderList(skip){
     const stored  = _settingsCache?.settings  || {};
     const envDefs = _settingsCache?.env_defaults || {};
     const list = document.getElementById('providerList');
+    const edits = _unsavedCardEdits(skip);
     list.innerHTML = '';
 
-    _providersCache.providers.forEach(p => {
+    (_providersCache?.providers || []).forEach(p => {
       const card = document.createElement('div');
       card.className = 'provider-card ' + (p.configured ? 'configured' : 'not-configured');
+      card.dataset.provider = p.name;
+      const label = esc(p.label);
 
       const pill = p.configured
         ? '<span class="pill green">● configured</span>'
@@ -1155,14 +1407,17 @@
         const placeholder = present
           ? `••••${suffix}`
           : (envDefs[p.key_field + '_set'] ? 'using .env value' : 'paste API key here');
+        const keyHint = present ? 'Leave blank to keep the stored key.'
+          : envDefs[p.key_field + '_set'] ? 'Leave blank to use the .env value.' : '';
         const storedPill = present
-          ? '<span class="pill green" style="margin-left:4px;">stored</span>'
-          : '<span class="pill gray" style="margin-left:4px;">not stored</span>';
+          ? '<span class="pill green">stored</span>'
+          : '<span class="pill gray">not stored</span>';
         keyFieldHtml = `
-          <div class="pfield">
-            <label>API Key ${storedPill}</label>
-            <input type="text" data-field="${p.key_field}" data-secret="1"
-              placeholder="${placeholder}" autocomplete="off" spellcheck="false"/>
+          <div class="field">
+            <label for="pf_${esc(p.key_field)}">API key ${storedPill}</label>
+            <input type="text" id="pf_${esc(p.key_field)}" data-field="${esc(p.key_field)}" data-secret="1" aria-label="${label} API key"
+              placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false"/>
+            ${keyHint ? `<div class="hint">${keyHint}</div>` : ''}
           </div>`;
       }
 
@@ -1170,10 +1425,10 @@
       if (p.base_url_field) {
         const v = stored[p.base_url_field] || envDefs[p.base_url_field] || '';
         baseUrlFieldHtml = `
-          <div class="pfield">
-            <label>Base URL</label>
-            <input type="text" data-field="${p.base_url_field}"
-              value="${v}"
+          <div class="field">
+            <label for="pf_${esc(p.base_url_field)}">Base URL</label>
+            <input type="text" id="pf_${esc(p.base_url_field)}" data-field="${esc(p.base_url_field)}" aria-label="${label} base URL"
+              value="${esc(v)}"
               placeholder="http://localhost:11434/v1"
               autocomplete="off" spellcheck="false"/>
           </div>`;
@@ -1184,9 +1439,9 @@
         const v       = stored[p.enable_field];
         const enabled = v === 'true' || (v == null && envDefs.claude_agent_sdk_enabled);
         enableFieldHtml = `
-          <div class="pfield">
-            <label>Enabled</label>
-            <select data-field="${p.enable_field}">
+          <div class="field">
+            <label for="pf_${esc(p.enable_field)}">Enabled</label>
+            <select id="pf_${esc(p.enable_field)}" data-field="${esc(p.enable_field)}" aria-label="${label} enabled">
               <option value="true"  ${enabled  ? 'selected' : ''}>true</option>
               <option value="false" ${!enabled ? 'selected' : ''}>false</option>
             </select>
@@ -1200,38 +1455,37 @@
         const opts       = p.model_options || [];
         const knownVals  = new Set(opts.map(o => o.value));
         const isCustom   = v && !knownVals.has(v);
-        const defaultLabel = envDefault ? `Use default (${envDefault})` : 'Use provider default';
+        const defaultLabel = envDefault ? `Use default (${esc(envDefault)})` : 'Use provider default';
         let optionsHtml  = `<option value="">${defaultLabel}</option>`;
         opts.forEach(o => {
-          optionsHtml += `<option value="${o.value}" ${o.value === v ? 'selected' : ''}>${o.label}</option>`;
+          optionsHtml += `<option value="${esc(o.value)}" ${o.value === v ? 'selected' : ''}>${esc(o.label)}</option>`;
         });
-        if (isCustom) optionsHtml += `<option value="${v}" selected>Custom: ${v}</option>`;
+        if (isCustom) optionsHtml += `<option value="${esc(v)}" selected>Custom: ${esc(v)}</option>`;
         modelFieldHtml = `
-          <div class="pfield">
-            <label>Model</label>
-            <div style="width:100%">
-              <select data-field="${p.model_field}" autocomplete="off" style="width:100%;"
-                ${isCustom ? 'disabled style="width:100%;opacity:0.4;"' : 'style="width:100%;"'}>${optionsHtml}</select>
-              <div class="custom-model-hint">Or enter any model name directly — overrides the list above:</div>
-              <input type="text" data-custom-model="${p.model_field}"
-                value="${isCustom ? v : ''}"
-                placeholder="e.g. qwen2.5:14b, llama3.3:70b, deepseek-r1 …"
-                autocomplete="off" style="width:100%;margin-top:0;"
-                oninput="this.closest('.pfield').querySelector('select').disabled=this.value.trim().length>0;
-                         this.closest('.pfield').querySelector('select').style.opacity=this.value.trim().length>0?'0.4':'1';"/>
-            </div>
+          <div class="field">
+            <label for="pf_${esc(p.model_field)}">Model</label>
+            <select id="pf_${esc(p.model_field)}" data-field="${esc(p.model_field)}" autocomplete="off" aria-label="${label} model"
+              ${isCustom ? 'disabled' : ''}>${optionsHtml}</select>
+          </div>
+          <div class="field">
+            <label for="pf_custom_${esc(p.model_field)}">Custom model</label>
+            <input type="text" id="pf_custom_${esc(p.model_field)}" data-custom-model="${esc(p.model_field)}" aria-label="${label} custom model name"
+              value="${isCustom ? esc(v) : ''}"
+              placeholder="e.g. qwen2.5:14b, llama3.3:70b, deepseek-r1"
+              autocomplete="off" spellcheck="false"/>
+            <div class="hint">Any model name. Overrides the list above.</div>
           </div>`;
       }
 
       const clearKeyBtn = p.key_field
-        ? `<button class="btn btn-ghost" data-action="clear-key" data-field="${p.key_field}">Clear stored key</button>`
+        ? `<button class="btn btn-ghost" data-action="clear-key" data-field="${esc(p.key_field)}">Clear stored key</button>`
         : '';
 
       card.innerHTML = `
         <div class="provider-card-head">
           <div class="provider-card-info">
-            <h4>${p.label}</h4>
-            <div class="desc">${p.description}</div>
+            <h4>${label}</h4>
+            <div class="desc">${esc(p.description)}</div>
           </div>
           <div>${pill}</div>
         </div>
@@ -1240,23 +1494,48 @@
           ${baseUrlFieldHtml}
           ${enableFieldHtml}
           ${modelFieldHtml}
-          <div class="card-actions">
-            <button class="btn btn-primary" data-action="save" data-provider="${p.name}">Save</button>
+          <div class="actions">
+            <button class="btn btn-primary" data-action="save">Save</button>
             ${clearKeyBtn}
+            <span class="card-status status" role="status"></span>
           </div>
         </div>`;
       list.appendChild(card);
+    });
+
+    edits.forEach(([name, sel, value]) => {
+      const el = list.querySelector(`.provider-card[data-provider="${CSS.escape(name)}"] ${sel}`);
+      if (!el || (el.tagName === 'SELECT' && ![...el.options].some(o => o.value === value))) return;
+      el.value = value;
+      if (el.dataset.customModel) _syncCustomModel(el);
     });
 
     list.querySelectorAll('button[data-action="save"]').forEach(btn => {
       btn.onclick = () => saveProviderRow(btn.closest('.provider-card'));
     });
     list.querySelectorAll('button[data-action="clear-key"]').forEach(btn => {
-      btn.onclick = () => putSettings({ [btn.dataset.field]: '' }).then(loadProviders);
+      btn.onclick = async () => {
+        const name  = btn.closest('.provider-card').dataset.provider;
+        const label = providerLabel(name);
+        if (!confirm(`Clear the stored ${label} API key? NullShift falls back to the .env value, if there is one.`)) return;
+        btn.disabled = true;
+        try {
+          const r = await putSettings({ [btn.dataset.field]: '' });
+          // Only the key was saved; the card's other unsaved edits stay
+          const stale = await reloadProviders([name, btn.dataset.field]);
+          if (stale) btn.disabled = false;
+          const warn = saveWarning(r, stale);
+          setStatus(cardStatus(name), warn ? `Key cleared — ${warn}` : 'Key cleared ✓', warn ? 'warn' : 'ok');
+        } catch(e) {
+          btn.disabled = false;
+          setStatus(cardStatus(name), 'Error: ' + e.message, 'err');
+        }
+      };
     });
   }
 
   async function saveProviderRow(cardEl){
+    const name    = cardEl.dataset.provider;
     const fields  = cardEl.querySelectorAll('input[data-field], select[data-field], textarea[data-field]');
     const updates = {};
     fields.forEach(el => {
@@ -1270,40 +1549,37 @@
     });
     if (!Object.keys(updates).length) return;
 
-    const btn  = cardEl.querySelector('button[data-action="save"]');
-    const orig = btn?.textContent;
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    const btn = cardEl.querySelector('button[data-action="save"]');
+    btn.disabled = true;
+    setStatus(cardStatus(name), 'Saving…');
     try {
-      await putSettings(updates);
-      if (btn) { btn.textContent = 'Saved ✓'; btn.style.background = '#16a34a'; }
-      await loadProviders();
+      const r = await putSettings(updates);
+      const stale = await reloadProviders(name);  // re-renders the cards; the others keep their unsaved edits
+      if (stale) btn.disabled = false;
+      const warn = saveWarning(r, stale);
+      setStatus(cardStatus(name), warn ? `Saved — ${warn}` : 'Saved ✓', warn ? 'warn' : 'ok');
     } catch(e) {
-      if (btn) { btn.textContent = 'Error'; btn.style.background = 'var(--red)'; }
-      console.error(e);
-    } finally {
-      if (btn) setTimeout(() => { btn.disabled = false; btn.textContent = orig; btn.style.background = ''; }, 1500);
+      btn.disabled = false;
+      setStatus(cardStatus(name), 'Error: ' + e.message, 'err');
     }
   }
 
   document.getElementById('saveActiveBtn').onclick = async () => {
     const v  = document.getElementById('activeProvider').value;
     const el = document.getElementById('activeStatus');
-    el.textContent = 'Saving…';
+    setStatus(el, 'Saving…');
     try {
       const r = await putSettings({ active_provider: v });
-      el.textContent = `Saved — active: ${r.active_provider}`;
-      setTimeout(() => { el.textContent = ''; }, 3000);
-    } catch(e) { el.textContent = 'Error: ' + e.message; el.style.color = 'var(--red)'; }
+      const warn = saveWarning(r, await reloadProviders());
+      setStatus(el, warn ? `Saved — ${warn}` : `Saved — active: ${providerLabel(r.active_provider)} · requests try: ${chainText(r.effective_chain)}`,
+                warn ? 'warn' : 'ok');
+    } catch(e) {
+      setStatus(el, 'Error: ' + e.message, 'err');
+    }
   };
 
-  async function putSettings(body){
-    const r = await fetch('/api/admin/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
+  function putSettings(body){
+    return api('/api/admin/settings', send('PUT', body));
   }
 
   // ─── RAG ─────────────────────────────────────────────────────
@@ -1314,48 +1590,58 @@
   }
 
   async function _fetchRagStatus() {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6000);
     try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 6000);
-      const r = await fetch('/api/admin/rag/status', { signal: ctrl.signal });
+      return await api('/api/admin/rag/status', { signal: ctrl.signal });
+    } catch {
+      return null;
+    } finally {
       clearTimeout(t);
-      return r.ok ? await r.json() : null;
-    } catch { return null; }
+    }
+  }
+
+  function _applyRagEnabled(on){
+    document.getElementById('ragEnabledLabel').textContent = on ? 'On' : 'Off';
+    // Only the provider fields are disabled; Save sits outside them so that
+    // switching RAG off can still be saved.
+    document.getElementById('ragProviderRow').disabled = !on;
+    _validateRagModel();
   }
 
   async function loadRagSettings(){
+    let st;
     try {
-      const [st, rs] = await Promise.all([
-        fetch('/api/admin/settings').then(r => r.ok ? r.json() : {}).catch(() => ({})),
-        _fetchRagStatus(),
-      ]);
-      const s        = st.settings || st;
-      const enabled  = (s.rag_enabled  ?? 'true') !== 'false';
-      const provider = s.rag_embedding_provider || 'auto';
-      const model    = s.rag_embedding_model || '';
-      const ollamaUrl = s.ollama_base_url || '';
-      document.getElementById('ragEnabledToggle').checked = enabled;
-      document.getElementById('ragEnabledLabel').textContent = enabled ? 'On' : 'Off';
-      document.getElementById('ragProviderSel').value = provider;
-      document.getElementById('ragModelInput').value = model;
-      document.getElementById('ragOllamaUrlInput').value = ollamaUrl;
-      document.getElementById('ollamaUrlRow').style.display = provider === 'ollama' ? '' : 'none';
-      _validateRagModel();
-      document.getElementById('ragProviderRow').style.opacity = enabled ? '1' : '0.4';
-      document.getElementById('ragProviderRow').style.pointerEvents = enabled ? '' : 'none';
-      renderRagStatus(rs);
-      // Auto-refresh while sync is running
-      _stopRagPoller();
-      if (rs && rs.sync_state === 'running') {
-        _ragPoller = setInterval(async () => {
-          const s = await _fetchRagStatus();
-          renderRagStatus(s);
-          if (!s || s.sync_state !== 'running') _stopRagPoller();
-        }, 3000);
-      }
+      st = await api('/api/admin/settings');
     } catch(e) {
-      document.getElementById('ragStatusBody').innerHTML =
-        `<span style="color:var(--red);">Error loading RAG settings: ${e.message}</span>`;
+      _loaded.delete('rag');
+      setStatus(document.getElementById('ragStatus'), 'Could not load RAG settings: ' + e.message, 'err');
+      refreshRagStatus();
+      return;
+    }
+    const s        = st.settings || st;
+    const enabled  = (s.rag_enabled  ?? 'true') !== 'false';
+    const provider = s.rag_embedding_provider || 'auto';
+    document.getElementById('ragEnabledToggle').checked = enabled;
+    document.getElementById('ragProviderSel').value = provider;
+    document.getElementById('ragModelInput').value = s.rag_embedding_model || '';
+    document.getElementById('ragOllamaUrlInput').value = s.ollama_base_url || '';
+    document.getElementById('ollamaUrlRow').style.display = provider === 'ollama' ? '' : 'none';
+    _applyRagEnabled(enabled);
+    refreshRagStatus();
+  }
+
+  async function refreshRagStatus(){
+    const rs = await _fetchRagStatus();
+    renderRagStatus(rs);
+    // Auto-refresh while sync is running, but only while the RAG tab is open
+    _stopRagPoller();
+    if (rs && rs.sync_state === 'running' && document.getElementById('pane-rag').classList.contains('active')) {
+      _ragPoller = setInterval(async () => {
+        const s = await _fetchRagStatus();
+        renderRagStatus(s);
+        if (!s || s.sync_state !== 'running') _stopRagPoller();
+      }, 3000);
     }
   }
 
@@ -1365,12 +1651,12 @@
     if (!s.enabled) {
       el.innerHTML =
         `<span style="color:var(--yellow);">● Disabled</span><br>` +
-        `Reason: ${s.reason || 'unknown'}`;
+        `Reason: ${esc(s.reason || 'unknown')}`;
       return;
     }
     const syncColor = s.sync_state === 'running'  ? 'var(--yellow)'
                     : s.sync_state === 'complete' ? 'var(--green)'
-                    : s.sync_state === 'skipped'  ? 'var(--cyan)'
+                    : s.sync_state === 'skipped'  ? 'var(--accent)'
                     : 'var(--muted)';
     const syncIcon  = s.sync_state === 'running'  ? '⟳'
                     : s.sync_state === 'complete' ? '✓'
@@ -1378,33 +1664,31 @@
                     : '—';
     el.innerHTML =
       `<span style="color:var(--green);">● Active</span><br>` +
-      `Provider&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${s.provider || '—'}<br>` +
-      `Collection&nbsp;&nbsp;&nbsp; ${s.collection || '—'}<br>` +
-      `Files indexed&nbsp; ${s.files_indexed ?? '—'}<br>` +
-      `Chunks indexed ${s.chunks_indexed ?? '—'}<br>` +
-      `<span style="color:${syncColor};">${syncIcon} ${s.sync_progress || s.sync_state || '—'}</span>`;
+      `Provider&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${esc(s.provider || '—')}<br>` +
+      `Collection&nbsp;&nbsp;&nbsp; ${esc(s.collection || '—')}<br>` +
+      `Files indexed&nbsp; ${esc(s.files_indexed ?? '—')}<br>` +
+      `Chunks indexed ${esc(s.chunks_indexed ?? '—')}<br>` +
+      `<span style="color:${syncColor};">${syncIcon} ${esc(s.sync_progress || s.sync_state || '—')}</span>`;
   }
 
   document.getElementById('ragEnabledToggle').addEventListener('change', function(){
-    const on = this.checked;
-    document.getElementById('ragEnabledLabel').textContent = on ? 'On' : 'Off';
-    document.getElementById('ragProviderRow').style.opacity = on ? '1' : '0.4';
-    document.getElementById('ragProviderRow').style.pointerEvents = on ? '' : 'none';
+    _applyRagEnabled(this.checked);
   });
 
   function _validateRagModel() {
+    const on       = document.getElementById('ragEnabledToggle').checked;
     const provider = document.getElementById('ragProviderSel').value;
     const model    = document.getElementById('ragModelInput').value.trim();
     const btn      = document.getElementById('saveRagBtn');
     const el       = document.getElementById('ragStatus');
-    const needsModel = provider === 'ollama';
+    // Turning RAG off must never be blocked by an unfilled model field
+    const needsModel = on && provider === 'ollama';
     if (needsModel && !model) {
       btn.disabled = true;
-      el.textContent = 'Model name is required for Ollama — enter it above before saving.';
-      el.style.color = 'var(--yellow)';
+      setStatus(el, 'Model name is required for Ollama — enter it above before saving.', 'warn');
     } else {
       btn.disabled = false;
-      if (el.textContent.startsWith('Model name')) { el.textContent = ''; }
+      if (el.textContent.startsWith('Model name')) setStatus(el, '');
     }
   }
 
@@ -1416,31 +1700,31 @@
   document.getElementById('ragModelInput').addEventListener('input', _validateRagModel);
 
   document.getElementById('saveRagBtn').onclick = async () => {
-    const el      = document.getElementById('ragStatus');
-    const provider = document.getElementById('ragProviderSel').value;
-    const model    = document.getElementById('ragModelInput').value.trim();
+    const el        = document.getElementById('ragStatus');
+    const on        = document.getElementById('ragEnabledToggle').checked;
+    const provider  = document.getElementById('ragProviderSel').value;
+    const model     = document.getElementById('ragModelInput').value.trim();
     const ollamaUrl = document.getElementById('ragOllamaUrlInput').value.trim();
-    if (provider === 'ollama' && !model) {
-      el.textContent = 'Model name is required for Ollama — enter it above before saving.';
-      el.style.color = 'var(--yellow)';
+    if (on && provider === 'ollama' && !model) {
+      setStatus(el, 'Model name is required for Ollama — enter it above before saving.', 'warn');
       return;
     }
-    el.textContent = 'Saving…'; el.style.color = 'var(--muted)';
+    setStatus(el, 'Saving…');
     const payload = {
-      rag_enabled:            document.getElementById('ragEnabledToggle').checked ? 'true' : 'false',
+      rag_enabled:            on ? 'true' : 'false',
       rag_embedding_provider: provider,
       rag_embedding_model:    model,
     };
     if (provider === 'ollama' && ollamaUrl) payload.ollama_base_url = ollamaUrl;
     try {
       await putSettings(payload);
-      el.textContent = 'Saved ✓ — reloaded live, no restart needed.';
-      el.style.color = 'var(--green)';
-      setTimeout(() => { el.textContent = ''; el.style.color = 'var(--muted)'; }, 4000);
-    } catch(e) { el.textContent = 'Error: ' + e.message; el.style.color = 'var(--red)'; }
+      setStatus(el, 'Saved ✓ — reloaded live, no restart needed.', 'ok');
+      setTimeout(() => setStatus(el, ''), 4000);
+      refreshRagStatus();
+    } catch(e) {
+      setStatus(el, 'Error: ' + e.message, 'err');
+    }
   };
-
-  document.querySelector('.tab[data-pane="rag"]').addEventListener('click', loadRagSettings);
 
   // ─── Usage ───────────────────────────────────────────────────
   function fmtPct(u){
@@ -1465,7 +1749,7 @@
     const body = document.getElementById('usageBody');
     body.innerHTML = '<div style="font-family:var(--font-mono);font-size:12px;color:var(--muted)">Loading…</div>';
     try {
-      const j = await fetch('/api/admin/usage').then(r => r.json());
+      const j = await api('/api/admin/usage');
       let html = '';
 
       // Provider chain card
@@ -1473,9 +1757,9 @@
         <div class="usage-card-title">Provider chain</div>
         <div class="kv-grid">
           <div class="k">Active</div>
-          <div class="v"><b>${j.active_provider}</b></div>
+          <div class="v"><b>${esc(j.active_provider)}</b></div>
           <div class="k">Configured</div>
-          <div class="v">${(j.configured_providers||[]).join(' → ') || '<i style="color:var(--muted)">none</i>'}</div>
+          <div class="v">${esc((j.configured_providers||[]).join(' → ')) || '<i style="color:var(--muted)">none</i>'}</div>
         </div>
       </div>`;
 
@@ -1485,11 +1769,11 @@
         const pct = fmtPct(rl.utilization);
         const barCls = pct == null ? '' : pct >= 90 ? 'crit' : pct >= 70 ? 'warn' : '';
         const statusPill = (rl.status === 'allowed' || rl.status === 'ok')
-          ? `<span class="pill green">${rl.status}</span>`
-          : `<span class="pill red">${rl.status || 'unknown'}</span>`;
+          ? `<span class="pill green">${esc(rl.status)}</span>`
+          : `<span class="pill red">${esc(rl.status || 'unknown')}</span>`;
 
         html += `<div class="usage-card">
-          <div class="usage-card-title">Rate limit · ${rl.rate_limit_type || 'unknown'}</div>
+          <div class="usage-card-title">Rate limit · ${esc(rl.rate_limit_type || 'unknown')}</div>
           <div class="kv-grid">
             <div class="k">Status</div><div class="v">${statusPill}</div>`;
         if (pct != null) {
@@ -1502,16 +1786,16 @@
             </div>`;
         }
         html += `<div class="k">Resets at</div>
-          <div class="v">${fmtAbsTime(rl.resets_at)}<span style="color:var(--muted)">${fmtRelative(rl.resets_at)}</span></div>`;
+          <div class="v">${esc(fmtAbsTime(rl.resets_at))}<span style="color:var(--muted)">${esc(fmtRelative(rl.resets_at))}</span></div>`;
         if (rl.overage_status) {
           const ovPill = rl.overage_status === 'allowed'
-            ? `<span class="pill green">${rl.overage_status}</span>`
-            : `<span class="pill yellow">${rl.overage_status}</span>`;
+            ? `<span class="pill green">${esc(rl.overage_status)}</span>`
+            : `<span class="pill yellow">${esc(rl.overage_status)}</span>`;
           html += `<div class="k">Overage</div><div class="v">${ovPill}</div>`;
           if (rl.overage_resets_at) html += `<div class="k">Overage resets at</div>
-            <div class="v">${fmtAbsTime(rl.overage_resets_at)}<span style="color:var(--muted)">${fmtRelative(rl.overage_resets_at)}</span></div>`;
+            <div class="v">${esc(fmtAbsTime(rl.overage_resets_at))}<span style="color:var(--muted)">${esc(fmtRelative(rl.overage_resets_at))}</span></div>`;
         }
-        html += `<div class="k">Captured at</div><div class="v">${fmtAbsTime(rl.captured_at)}</div>
+        html += `<div class="k">Captured at</div><div class="v">${esc(fmtAbsTime(rl.captured_at))}</div>
           </div></div>`;
       } else {
         html += `<div class="hint-box">No rate-limit telemetry yet. This is populated after the first chat request using the Claude Agent SDK.</div>`;
@@ -1526,73 +1810,73 @@
         html += `<div class="usage-card">
           <div class="usage-card-title">Last LLM call</div>
           <div class="kv-grid">
-            <div class="k">Provider</div><div class="v">${lc.provider}</div>
-            <div class="k">Model</div><div class="v">${lc.model || '<span style="color:var(--muted)">default</span>'}</div>
+            <div class="k">Provider</div><div class="v">${esc(lc.provider)}</div>
+            <div class="k">Model</div><div class="v">${lc.model ? esc(lc.model) : '<span style="color:var(--muted)">default</span>'}</div>
             <div class="k">Status</div><div class="v">${okPill}</div>
-            <div class="k">Duration</div><div class="v">${lc.duration_ms != null ? lc.duration_ms + ' ms' : '—'}</div>
-            <div class="k">When</div><div class="v">${fmtAbsTime(lc.ts)}</div>
-            ${lc.error ? `<div class="k">Error</div><div class="v" style="color:var(--red)">${lc.error}</div>` : ''}
+            <div class="k">Duration</div><div class="v">${lc.duration_ms != null ? esc(lc.duration_ms) + ' ms' : '—'}</div>
+            <div class="k">When</div><div class="v">${esc(fmtAbsTime(lc.ts))}</div>
+            ${lc.error ? `<div class="k">Error</div><div class="v" style="color:var(--red);word-break:break-word;">${esc(lc.error)}</div>` : ''}
           </div>
         </div>`;
       }
 
       body.innerHTML = html;
     } catch(e) {
-      body.innerHTML = `<div class="hint-box" style="border-color:var(--red);color:var(--red);">Error: ${e.message}</div>`;
+      body.innerHTML = `<div class="hint-box" style="border-color:var(--red);color:var(--red);">Error: ${esc(e.message)}</div>`;
     }
   }
 
   document.getElementById('refreshUsageBtn').onclick = loadUsage;
 
   // ─── Vision ──────────────────────────────────────────────────
-  const VISION_CAPS = [
-    { name: 'anthropic',        label: 'Anthropic (Claude API)', supported: true,  note: 'All models — up to 20 images, 5 MB each (JPEG/PNG/GIF/WebP)' },
-    { name: 'openai',           label: 'OpenAI',                 supported: true,  note: 'gpt-5.x, gpt-4.1, gpt-4o, o3, o4-mini — up to 10 images, 20 MB each' },
-    { name: 'gemini',           label: 'Google Gemini',          supported: true,  note: 'All current models — up to 16 images per request' },
-    { name: 'groq',             label: 'Groq',                   supported: true,  note: 'Use llama-4-scout, llama-4-maverick, or qwen3-vl-32b' },
-    { name: 'xai',              label: 'xAI Grok',               supported: true,  note: 'grok-4.3 and grok-4-0709 support vision' },
-    { name: 'openrouter',       label: 'OpenRouter',             supported: true,  note: 'Depends on routed model' },
-    { name: 'qwen',             label: 'Qwen (Alibaba)',         supported: true,  note: 'qwen3-vl-plus and qwen3-vl-flash' },
-    { name: 'kimi',             label: 'Kimi (Moonshot)',        supported: true,  note: 'kimi-k2.5 supports vision' },
-    { name: 'ollama',           label: 'Ollama (local)',         supported: null,  note: 'llama4:scout, qwen3-vl, gemma3 support vision; others text-only' },
-    { name: 'claude_agent_sdk', label: 'Claude Agent SDK',       supported: false, note: 'No vision via CLI — switch to Anthropic API for image analysis' },
-    { name: 'deepseek',         label: 'DeepSeek',               supported: false, note: 'DeepSeek V4 is text-only; no vision support' },
-    { name: 'perplexity',       label: 'Perplexity',             supported: false, note: 'No vision support' },
-  ];
-
   async function loadVisionSettings() {
+    const msg = document.getElementById('visionSaveMsg');
+    const btn = document.getElementById('saveVisionBtn');
     try {
-      const r = await fetch('/api/admin/settings', { credentials: 'same-origin' });
-      const s = r.ok ? await r.json() : {};
+      const st = await api('/api/admin/settings');
+      const s  = st.settings || st;
       document.getElementById('visionMaxImages').value = s.vision_max_images || 4;
       document.getElementById('visionMaxSizeMb').value = s.vision_max_size_mb || 5;
-    } catch {}
+      btn.disabled = false;
+    } catch(e) {
+      // Saving now would write the placeholder 4 / 5 over the real limits
+      _loaded.delete('vision');
+      btn.disabled = true;
+      setStatus(msg, 'Could not load the current limits: ' + e.message, 'err');
+    }
 
     const tbody = document.getElementById('visionCapTable');
-    tbody.innerHTML = '';
-    VISION_CAPS.forEach(p => {
-      const icon = p.supported === true ? '✓' : p.supported === null ? '?' : '✕';
-      const color = p.supported === true ? 'var(--green)' : p.supported === null ? 'var(--yellow)' : 'var(--red)';
-      const tr = document.createElement('tr');
-      tr.style.borderBottom = '1px solid var(--border)';
-      tr.innerHTML = `
-        <td style="padding:8px 10px;color:var(--fg);">${p.label}</td>
-        <td style="padding:8px 10px;font-weight:700;color:${color};">${icon}</td>
-        <td style="padding:8px 10px;color:var(--fg2);font-family:var(--font-mono);font-size:11px;">${p.note}</td>`;
-      tbody.appendChild(tr);
-    });
+    try {
+      const j = await api('/api/admin/vision');
+      tbody.innerHTML = (j.providers || []).map(p => {
+        const icon  = p.supported === true ? '✓' : p.supported === null ? '?' : '✕';
+        const color = p.supported === true ? 'var(--green)' : p.supported === null ? 'var(--yellow)' : 'var(--red)';
+        return `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 10px;color:var(--text2);">${esc(p.label)}</td>
+          <td style="padding:8px 10px;font-weight:700;color:${color};">${icon}</td>
+          <td style="padding:8px 10px;color:var(--text);font-family:var(--font-mono);font-size:11px;">${esc(p.note)}</td>
+        </tr>`;
+      }).join('');
+    } catch(e) {
+      tbody.innerHTML = `<tr><td colspan="3" class="load-error">Could not load vision support: ${esc(e.message)}</td></tr>`;
+    }
   }
 
-  async function saveVisionLimits() {
-    const imgs = parseInt(document.getElementById('visionMaxImages').value) || 4;
-    const mb   = parseFloat(document.getElementById('visionMaxSizeMb').value) || 5;
-    await putSettings({ vision_max_images: String(imgs), vision_max_size_mb: String(mb) });
-    const msg = document.getElementById('visionSaveMsg');
-    msg.style.display = 'inline';
-    setTimeout(() => msg.style.display = 'none', 2000);
-  }
-
-  document.querySelector('.tab[data-pane="vision"]').addEventListener('click', loadVisionSettings);
+  document.getElementById('saveVisionBtn').onclick = async () => {
+    const msg  = document.getElementById('visionSaveMsg');
+    const imgs = Number(document.getElementById('visionMaxImages').value);
+    const mb   = Number(document.getElementById('visionMaxSizeMb').value);
+    if (!Number.isInteger(imgs) || imgs < 1 || imgs > 20) { setStatus(msg, 'Max images must be a whole number from 1 to 20', 'err'); return; }
+    if (!(mb >= 0.5 && mb <= 20)) { setStatus(msg, 'Max image size must be between 0.5 and 20 MB', 'err'); return; }
+    setStatus(msg, 'Saving…');
+    try {
+      await putSettings({ vision_max_images: String(imgs), vision_max_size_mb: String(mb) });
+      setStatus(msg, 'Saved ✓', 'ok');
+      setTimeout(() => setStatus(msg, ''), 2500);
+    } catch(e) {
+      setStatus(msg, 'Error: ' + e.message, 'err');
+    }
+  };
 
   // ─── Connectors tab ─────────────────────────────────────────
   const _siemFields = {
@@ -1603,6 +1887,13 @@
     sentinel:    'siem-sentinel',
   };
 
+  // A generated webhook token lives only in the input until Save. It may
+  // already be pasted into the SIEM, so it must not be dropped silently.
+  let _webhookUnsaved = false;
+  window.addEventListener('beforeunload', e => {
+    if (_webhookUnsaved) { e.preventDefault(); e.returnValue = ''; }
+  });
+
   function _showSiemFields(provider) {
     Object.values(_siemFields).forEach(id => {
       const el = document.getElementById(id);
@@ -1612,6 +1903,8 @@
       const el = document.getElementById(_siemFields[provider]);
       if (el) el.style.display = '';
     }
+    document.querySelectorAll('[data-test-siem]').forEach(b => { b.hidden = b.dataset.testSiem !== provider; });
+    document.querySelectorAll('.siem-test-status').forEach(s => { s.hidden = s.dataset.for !== provider; });
   }
 
   document.getElementById('siemProviderSel').addEventListener('change', function() {
@@ -1619,93 +1912,105 @@
   });
 
   async function loadConnectors() {
+    let st;
     try {
-      const st = await fetch('/api/admin/settings').then(r => r.ok ? r.json() : {}).catch(() => ({}));
-      const s = st.settings || st;
+      st = await api('/api/admin/settings');
+    } catch(e) {
+      _loaded.delete('connectors');
+      setStatus(document.getElementById('siemSaveStatus'), 'Could not load connector settings: ' + e.message, 'err');
+      return;
+    }
+    const s = st.settings || st;
 
-      // SIEM
-      const provider = s.siem_provider || '';
-      document.getElementById('siemProviderSel').value = provider;
-      _showSiemFields(provider);
-      // Populate fields — secrets come back as {present, suffix} stubs (not strings)
-      document.querySelectorAll('[data-siem-field]').forEach(el => {
-        const key = el.dataset.siemField;
-        const v = s[key];
-        if (v === undefined || v === null) {
-          el.value = '';
-          if (el.type === 'password') el.placeholder = 'not configured';
-          return;
-        }
-        if (typeof v === 'object' && 'present' in v) {
-          // Masked secret stub — never expose the value, just signal it's there
-          el.value = '';
-          el.placeholder = v.present
-            ? `● already set${v.suffix ? ' (…' + v.suffix + ')' : ''} — paste to update`
-            : 'not configured';
-        } else {
-          el.value = v;
-        }
-      });
+    // SIEM
+    const provider = s.siem_provider || '';
+    document.getElementById('siemProviderSel').value = provider;
+    _showSiemFields(provider);
+    // Populate fields — secrets come back as {present, suffix} stubs (not strings)
+    document.querySelectorAll('[data-siem-field]').forEach(el => {
+      const key = el.dataset.siemField;
+      const v = s[key];
+      if (v === undefined || v === null) {
+        el.value = '';
+        if (el.type === 'password') el.placeholder = 'not configured';
+        return;
+      }
+      if (typeof v === 'object' && 'present' in v) {
+        // Masked secret stub — never expose the value, just signal it's there
+        el.value = '';
+        el.placeholder = v.present
+          ? `● already set${v.suffix ? ' (…' + v.suffix + ')' : ''} — paste to update`
+          : 'not configured';
+      } else {
+        el.value = v;
+      }
+    });
 
-      // VT — secret stub from API
-      const vtVal = s.vt_api_key;
-      const vtSet = !!(vtVal && (typeof vtVal === 'object' ? vtVal.present : true))
-                    || !!(st.env_defaults && st.env_defaults.vt_api_key_set);
-      const vtSuffix = (typeof vtVal === 'object' && vtVal && vtVal.suffix) ? ' (…' + vtVal.suffix + ')' : '';
-      document.getElementById('vtApiKey').value = '';
-      document.getElementById('vtApiKey').placeholder = vtSet
-        ? `● already set${vtSuffix} — paste to update`
-        : 'Enter your VT API key';
+    // VT — secret stub from API
+    const vtVal = s.vt_api_key;
+    const vtSet = !!(vtVal && (typeof vtVal === 'object' ? vtVal.present : true))
+                  || !!(st.env_defaults && st.env_defaults.vt_api_key_set);
+    const vtSuffix = (typeof vtVal === 'object' && vtVal && vtVal.suffix) ? ' (…' + vtVal.suffix + ')' : '';
+    document.getElementById('vtApiKey').value = '';
+    document.getElementById('vtApiKey').placeholder = vtSet
+      ? `● already set${vtSuffix} — paste to update`
+      : 'Enter your VT API key';
 
-      // Webhook token — secret stub from API
-      const whVal = s.webhook_token;
-      const whSet = !!(whVal && (typeof whVal === 'object' ? whVal.present : true));
-      const whSuffix = (typeof whVal === 'object' && whVal && whVal.suffix) ? ' (…' + whVal.suffix + ')' : '';
-      document.getElementById('webhookToken').value = '';
-      document.getElementById('webhookToken').placeholder = whSet
-        ? `● already set${whSuffix} — paste to update`
-        : 'not configured — ingestion disabled';
-    } catch(e) { console.error('loadConnectors', e); }
+    // Webhook token — secret stub from API
+    const whVal = s.webhook_token;
+    const whSet = !!(whVal && (typeof whVal === 'object' ? whVal.present : true));
+    const whSuffix = (typeof whVal === 'object' && whVal && whVal.suffix) ? ' (…' + whVal.suffix + ')' : '';
+    if (!_webhookUnsaved) document.getElementById('webhookToken').value = '';
+    document.getElementById('webhookToken').placeholder = whSet
+      ? `● already set${whSuffix} — paste to update`
+      : 'not configured — ingestion disabled';
   }
 
   document.getElementById('saveSiemBtn').onclick = async () => {
     const st = document.getElementById('siemSaveStatus');
-    st.textContent = 'Saving…'; st.style.color = 'var(--muted)';
+    setStatus(st, 'Saving…');
     const updates = { siem_provider: document.getElementById('siemProviderSel').value };
     document.querySelectorAll('[data-siem-field]').forEach(el => {
       if (el.value.trim()) updates[el.dataset.siemField] = el.value.trim();
     });
     try {
       await putSettings(updates);
-      st.textContent = 'Saved ✓'; st.style.color = 'var(--green)';
-      setTimeout(() => { st.textContent = ''; }, 3000);
-    } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = 'var(--red)'; }
+      setStatus(st, 'Saved ✓', 'ok');
+      setTimeout(() => setStatus(st, ''), 3000);
+    } catch(e) {
+      setStatus(st, 'Error: ' + e.message, 'err');
+    }
   };
 
   document.getElementById('saveVtBtn').onclick = async () => {
     const st = document.getElementById('vtSaveStatus');
     const key = document.getElementById('vtApiKey').value.trim();
-    if (!key) { st.textContent = 'Enter a key first'; st.style.color = 'var(--yellow)'; return; }
-    st.textContent = 'Saving…'; st.style.color = 'var(--muted)';
+    if (!key) { setStatus(st, 'Enter a key first', 'warn'); return; }
+    setStatus(st, 'Saving…');
     try {
       await putSettings({ vt_api_key: key });
-      st.textContent = 'Saved ✓'; st.style.color = 'var(--green)';
+      setStatus(st, 'Saved ✓', 'ok');
       document.getElementById('vtApiKey').value = '';
       document.getElementById('vtApiKey').placeholder = '● already set — paste to update';
-      setTimeout(() => { st.textContent = ''; }, 3000);
-    } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = 'var(--red)'; }
+      setTimeout(() => setStatus(st, ''), 3000);
+    } catch(e) {
+      setStatus(st, 'Error: ' + e.message, 'err');
+    }
   };
 
+  // Tests the key typed in the field, or the saved key when the field is empty
   document.getElementById('testVtBtn').onclick = async () => {
     const st = document.getElementById('vtSaveStatus');
-    st.textContent = 'Testing…'; st.style.color = 'var(--muted)';
+    const key = document.getElementById('vtApiKey').value.trim();
+    setStatus(st, key ? 'Testing the key in the field…' : 'Testing the saved key…');
     try {
-      const r = await fetch('/api/admin/connectors/vt/test', { headers: {'X-CSRF-Token': document.cookie.match(/csrf_token=([^;]+)/)?.[1]||''} });
-      const j = await r.json();
-      if (j.ok) { st.textContent = '✓ Key valid'; st.style.color = 'var(--green)'; }
-      else { st.textContent = '✗ ' + (j.error || 'invalid key'); st.style.color = 'var(--red)'; }
-    } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = 'var(--red)'; }
-    setTimeout(() => { st.textContent = ''; }, 4000);
+      const j = await api('/api/admin/connectors/vt/test', send('POST', { api_key: key }));
+      if (j.ok) setStatus(st, '✓ Key valid', 'ok');
+      else setStatus(st, '✗ ' + (j.error || 'invalid key'), 'err');
+    } catch(e) {
+      setStatus(st, 'Error: ' + e.message, 'err');
+    }
+    setTimeout(() => setStatus(st, ''), 5000);
   };
 
   document.getElementById('genWebhookBtn').onclick = () => {
@@ -1715,28 +2020,35 @@
     const input = document.getElementById('webhookToken');
     input.type = 'text';
     input.value = tok;
-    document.getElementById('webhookSaveStatus').textContent = 'Copy this token into your SIEM, then press Save';
-    document.getElementById('webhookSaveStatus').style.color = 'var(--yellow)';
+    _webhookUnsaved = true;
+    setStatus(document.getElementById('webhookSaveStatus'), 'Copy this token into your SIEM, then press Save', 'warn');
   };
+  document.getElementById('webhookToken').addEventListener('input', function(){
+    _webhookUnsaved = !!this.value.trim();
+  });
 
   document.getElementById('saveWebhookBtn').onclick = async () => {
     const st = document.getElementById('webhookSaveStatus');
     const input = document.getElementById('webhookToken');
     const tok = input.value.trim();
-    if (!tok) { st.textContent = 'Enter or generate a token first'; st.style.color = 'var(--yellow)'; return; }
-    if (tok.length < 16) { st.textContent = 'Token too short — use at least 16 chars'; st.style.color = 'var(--red)'; return; }
-    st.textContent = 'Saving…'; st.style.color = 'var(--muted)';
+    if (!tok) { setStatus(st, 'Enter or generate a token first', 'warn'); return; }
+    if (tok.length < 16) { setStatus(st, 'Token too short — use at least 16 chars', 'err'); return; }
+    setStatus(st, 'Saving…');
     try {
       await putSettings({ webhook_token: tok });
-      st.textContent = 'Saved ✓'; st.style.color = 'var(--green)';
+      _webhookUnsaved = false;
+      setStatus(st, 'Saved ✓', 'ok');
       input.value = '';
       input.type = 'password';
       input.placeholder = '● already set — paste to update';
-      setTimeout(() => { st.textContent = ''; }, 3000);
-    } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = 'var(--red)'; }
+      setTimeout(() => setStatus(st, ''), 3000);
+    } catch(e) {
+      setStatus(st, 'Error: ' + e.message, 'err');
+    }
   };
 
-  // Test-connection buttons for each SIEM — use live form values, never the DB
+  // Test-connection buttons for each SIEM. Blank fields fall back to the saved
+  // values server-side; a saved secret is only reused for the saved URL.
   document.querySelectorAll('[data-test-siem]').forEach(btn => {
     btn.onclick = async () => {
       const provider = btn.dataset.testSiem;
@@ -1748,36 +2060,19 @@
           payload[el.dataset.siemField] = el.value.trim();
         });
       }
-      statusEl.textContent = '⟳ Testing…';
-      statusEl.style.color = 'var(--muted)';
+      setStatus(statusEl, '⟳ Testing…');
       btn.disabled = true;
       try {
-        const r = await fetch(`/api/admin/connectors/siem/${provider}/test`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': document.cookie.match(/csrf_token=([^;]+)/)?.[1] || '',
-          },
-          body: JSON.stringify(payload),
-        });
-        const j = await r.json();
-        if (j.ok) {
-          statusEl.textContent = '✓ Connection successful';
-          statusEl.style.color = 'var(--green)';
-        } else {
-          statusEl.textContent = '✗ ' + (j.error || 'connection failed');
-          statusEl.style.color = 'var(--red)';
-        }
+        const j = await api(`/api/admin/connectors/siem/${provider}/test`, send('POST', payload));
+        if (j.ok) setStatus(statusEl, '✓ Connection successful', 'ok');
+        else setStatus(statusEl, '✗ ' + (j.error || 'connection failed'), 'err');
       } catch(e) {
-        statusEl.textContent = '✗ ' + e.message;
-        statusEl.style.color = 'var(--red)';
+        setStatus(statusEl, '✗ ' + e.message, 'err');
       } finally {
         btn.disabled = false;
       }
     };
   });
-
-  document.querySelector('.tab[data-pane="connectors"]').addEventListener('click', loadConnectors);
 
   // ─── Init ────────────────────────────────────────────────────
   loadUsers();

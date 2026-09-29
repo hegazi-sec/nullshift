@@ -714,17 +714,17 @@ def configured_provider_names() -> List[str]:
 
 _VISION_CAPS: Dict[str, Dict[str, Any]] = {
     "anthropic":         {"supported": True,  "note": "Claude API — vision on all models (JPEG/PNG/GIF/WebP, up to 20 images, 5 MB each)"},
-    "openai":            {"supported": True,  "note": "OpenAI — vision on gpt-5.x, gpt-4.1, gpt-4o, o3, o4-mini (up to 10 images, 20 MB each)"},
-    "gemini":            {"supported": True,  "note": "Gemini — all current models support vision (up to 16 images per request)"},
+    "openai":            {"supported": True,  "note": "OpenAI — vision on gpt-6-*, gpt-5.x, gpt-4.1, gpt-4o, o3, o4-mini (up to 10 images, 20 MB each)"},
+    "gemini":            {"supported": True,  "note": "Gemini — all current models support vision, incl. gemini-3.8-flash (up to 16 images per request)"},
     "groq":              {"supported": True,  "note": "Groq — use llama-4-scout, llama-4-maverick, or qwen3-vl-32b for vision"},
-    "xai":               {"supported": True,  "note": "xAI — grok-4.3 and grok-4-0709 support vision"},
+    "xai":               {"supported": True,  "note": "xAI — grok-4.7, grok-4.3, grok-4-0709 and grok-2-vision support vision"},
     "openrouter":        {"supported": True,  "note": "OpenRouter — vision depends on the routed model"},
     "claude_agent_sdk":  {"supported": False, "note": "Claude Agent SDK — vision not supported via CLI; switch to Anthropic API for image analysis"},
-    "deepseek":          {"supported": False, "note": "DeepSeek V4 — text only, no vision support"},
+    "deepseek":          {"supported": None,  "note": "DeepSeek — only deepseek-flash (V4.1 Flash) supports vision; deepseek-v4-pro and the legacy aliases are text only"},
     "ollama":            {"supported": None,  "note": "Ollama — vision depends on loaded model (llama4:scout, qwen3-vl, gemma3 support vision)"},
     "perplexity":        {"supported": False, "note": "Perplexity Sonar — vision not supported"},
     "qwen":              {"supported": True,  "note": "Qwen — vision via qwen3-vl-plus or qwen3-vl-flash models"},
-    "kimi":              {"supported": True,  "note": "Kimi — vision via kimi-k2.5 model"},
+    "kimi":              {"supported": None,  "note": "Kimi — vision via kimi-k2.5; kimi-k2.6 and moonshot-v1 are not marked for vision"},
 }
 
 
@@ -760,11 +760,12 @@ def _provider_chain() -> List[Tuple[str, LLMProvider, Optional[str]]]:
     for available providers only.
 
     Order is determined by the user-stored `provider_chain` JSON array in DB;
-    falls back to _DEFAULT_CHAIN_ORDER when no custom chain is set. Providers
-    not in the user's chain are appended at the end in default order so newly-
-    added providers still participate without requiring a chain re-save.
+    falls back to _DEFAULT_CHAIN_ORDER when no custom chain is set. A saved
+    chain is used exactly as stored: providers missing from it are not tried.
 
-    If active_provider is pinned (not 'auto'), only that provider is returned.
+    If active_provider is pinned (not 'auto'), only that provider is returned,
+    and only when it is also in the chain. The admin settings PUT refuses a
+    chain or pin change that would empty a list that was working.
     """
     active = get_active_provider()
 

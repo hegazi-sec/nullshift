@@ -83,6 +83,15 @@ class IncidentStore:
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_inc_conv_conv ON incident_conversations(conversation_id)"
             )
+            # ponytail: startup prune of links to conversations deleted before the delete route
+            # detached them; a no-op after, delete once every install has run it
+            try:
+                cur.execute(
+                    "DELETE FROM incident_conversations "
+                    "WHERE conversation_id NOT IN (SELECT id FROM conversations)"
+                )
+            except sqlite3.OperationalError:
+                pass  # conversations table not created yet in this DB: nothing to prune
             self.conn.commit()
 
     @staticmethod
@@ -316,6 +325,19 @@ class IncidentStore:
                 )
             self.conn.commit()
             return changed
+
+    def detach_conversation(self, conversation_id: str) -> int:
+        """A conversation was deleted: drop it from every case it was linked to.
+        Links are only ever made between one user's own case and chat, so no
+        ownership check is needed here."""
+        with self.lock:
+            cur = self.conn.cursor()
+            cur.execute(
+                "DELETE FROM incident_conversations WHERE conversation_id=?",
+                (conversation_id,),
+            )
+            self.conn.commit()
+            return cur.rowcount
 
     def incidents_for_conversation(
         self, user_id: int, conversation_id: str

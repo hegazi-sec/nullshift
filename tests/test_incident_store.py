@@ -169,7 +169,22 @@ def test_report_markdown_contains_key_sections():
 def test_report_html_escapes_user_content():
     incident, conversations, verdicts = _report_fixtures()
     html_doc = build_incident_report_html(incident, conversations, verdicts)
-    assert "<script>" not in html_doc.split("</head>")[1]  # body has no raw tags from content
+    body = html_doc.split("</head>")[1]
+    # No raw tags from content: the only script is the report's own print button handler.
+    assert body.count("<script") == 1 and "<script>document.querySelector('.print-btn')" in body
+    assert "WS-042 &lt;script&gt;" in html_doc and "WS-042 <script>" not in html_doc
     assert "&lt;img src=x onerror=alert(1)&gt;" in html_doc
     assert "INC-0001" in html_doc
     assert "10.9.8.7" in html_doc
+
+
+def test_detach_and_startup_prune_of_deleted_conversations(db_path: Path, store: IncidentStore, chat: ChatStore):
+    kept = chat.create_conversation_for_user(1, title="kept")
+    gone = chat.create_conversation_for_user(1, title="gone")
+    inc = store.create(user_id=1, title="X")
+    for c in (kept, gone):
+        store.link_conversation(1, inc["id"], c["id"])
+    chat.delete_conversation_for_user(1, gone["id"])  # an old delete that left the link behind
+    assert IncidentStore(db_path=db_path).list_for_user(1)[0]["conversation_count"] == 1  # reopening prunes it
+    assert store.detach_conversation(kept["id"]) == 1
+    assert store.get_for_user(1, inc["id"])["conversations"] == []

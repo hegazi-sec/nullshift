@@ -16,7 +16,7 @@
       --border2:  #243352;
       --text:     #a8bfd8;
       --text2:    #c8dff0;
-      --muted:    #4a6080;
+      --muted:    #6f84a3;
       --accent:   #00b4d8;
       --accent2:  #0077a8;
       --red:      #ef4444;
@@ -25,17 +25,22 @@
       --green:    #22c55e;
       --blue:     #3b82f6;
       --rad:      6px;
+      --field-w:  560px;
+      --field-h:  36px;
+      --label-w:  180px;
       --font-ui:  'Chakra Petch', monospace;
       --font-hd:  'Chakra Petch', monospace;
       --font-mono:'JetBrains Mono', monospace;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    [hidden] { display: none !important; }
 
     body {
       font-family: var(--font-ui);
       background: var(--bg);
       color: var(--text2);
       height: 100vh;
+      height: 100dvh;
       display: flex;
       overflow: hidden;
       /* dot-grid texture */
@@ -104,7 +109,7 @@
     .conv-search {
       display: flex;
       gap: 6px;
-      padding: 6px 10px;
+      padding: 8px 10px;
       border-bottom: 1px solid var(--border);
     }
     .btn-refresh {
@@ -120,50 +125,44 @@
     }
     .btn-refresh:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
     .btn-refresh:disabled { opacity: .6; cursor: default; }
-    .conv-search input {
-      width: 100%;
-      min-width: 0;
-      background: var(--bg3);
-      border: 1px solid var(--border2);
-      border-radius: var(--rad);
-      color: var(--text2);
-      font-family: var(--font-mono);
-      font-size: 11px;
-      padding: 5px 9px;
-      outline: none;
-      transition: border-color .12s;
-    }
-    .conv-search input:focus { border-color: var(--accent); }
-    .conv-search input::placeholder { color: var(--muted); }
 
-    /* ── Sidebar tabs (Investigations | Cases) ──────── */
-    .side-tabs {
-      display: flex;
-      gap: 4px;
-      padding: 8px 14px 0;
+    /* ── Form fields: the same box as the settings pages ─── */
+    .fld {
+      width: 100%; max-width: var(--field-w); min-width: 0; height: var(--field-h);
+      padding: 8px 10px; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--rad);
+      color: var(--text2); font-family: var(--font-mono); font-size: 12px; line-height: 18px;
+      outline: none; transition: border-color .12s;
     }
-    .side-tab {
-      flex: 1;
-      background: transparent;
-      border: none;
-      border-bottom: 2px solid transparent;
-      color: var(--muted);
-      font-family: var(--font-ui);
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-      padding: 6px 4px;
-      cursor: pointer;
-      transition: color .12s, border-color .12s;
+    .fld:focus { outline: none; border-color: var(--accent); }
+    .fld::placeholder { color: var(--muted); }
+    .fld:disabled { opacity: .5; cursor: default; }
+    select.fld option { background: var(--bg2); color: var(--text2); }
+    textarea.fld { height: auto; min-height: 96px; resize: vertical; }
+    .field {
+      display: grid; grid-template-columns: var(--label-w) minmax(0, var(--field-w));
+      gap: 6px 14px; align-items: center; margin-top: 12px;
     }
-    .side-tab:hover { color: var(--text2); }
-    .side-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-    .tab-count {
-      display: inline-block; min-width: 15px; padding: 0 4px; margin-left: 4px;
-      background: var(--red); color: #fff; border-radius: 8px;
-      font-size: 10px; line-height: 15px; text-align: center;
+    .field > label {
+      font-family: var(--font-hd); font-size: 10px; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--muted); overflow-wrap: anywhere;
     }
+    .field.top > label { align-self: start; padding-top: 11px; }
+    .field .hint { grid-column: 2; font-size: 11px; color: var(--muted); }
+    .field-actions { padding-left: calc(var(--label-w) + 14px); }
+    @container (max-width: 520px) {
+      .field { grid-template-columns: minmax(0, 1fr); }
+      .field.top > label { padding-top: 0; }
+      .field .hint { grid-column: 1; }
+      .field-actions { padding-left: 0; }
+    }
+    @media (max-width: 640px) {
+      .field { grid-template-columns: minmax(0, 1fr); }
+      .field.top > label { padding-top: 0; }
+      .field .hint { grid-column: 1; }
+      .field-actions { padding-left: 0; }
+    }
+    .conv-search .fld { max-width: none; }
+
     .alert-payload {
       background: var(--bg3); border: 1px solid var(--border);
       border-radius: 5px; padding: 10px 12px; margin-top: 10px;
@@ -196,28 +195,19 @@
     .case-status.st-closed        { color: var(--muted); }
 
     /* ── Case detail panel ──────────────────────────── */
-    .case-panel {
-      max-width: 720px; margin: 24px auto; padding: 0 18px;
+    .panel {
+      width: 100%; max-width: 760px; margin: 8px auto 24px;
     }
     .case-card {
       background: var(--bg2); border: 1px solid var(--border);
-      border-radius: 8px; padding: 20px 22px;
+      border-radius: 8px; padding: 20px 22px; container-type: inline-size;
     }
     .case-card h2 { margin: 0 0 2px; font-size: 17px; color: var(--text2); }
     .case-card .case-num {
       font-family: var(--font-mono); font-size: 12px; color: var(--accent);
       letter-spacing: .08em;
     }
-    .case-row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
-    .case-row label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-    .case-panel select, .case-panel input[type=text], .case-panel textarea {
-      background: var(--bg3); border: 1px solid var(--border2); color: var(--text2);
-      border-radius: 5px; padding: 6px 9px; font-family: var(--font-ui); font-size: 13px;
-    }
-    .case-panel select:focus, .case-panel input:focus, .case-panel textarea:focus {
-      outline: none; border-color: var(--accent);
-    }
-    .case-panel textarea { width: 100%; min-height: 70px; resize: vertical; margin-top: 6px; }
+    .case-form { margin-top: 6px; }
     .case-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
     .btn-case {
       background: var(--bg3); border: 1px solid var(--border2); color: var(--text2);
@@ -242,6 +232,7 @@
     .dash { width: 100%; max-width: 1180px; margin: 0 auto; padding: 4px 0 24px; }
     .dash-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
     .dash-range { display: inline-flex; border: 1px solid var(--border2); border-radius: 5px; overflow: hidden; }
+    .dash-range button:focus-visible { outline-offset: -2px; }
     .dash-range button {
       background: transparent; border: none; color: var(--muted); cursor: pointer;
       font-family: var(--font-mono); font-size: 11px; padding: 5px 11px;
@@ -264,7 +255,7 @@
     .dash-card.wide { grid-column: 1 / -1; }
     .dash.editing .dash-card { border-color: var(--accent2); }
     .dash-card header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-    .dash-card h3 { margin: 0; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .dash-card h2 { margin: 0; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
     .dash-edit { display: none; gap: 4px; }
     .dash.editing .dash-edit { display: inline-flex; }
     .dash-edit button {
@@ -316,12 +307,11 @@
     .agent-desc { margin: 0 0 10px; font-size: 12px; line-height: 1.5; color: var(--text); }
     .agent-warn { margin: -4px 0 10px; font-size: 11px; color: var(--orange); }
     .agent-ctl { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
-    .agent-ctl input[type=number], .agents-owner select {
-      width: 64px; padding: 3px 6px; background: var(--bg3); border: 1px solid var(--border2);
-      border-radius: 4px; color: var(--text2); font-family: var(--font-mono); font-size: 11px;
-    }
-    .agents-owner { font-size: 12px; color: var(--muted); }
-    .agents-owner select { width: auto; }
+    .agent-ctl label { display: inline-flex; align-items: center; gap: 8px; }
+    .agent-ctl .fld { width: 96px; }
+    .agent-ctl .btn-mini, .agents-owner .btn-mini { height: var(--field-h); padding: 0 12px; }
+    .agents-owner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+    .agents-owner .fld { width: auto; min-width: 160px; }
     .agent-last { margin-top: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
     .btn-mini {
       padding: 3px 8px; background: var(--bg3); border: 1px solid var(--border2); border-radius: 4px;
@@ -365,91 +355,27 @@
       border: 1px solid var(--accent); border-radius: 8px; padding: 2px 8px;
       cursor: pointer; white-space: nowrap;
     }
-    .modal-overlay {
-      position: fixed; inset: 0; background: rgba(3,8,16,.72);
-      display: none; align-items: center; justify-content: center; z-index: 100;
+    dialog.modal {
+      margin: auto; background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px;
+      width: min(420px, 92vw); max-height: 80vh; overflow-y: auto; padding: 20px; color: var(--text2);
     }
-    .modal-overlay.show { display: flex; }
-    .modal {
-      background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px;
-      width: min(420px, 92vw); max-height: 80vh; overflow-y: auto; padding: 20px;
-    }
+    dialog.modal::backdrop, dialog.lightbox::backdrop { background: rgba(3,8,16,.72); }
     .modal h3 { margin: 0 0 14px; font-size: 14px; color: var(--text2); }
     .modal .case-choice {
-      display: flex; align-items: center; gap: 8px;
+      display: flex; align-items: center; gap: 8px; width: 100%; background: none; font: inherit; text-align: left;
       padding: 9px 12px; border: 1px solid var(--border); border-radius: 5px;
       margin-bottom: 6px; cursor: pointer; font-size: 13px; color: var(--text2);
       transition: border-color .12s;
     }
     .modal .case-choice:hover { border-color: var(--accent); }
-    .modal input[type=text] {
-      width: 100%; background: var(--bg3); border: 1px solid var(--border2);
-      color: var(--text2); border-radius: 5px; padding: 8px 10px; font-size: 13px;
-    }
-    .modal input[type=text]:focus { outline: none; border-color: var(--accent); }
+    .modal-new { display: flex; gap: 8px; margin-top: 14px; }
+    .modal-new .fld { flex: 1; }
+    .modal-new .btn-case { height: var(--field-h); }
 
     .conv-list { flex: 1; overflow-y: auto; padding: 6px 0; }
     .conv-list::-webkit-scrollbar { width: 4px; }
     .conv-list::-webkit-scrollbar-track { background: transparent; }
     .conv-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
-    .conv-item {
-      padding: 9px 14px;
-      cursor: pointer;
-      border-left: 2px solid transparent;
-      transition: background .12s, border-color .12s;
-      position: relative;
-    }
-    .conv-item:hover { background: rgba(0,180,216,.05); border-left-color: var(--border2); }
-    .conv-item.active { background: rgba(0,180,216,.09); border-left-color: var(--accent); }
-    .conv-item .del-btn {
-      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-      display: none; background: none; border: none; color: var(--muted);
-      font-size: 13px; cursor: pointer; padding: 2px 5px; border-radius: 3px; line-height: 1;
-    }
-    .conv-item:hover .del-btn { display: block; }
-    .conv-item .del-btn:hover { color: var(--red); background: rgba(239,68,68,.12); }
-    .conv-item .ctitle {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text2);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .conv-item .ctime {
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 2px;
-      font-family: var(--font-mono);
-    }
-
-    .sidebar-footer {
-      padding: 10px 14px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .btn-ghost {
-      background: transparent;
-      border: none;
-      color: var(--muted);
-      font-family: var(--font-ui);
-      font-size: 12px;
-      font-weight: 500;
-      padding: 6px 8px;
-      border-radius: var(--rad);
-      cursor: pointer;
-      text-align: left;
-      text-decoration: none;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: color .12s, background .12s;
-    }
-    .btn-ghost:hover { color: var(--text2); background: var(--bg3); }
-    .btn-ghost svg { width:13px; height:13px; flex-shrink:0; }
 
     /* ── Main area ───────────────────────────────── */
     .main {
@@ -472,6 +398,8 @@
       flex-shrink: 0;
     }
     .conv-title {
+      flex: 1 1 0;
+      min-width: 0;
       font-family: var(--font-hd);
       font-size: 13px;
       font-weight: 600;
@@ -481,7 +409,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .topbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .topbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: nowrap; justify-content: flex-end; }
     .status-pill {
       display: flex;
       align-items: center;
@@ -618,14 +546,15 @@
       opacity: 0;
       transition: opacity .15s;
     }
-    .msg-wrap:hover .msg-time { opacity: 1; }
+    .msg-wrap:hover .msg-time, .msg-wrap:focus-within .msg-time { opacity: 1; }
 
     .msg-copy {
       background: none; border: none; color: var(--muted); cursor: pointer;
       font-size: 12px; padding: 2px 5px; border-radius: 3px; line-height: 1;
       opacity: 0; transition: opacity .15s, color .12s;
     }
-    .msg-wrap:hover .msg-copy { opacity: .7; }
+    .msg-wrap:hover .msg-copy, .msg-wrap:focus-within .msg-copy { opacity: .7; }
+    .msg-copy:focus-visible, .section-copy:focus-visible { opacity: 1; outline: 1px solid var(--accent); outline-offset: 1px; }
     .msg-copy:hover { opacity: 1; color: var(--accent); background: rgba(0,180,216,.08); }
 
     /* Sidebar verdict dot */
@@ -654,7 +583,8 @@
       opacity: 0;
       transition: opacity .15s;
     }
-    .section-header:hover .section-copy { opacity: 1; }
+    .section-header:hover .section-copy, .section-header:focus-within .section-copy { opacity: 1; }
+    @media (hover: none) { .msg-copy, .section-copy, .msg-time { opacity: .8; } }
     .section-header { justify-content: space-between; }
 
     .bubble {
@@ -663,8 +593,10 @@
       border-radius: 8px;
       line-height: 1.6;
       font-size: 14px;
+      overflow-wrap: anywhere;
     }
     .msg-wrap.user .bubble {
+      white-space: pre-wrap;
       background: var(--bg3);
       border: 1px solid var(--border2);
       color: var(--text2);
@@ -746,8 +678,11 @@
       border: 1px solid var(--border);
       color: var(--text);
       vertical-align: top;
-      word-break: break-all;
+      overflow-wrap: normal;
+      min-width: 7ch;
     }
+    .tbl-wrap { overflow-x: auto; max-width: 100%; margin: 10px 0; }
+    .tbl-wrap table { margin: 0; }
     .bubble tr:nth-child(even) td { background: rgba(255,255,255,.02); }
     .bubble tr:hover td { background: rgba(0,180,216,.04); }
 
@@ -933,7 +868,7 @@
 
     .btn-send {
       background: var(--accent);
-      color: #fff;
+      color: #03131c;
       border: none;
       font-family: var(--font-hd);
       font-size: 12px;
@@ -978,6 +913,8 @@
       background: var(--bg3); border: 1px solid var(--border2); border-radius: 4px;
       font-family: var(--font-mono); font-size: 11px; color: var(--text2);
     }
+    .file-chip { max-width: 100%; min-width: 0; }
+    .file-chip .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .file-chip .kind { color: var(--accent); font-weight: 600; }
     .file-chip .size { color: var(--muted); }
     .file-chip .rm { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 10px; padding: 4px 6px; }
@@ -999,410 +936,536 @@
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    /* ── App shell: rail + list pane + views ─────────── */
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+    .skip-link { position: absolute; left: 8px; top: -40px; z-index: 200; background: var(--accent); color: #03131c; padding: 6px 10px; border-radius: 4px; font-size: 12px; }
+    .skip-link:focus { top: 8px; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    button { font-family: inherit; }
+
+    .rail {
+      width: 72px; min-width: 72px; background: var(--bg); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 10px 6px; z-index: 3;
+    }
+    .rail-brand { display: flex; justify-content: center; padding: 4px 0 10px; }
+    .rail-link {
+      position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
+      padding: 8px 2px; border-radius: 8px; color: var(--muted); text-decoration: none;
+      font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+      border: 1px solid transparent; transition: color .12s, background .12s;
+    }
+    .rail-link svg { width: 20px; height: 20px; }
+    .rail-link:hover { color: var(--text2); background: var(--bg3); }
+    .rail-link[aria-current="page"] { color: var(--accent); background: rgba(0,180,216,.09); border-color: rgba(0,180,216,.25); }
+    .rail-spacer { flex: 1; }
+    .rail-badge {
+      position: absolute; top: 3px; right: 6px; min-width: 16px; padding: 0 4px; border-radius: 8px;
+      background: #dc2626; color: #fff; font-size: 10px; line-height: 16px; text-align: center; font-weight: 700;
+    }
+
+    .listpane { width: 280px; min-width: 280px; }
+    .listpane-head { display: flex; align-items: center; gap: 8px; padding: 14px 12px 10px; border-bottom: 1px solid var(--border); }
+    .listpane-head h2 {
+      flex: 1; font-family: var(--font-hd); font-size: 12px; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .listpane-head .btn-new { width: auto; padding: 6px 10px; }
+    body.no-list .listpane { display: none; }
+    .list-foot { padding: 8px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .list-empty { padding: 16px 14px; font-size: 12px; color: var(--muted); list-style: none; }
+
+    .conv-list { list-style: none; }
+    .row { position: relative; list-style: none; }
+    .row-main {
+      display: block; padding: 9px 36px 9px 14px; color: inherit; text-decoration: none;
+      border-left: 2px solid transparent; transition: background .12s, border-color .12s;
+    }
+    .row-main:hover { background: rgba(0,180,216,.05); border-left-color: var(--border2); }
+    .row-main[aria-current="page"] { background: rgba(0,180,216,.09); border-left-color: var(--accent); }
+    .row-main:focus-visible { outline-offset: -2px; }
+    .row.dim .row-title .t { color: var(--muted); }
+    .row-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text2); min-width: 0; }
+    .row-title .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row-meta { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 11px; color: var(--muted); font-family: var(--font-mono); min-width: 0; }
+    .row-meta .m { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row-meta .case-status { margin-left: auto; flex-shrink: 0; }
+    .row .del-btn {
+      position: absolute; right: 8px; top: 50%; transform: translateY(-50%); opacity: 0;
+      background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; padding: 4px 6px; border-radius: 3px; line-height: 1;
+    }
+    .row:hover .del-btn, .row:focus-within .del-btn { opacity: 1; }
+    @media (hover: none) { .row .del-btn { opacity: .8; } }
+    .row .del-btn:hover, .row .del-btn:focus-visible { color: var(--red); background: rgba(239,68,68,.12); }
+    .tag {
+      flex-shrink: 0; font-family: var(--font-mono); font-size: 9.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+      padding: 0 5px; border-radius: 3px; border: 1px solid currentColor; line-height: 15px;
+    }
+    .tag-low, .tag-benign { color: var(--green); }
+    .tag-medium, .tag-inconclusive { color: var(--yellow); }
+    .tag-high, .tag-suspicious { color: var(--orange); }
+    .tag-critical, .tag-malicious { color: var(--red); }
+    .run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); flex-shrink: 0; animation: pulse-dot 1s ease-in-out infinite; }
+    .unread-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+    .main:focus { outline: none; }
+    .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .view[hidden] { display: none; }
+    .view-scroll { overflow-y: auto; padding: 18px 24px; }
+    .chat-log { display: flex; flex-direction: column; gap: 4px; }
+    .chat-session { display: flex; flex-direction: column; gap: 4px; }
+    .chat-note { align-self: center; margin: 24px 0; font-size: 12px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+    .welcome[hidden] { display: none; }
+    .hint-chip { font: inherit; font-size: 12px; width: 100%; }
+    .menu-btn { display: none; }
+    .btn-icon { background: transparent; border: 1px solid var(--border2); color: var(--text2); border-radius: 5px; padding: 4px 9px; cursor: pointer; font-size: 14px; line-height: 1; }
+    .case-badge { text-decoration: none; }
+    .empty-panel { color: var(--muted); font-size: 13px; text-align: center; padding: 48px 16px; line-height: 1.7; }
+    .panel-error { color: var(--red); font-size: 13px; display: flex; gap: 10px; align-items: center; padding: 24px 0; }
+    a.btn-case { text-decoration: none; display: inline-block; }
+    .case-conv-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .case-conv-row .case-conv-item { flex: 1; margin: 0; color: var(--text2); text-decoration: none; min-width: 0; overflow-wrap: anywhere; }
+    .claim-note { font-size: 12px; color: var(--muted); align-self: center; }
+
+    /* composer: options row above the input row */
+    .input-options { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .input-options .input-hint { margin-left: auto; }
+    .input-toolbar { min-width: 0; }
+    .input-box { min-width: 0; }
+    .composer-notice { font-size: 12px; color: var(--yellow); }
+    .composer-notice[hidden], .img-preview-strip[hidden] { display: none; }
+    .bubble-image-btn { padding: 0; border: none; background: none; cursor: zoom-in; border-radius: 4px; }
+
+    .toast {
+      position: fixed; right: 16px; top: 56px; z-index: 150; max-width: min(420px, calc(100vw - 32px));
+      background: var(--bg3); border: 1px solid var(--border2); border-left: 3px solid var(--accent); border-radius: 6px;
+      padding: 10px 12px; font-size: 13px; color: var(--text2); display: flex; gap: 10px; align-items: center; box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    }
+    .toast[hidden] { display: none; }
+    .toast a { color: var(--accent); font-weight: 600; }
+    .toast .x { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; }
+    dialog.lightbox { margin: auto; padding: 0; border: 1px solid var(--border2); background: var(--bg); border-radius: 6px; max-width: 94vw; max-height: 92vh; }
+    dialog.lightbox img { display: block; max-width: 94vw; max-height: 86vh; }
+    dialog.lightbox .lb-bar { display: flex; justify-content: flex-end; padding: 6px; }
+    .drawer-backdrop { display: none; }
+
+    /* ── Phones and narrow windows ──────────────────── */
+    @media (max-width: 760px) {
+      body { flex-direction: column; }
+      .rail {
+        order: 3; width: 100%; min-width: 0; height: 58px; flex-direction: row; justify-content: space-around;
+        padding: 4px 4px env(safe-area-inset-bottom); border-right: none; border-top: 1px solid var(--border); gap: 0;
+      }
+      .rail-brand, .rail-spacer { display: none; }
+      .rail-link { flex: 1; min-width: 0; padding: 6px 0; font-size: 9px; letter-spacing: 0; overflow: hidden; }
+      .main { order: 1; flex: 1; min-height: 0; }
+      .listpane {
+        position: fixed; top: 0; bottom: 58px; left: 0; width: min(86vw, 320px); min-width: 0; z-index: 20;
+        transform: translateX(-102%); box-shadow: 8px 0 24px rgba(0,0,0,.45);
+        visibility: hidden; transition: transform .18s ease, visibility 0s linear .18s;
+      }
+      body.drawer-open .listpane { transform: none; visibility: visible; transition: transform .18s ease, visibility 0s; }
+      body.drawer-open .drawer-backdrop { display: block; position: fixed; inset: 0 0 58px 0; background: rgba(3,8,16,.6); z-index: 15; }
+      body:not(.no-list) .menu-btn { display: inline-block; }
+      .topbar { padding: 8px 10px; }
+      .view-scroll, .chat-area { padding: 12px; }
+      .bubble { max-width: 92%; }
+      .input-area { padding: 8px 10px; }
+      .input-options .input-hint { display: none; }
+    }
   </style>
 </head>
-<body>
+<body class="no-list">
+<a class="skip-link" href="#main">Skip to content</a>
 
-<!-- ═══ SIDEBAR ═══════════════════════════════════════════════════ -->
-<div class="sidebar">
-  <div class="sidebar-header">
-    <div class="brand">
-      <svg class="brand-mark" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <defs>
-          <polygon id="bhex" points="19.05,-11 0,-22 -19.05,-11 -19.05,11 0,22 19.05,11"/>
-        </defs>
-        <g fill="#2a3a55">
-          <use href="#bhex" transform="translate(110,115)"/>
-          <use href="#bhex" transform="translate(148,115)"/>
-          <use href="#bhex" transform="translate(129,82)"/>
-          <use href="#bhex" transform="translate(72,115)"/>
-          <use href="#bhex" transform="translate(91,148)"/>
-          <use href="#bhex" transform="translate(129,148)"/>
-        </g>
-        <use href="#bhex" transform="translate(91,82)" fill="none" stroke="#00b4d8" stroke-width="1.5" opacity="0.45"/>
-        <g fill="#00b4d8">
-          <circle cx="86" cy="75" r="2" opacity="0.85"/>
-          <circle cx="81" cy="68" r="2" opacity="0.65"/>
-          <circle cx="76" cy="61" r="2" opacity="0.45"/>
-        </g>
-        <use href="#bhex" transform="translate(67,52)" fill="#00b4d8"/>
-      </svg>
-      NullShift L1
-    </div>
-    <button class="btn-new" id="newChatBtn">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
-        <line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/>
-      </svg>
-      New Investigation
-    </button>
-  </div>
+<!-- ═══ RAIL: main navigation ══════════════════════════════════════ -->
+<nav class="rail" aria-label="Main">
+  <a class="rail-brand" href="#/new" aria-label="NullShift: new investigation">
+    <svg class="brand-mark" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <polygon id="bhex" points="19.05,-11 0,-22 -19.05,-11 -19.05,11 0,22 19.05,11"/>
+      </defs>
+      <g fill="#2a3a55">
+        <use href="#bhex" transform="translate(110,115)"/>
+        <use href="#bhex" transform="translate(148,115)"/>
+        <use href="#bhex" transform="translate(129,82)"/>
+        <use href="#bhex" transform="translate(72,115)"/>
+        <use href="#bhex" transform="translate(91,148)"/>
+        <use href="#bhex" transform="translate(129,148)"/>
+      </g>
+      <use href="#bhex" transform="translate(91,82)" fill="none" stroke="#00b4d8" stroke-width="1.5" opacity="0.45"/>
+      <g fill="#00b4d8">
+        <circle cx="86" cy="75" r="2" opacity="0.85"/>
+        <circle cx="81" cy="68" r="2" opacity="0.65"/>
+        <circle cx="76" cy="61" r="2" opacity="0.45"/>
+      </g>
+      <use href="#bhex" transform="translate(67,52)" fill="#00b4d8"/>
+    </svg>
+  </a>
+  <a class="rail-link" href="#/chat" data-nav="chat">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 4h14v9H8l-4 3v-3H3z"/></svg>
+    <span>Chats</span>
+  </a>
+  <a class="rail-link" href="#/alerts" data-nav="alerts">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 13V9a5 5 0 0 1 10 0v4l1.5 2h-13zM8 17h4"/></svg>
+    <span>Alerts</span>
+    <b class="rail-badge" id="alertCount" hidden></b>
+  </a>
+  <a class="rail-link" href="#/cases" data-nav="cases">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 5.5h6l1.5 2h7.5v8.5h-15z"/></svg>
+    <span>Cases</span>
+  </a>
+  <a class="rail-link" href="#/dashboard" data-nav="dashboard">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 3h6v8H3zM11 3h6v5h-6zM11 10h6v7h-6zM3 13h6v4H3z"/></svg>
+    <span>Dashboard</span>
+  </a>
+  <a class="rail-link" href="#/agents" data-nav="agents">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="4" y="6" width="12" height="10" rx="2"/><path d="M10 3v3M7.5 11h.01M12.5 11h.01M8 14h4"/></svg>
+    <span>Agents</span>
+  </a>
+  <div class="rail-spacer"></div>
+  <a class="rail-link" id="adminLink" href="/admin" hidden>
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M11.1 4.9l1.4-1.4M3.5 12.5l1.4-1.4"/></svg>
+    <span>Settings</span>
+  </a>
+  <a class="rail-link" id="logoutLink" href="/logout">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M10 3h3a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-3M7 11l4-3-4-3M1 8h9"/></svg>
+    <span>Log out</span>
+  </a>
+</nav>
 
-  <div class="side-tabs">
-    <button class="side-tab active" id="tabChats">Investigations</button>
-    <button class="side-tab" id="tabCases">Cases</button>
-    <button class="side-tab" id="tabAlerts">Alerts<span class="tab-count" id="alertCount" style="display:none">0</span></button>
+<!-- ═══ LIST PANE: investigations / alerts / cases ═════════════════ -->
+<aside class="sidebar listpane" id="listPane" aria-labelledby="listTitle">
+  <div class="listpane-head">
+    <h2 id="listTitle">Investigations</h2>
+    <a class="btn-new" id="newChatBtn" href="#/new">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+      New
+    </a>
+    <button class="btn-refresh" id="alertSyncBtn" type="button" hidden title="Pull alerts the SIEM webhook missed (last 24h)">Pull missed</button>
   </div>
   <div class="conv-search">
-    <input type="text" id="convSearch" placeholder="Search investigations…" autocomplete="off"/>
-    <button class="btn-refresh" id="alertSyncBtn" style="display:none" title="Pull alerts the SIEM webhook missed (last 24h)">Refresh</button>
+    <label class="sr-only" for="listSearch">Search the list</label>
+    <input type="search" class="fld" id="listSearch" placeholder="Search investigations…" autocomplete="off"/>
   </div>
-  <div class="conv-list" id="convList"></div>
+  <ul class="conv-list" id="convList" aria-labelledby="listTitle"></ul>
+  <div class="list-foot" id="listFoot" hidden></div>
+</aside>
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
 
-  <div class="sidebar-footer">
-    <a class="btn-ghost" id="adminLink" href="/admin" style="display:none">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-        <circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M11.1 4.9l1.4-1.4M3.5 12.5l1.4-1.4"/>
-      </svg>
-      Settings
-    </a>
-    <a class="btn-ghost" href="/logout">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-        <path d="M10 3h3a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-3M7 11l4-3-4-3M1 8h9"/>
-      </svg>
-      Log out
-    </a>
-  </div>
-</div>
-
-<!-- ═══ MAIN ══════════════════════════════════════════════════════ -->
-<div class="main">
-
-  <!-- Topbar -->
-  <div class="topbar">
-    <div class="conv-title" id="convTitle">Select a conversation</div>
+<!-- ═══ MAIN: one container per view ═══════════════════════════════ -->
+<main class="main" id="main" tabindex="-1">
+  <header class="topbar">
+    <button class="btn-icon menu-btn" id="menuBtn" type="button" aria-label="Show list" aria-controls="listPane" aria-expanded="false">☰</button>
+    <h1 class="conv-title" id="viewTitle" tabindex="-1">New investigation</h1>
     <div class="topbar-right">
-      <button class="btn-topbar" id="dashBtn" title="Live SOC dashboard">Dashboard</button>
-      <button class="btn-topbar" id="agentsBtn" title="Autonomous triage, investigation, reporting and containment">Agents</button>
-      <span class="case-badge" id="caseBadge" style="display:none" title="Open case"></span>
-      <button class="btn-topbar" id="addToCaseBtn" style="display:none" title="Attach this investigation to a case">+ Case</button>
+      <a class="case-badge" id="caseBadge" hidden title="Open the linked case"></a>
+      <button class="btn-topbar" id="addToCaseBtn" type="button" hidden title="Attach this investigation to a case">+ Case</button>
       <div class="status-pill" id="statusPill">
-        <div class="status-dot" id="statusDot"></div>
+        <span class="status-dot thinking" id="statusDot"></span>
         <span id="statusText">Connecting…</span>
       </div>
     </div>
-  </div>
+  </header>
 
-  <!-- Chat -->
-  <div class="chat-area" id="chatArea">
-    <!-- Welcome -->
-    <div class="welcome" id="welcomeScreen">
-      <div class="welcome-icon">⬡</div>
-      <h2>L1 SOC Analyst Console</h2>
-      <p>Start a new investigation or select a conversation from the sidebar.</p>
-      <div class="welcome-hints">
-        <div class="hint-chip" onclick="fillInput('Find new detections and give me details')">Find new detections and give me details</div>
-        <div class="hint-chip" onclick="fillInput('Any suspicious activity in the last 24h?')">Any suspicious activity in the last 24h?</div>
-        <div class="hint-chip" onclick="fillInput('Show me any DNS tunneling detections')">Show me any DNS tunneling detections</div>
-        <div class="hint-chip" onclick="fillInput('Any whoami or recon commands executed?')">Any whoami or recon commands executed?</div>
+  <section class="view" id="view-chat" aria-label="Investigation chat">
+    <div class="chat-area" id="chatArea">
+      <div class="welcome" id="welcomeScreen">
+        <div class="welcome-icon" aria-hidden="true">⬡</div>
+        <h2>L1 SOC Analyst Console</h2>
+        <p>Describe what you're investigating below, or pick a starting point.</p>
+        <div class="welcome-hints">
+          <button type="button" class="hint-chip" data-hint="Find new detections and give me details">Find new detections and give me details</button>
+          <button type="button" class="hint-chip" data-hint="Any suspicious activity in the last 24h?">Any suspicious activity in the last 24h?</button>
+          <button type="button" class="hint-chip" data-hint="Show me any DNS tunneling detections">Show me any DNS tunneling detections</button>
+          <button type="button" class="hint-chip" data-hint="Any whoami or recon commands executed?">Any whoami or recon commands executed?</button>
+        </div>
+      </div>
+      <div class="chat-log" id="chatLog"></div>
+    </div>
+
+    <input type="file" id="fileInput" accept="image/*,.csv,text/csv" multiple hidden>
+    <div class="input-area">
+      <div id="previewStrip" class="img-preview-strip" hidden></div>
+      <div class="composer-notice" id="composerNotice" hidden></div>
+      <div class="input-options">
+        <label class="debug-label"><input type="checkbox" id="debugToggle"/> DEBUG</label>
+        <label class="debug-label" title="Response creativity. Lower = precise. Upper limit 0.5 to prevent hallucinations. L2 handoff always uses 0.1.">
+          <span style="white-space:nowrap">TEMP <span id="tempVal" style="font-variant-numeric:tabular-nums;min-width:2.2ch;display:inline-block">0.2</span></span>
+          <input type="range" id="tempSlider" min="0" max="0.5" step="0.05" value="0.2" aria-label="Response temperature"
+            style="width:72px;accent-color:var(--accent);cursor:pointer;vertical-align:middle"/>
+        </label>
+        <span class="input-hint">Enter to send · Shift+Enter for newline</span>
+      </div>
+      <div class="input-toolbar">
+        <button class="btn-attach" id="attachBtn" type="button" aria-label="Attach screenshots or CSV files" title="Attach screenshots (max 4, 5 MB each) or CSV files (max 3, 5 MB each)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path d="M13.5 8.5l-5 5a3.5 3.5 0 0 1-5-5l6-6a2 2 0 0 1 3 3l-6 6a.5.5 0 0 1-.7-.7l5-5"/>
+          </svg>
+        </button>
+        <label class="sr-only" for="inputBox">Message</label>
+        <textarea id="inputBox" class="input-box" rows="1" placeholder="Describe what you're investigating…"></textarea>
+        <button class="btn-send" id="sendBtn" type="button">Send</button>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- Input -->
-  <input type="file" id="imageInput" accept="image/*,.csv,text/csv" multiple style="display:none">
-  <div class="input-area">
-    <div id="imgPreviewStrip" class="img-preview-strip" style="display:none"></div>
-    <div class="input-toolbar">
-      <label class="debug-label">
-        <input type="checkbox" id="debugToggle"/> DEBUG
-      </label>
-      <label class="debug-label" title="Response creativity. Lower = precise. Upper limit 0.5 to prevent hallucinations. L2 handoff always uses 0.1." style="gap:5px;user-select:none;">
-        <span style="white-space:nowrap;">TEMP <span id="tempVal" style="font-variant-numeric:tabular-nums;min-width:2.2ch;display:inline-block;">0.2</span></span>
-        <input type="range" id="tempSlider" min="0" max="0.5" step="0.05" value="0.2"
-          style="width:72px;accent-color:var(--accent,#7c6af7);cursor:pointer;vertical-align:middle;"/>
-      </label>
-      <button class="btn-attach" id="attachBtn" title="Attach screenshots (max 4, 5 MB each) or CSV files (max 3, 5 MB each)">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-          <path d="M13.5 8.5l-5 5a3.5 3.5 0 0 1-5-5l6-6a2 2 0 0 1 3 3l-6 6a.5.5 0 0 1-.7-.7l5-5"/>
-        </svg>
-      </button>
-      <textarea id="inputBox" class="input-box" rows="1"
-        placeholder="Describe what you're investigating… (Enter to send, Shift+Enter for newline)"></textarea>
-      <button class="btn-send" id="sendBtn">Send</button>
-    </div>
-    <div class="input-hint">Enter to send · Shift+Enter for newline</div>
-  </div>
-</div>
+  <section class="view view-scroll" id="view-alerts" hidden aria-label="Alert details"><div class="panel" id="alertBody"></div></section>
+  <section class="view view-scroll" id="view-cases" hidden aria-label="Case details"><div class="panel" id="caseBody"></div></section>
+  <section class="view view-scroll" id="view-dashboard" hidden aria-label="Dashboard"></section>
+  <section class="view view-scroll" id="view-agents" hidden aria-label="Agents"></section>
+</main>
 
-<!-- Add-to-case modal -->
-<div class="modal-overlay" id="caseModal">
-  <div class="modal">
-    <h3>Attach to case</h3>
-    <div id="caseChoices"></div>
-    <div style="display:flex;gap:8px;margin-top:14px">
-      <input type="text" id="newCaseTitle" placeholder="New case title…"/>
-      <button class="btn-case" id="createCaseBtn">Create</button>
-    </div>
-    <div style="text-align:right;margin-top:12px">
-      <button class="btn-case" onclick="document.getElementById('caseModal').classList.remove('show')">Cancel</button>
-    </div>
+<!-- Add-to-case dialog -->
+<dialog class="modal" id="caseModal" aria-labelledby="caseModalTitle">
+  <h3 id="caseModalTitle">Attach to case</h3>
+  <div id="caseChoices"></div>
+  <div class="modal-new">
+    <label class="sr-only" for="newCaseTitle">New case title</label>
+    <input type="text" class="fld" id="newCaseTitle" placeholder="New case title…"/>
+    <button class="btn-case" id="createCaseBtn" type="button">Create</button>
   </div>
-</div>
+  <div style="text-align:right;margin-top:12px">
+    <button class="btn-case" id="caseCancelBtn" type="button">Cancel</button>
+  </div>
+</dialog>
 
+<!-- Screenshot viewer -->
+<dialog class="lightbox" id="imgDialog" aria-label="Screenshot">
+  <div class="lb-bar"><button class="btn-case" type="button" id="imgDialogClose">Close</button></div>
+  <img id="imgDialogImg" alt="">
+</dialog>
+
+<div class="toast" id="toast" role="alert" hidden></div>
+<div class="sr-only" id="srStatus" role="status" aria-live="polite"></div>
 <script>
+// ─── Helpers ─────────────────────────────────────────────────────
+const $ = id => document.getElementById(id)
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) }
+function fmtTime(t) { try { return new Date(t).toLocaleString() } catch { return '' } }
+function fmtShort(t) { try { return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) } catch { return '' } }
+function fmtAlertTime(t) {
+  const d = new Date(t)
+  if (isNaN(d)) return ''
+  return d.toLocaleString([], d.toDateString() === new Date().toDateString()
+    ? { hour: '2-digit', minute: '2-digit' }
+    : { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+function fmtCount(n) {
+  return n < 10000 ? n.toLocaleString() : new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(n)
+}
+function fmtDur(s) {
+  if (s == null) return '—'
+  return s < 90 ? `${Math.round(s)}s` : s < 5400 ? `${Math.round(s / 60)}m` : s < 172800 ? `${(s / 3600).toFixed(1)}h` : `${Math.round(s / 86400)}d`
+}
+function fmtBytes(n) {
+  return n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`
+}
+function firstLine(text) { return String(text || '').trim().split('\n', 1)[0].slice(0, 60) }
+function isNarrow() { return window.matchMedia('(max-width: 760px)').matches }
+
 // ─── API ──────────────────────────────────────────────────────────
-const api = {
-  async listConvs() {
-    const r = await fetch('/api/conversations', { credentials: 'same-origin' })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async newConv() {
-    const r = await fetch('/api/conversations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-      credentials: 'same-origin'
-    })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async getMessages(id) {
-    const r = await fetch(`/api/conversations/${id}/messages`, { credentials: 'same-origin' })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async deleteConv(id) {
-    const r = await fetch(`/api/conversations/${id}`, { method: 'DELETE', credentials: 'same-origin' })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async send(conversation_id, message, debug = false, images = null) {
-    const body = { message, debug }
-    if (images && images.length) body.images = images
-    const r = await fetch(`/api/conversations/${conversation_id}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      credentials: 'same-origin'
-    })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  // ── Incidents / cases ──
-  async listIncidents() {
-    const r = await fetch('/api/incidents', { credentials: 'same-origin' })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async newIncident(payload) {
-    const r = await fetch('/api/incidents', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload), credentials: 'same-origin'
-    })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async getIncident(id) {
-    const r = await fetch(`/api/incidents/${id}`, { credentials: 'same-origin' })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async updateIncident(id, payload) {
-    const r = await fetch(`/api/incidents/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload), credentials: 'same-origin'
-    })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async deleteIncident(id) {
-    const r = await fetch(`/api/incidents/${id}`, { method: 'DELETE', credentials: 'same-origin' })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async linkConvToIncident(incId, convId) {
-    const r = await fetch(`/api/incidents/${incId}/conversations`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversation_id: convId }), credentials: 'same-origin'
-    })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async unlinkConvFromIncident(incId, convId) {
-    const r = await fetch(`/api/incidents/${incId}/conversations/${convId}`, {
-      method: 'DELETE', credentials: 'same-origin'
-    })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async incidentsForConv(convId) {
-    const r = await fetch(`/api/conversations/${convId}/incidents`, { credentials: 'same-origin' })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  // ── Alert inbox ──
-  async listAlerts(status) {
-    const qs = status ? `?status=${encodeURIComponent(status)}` : ''
-    const r = await fetch(`/api/alerts${qs}`, { credentials: 'same-origin' })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async getAlert(id) {
-    const r = await fetch(`/api/alerts/${id}`, { credentials: 'same-origin' })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async investigateAlert(id) {
-    const r = await fetch(`/api/alerts/${id}/investigate`, { method: 'POST', credentials: 'same-origin' })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async dismissAlert(id) {
-    const r = await fetch(`/api/alerts/${id}/dismiss`, { method: 'POST', credentials: 'same-origin' })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  },
-  async syncAlerts() {
-    const r = await fetch('/api/alerts/sync', { method: 'POST', credentials: 'same-origin' })
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
-  }
+// Every call goes through apiRaw: a 401 anywhere sends the analyst to login once,
+// keeping the current view and unsent drafts so they come back after signing in.
+class ApiError extends Error { constructor(msg, status) { super(msg); this.status = status } }
+
+function errorText(body, status) {
+  try {
+    const j = typeof body === 'string' ? JSON.parse(body) : body
+    const d = j?.detail ?? j?.error ?? j?.message
+    if (typeof d === 'string' && d) return d
+    if (Array.isArray(d)) return d.map(x => x?.msg || String(x)).join('; ')
+  } catch {}
+  if (typeof body === 'string' && body && body.length < 300 && !/^\s*</.test(body)) return body
+  return `Request failed (HTTP ${status})`
 }
 
-// ─── Temperature slider ──────────────────────────────────────────
-;(async () => {
-  const slider = document.getElementById('tempSlider')
-  const label  = document.getElementById('tempVal')
-  // Load saved preference
-  try {
-    const r = await fetch('/api/me/prefs', { credentials: 'same-origin' })
-    if (r.ok) {
-      const d = await r.json()
-      const saved = d?.prefs?.temperature_override
-      if (saved != null) { slider.value = saved; label.textContent = parseFloat(saved).toFixed(2) }
-    }
-  } catch(_) {}
-  // Update label live
-  slider.addEventListener('input', () => {
-    label.textContent = parseFloat(slider.value).toFixed(2)
-  })
-  // Save on release
-  slider.addEventListener('change', async () => {
-    const val = parseFloat(slider.value)
-    label.textContent = val.toFixed(2)
-    try {
-      await fetch('/api/me/prefs', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ prefs: { temperature_override: val } }),
-      })
-    } catch(_) {}
-  })
-})()
+let _redirecting = false
+function toLogin() {
+  if (_redirecting) return
+  _redirecting = true
+  stopTimers()
+  saveDrafts()
+  try { sessionStorage.setItem('ns.returnTo', location.hash || '#/new') } catch {}
+  location.href = '/login'
+}
 
-// ─── DOM refs ────────────────────────────────────────────────────
-const convListEl   = document.getElementById('convList')
-const chatEl       = document.getElementById('chatArea')
-const inputEl      = document.getElementById('inputBox')
-const sendBtn      = document.getElementById('sendBtn')
-const newChatBtn   = document.getElementById('newChatBtn')
-const statusDot    = document.getElementById('statusDot')
-const statusText   = document.getElementById('statusText')
-const debugToggle  = document.getElementById('debugToggle')
-const convTitleEl  = document.getElementById('convTitle')
-const welcomeEl    = document.getElementById('welcomeScreen')
-const adminLink    = document.getElementById('adminLink')
+async function apiRaw(url, opts = {}) {
+  const r = await fetch(url, { credentials: 'same-origin', ...opts })
+  if (r.status === 401) { setTimeout(toLogin, 0); throw new ApiError('Your session expired. Sign in again.', 401) }  // callers restore drafts first
+  return r
+}
 
-let currentConv = null
-let sending = false
+async function apiJSON(url, opts = {}) {
+  if (opts.body !== undefined && typeof opts.body !== 'string') {
+    opts = { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) }, body: JSON.stringify(opts.body) }
+  }
+  const r = await apiRaw(url, opts)
+  const text = await r.text()
+  if (!r.ok) throw new ApiError(errorText(text, r.status), r.status)
+  try { return text ? JSON.parse(text) : {} } catch { return {} }
+}
 
-// ─── Helpers ─────────────────────────────────────────────────────
-function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) }
-function fmtTime(t) { try { return new Date(t).toLocaleString() } catch { return '' } }
-function fmtShort(t) { try { return new Date(t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }) } catch { return '' } }
-function fillInput(text) { inputEl.value = text; inputEl.focus() }
+const enc = encodeURIComponent
+const api = {
+  listConvs: () => apiJSON('/api/conversations'),
+  newConv: title => apiJSON('/api/conversations', { method: 'POST', body: title ? { title } : {} }),
+  getMessages: id => apiJSON(`/api/conversations/${enc(id)}/messages`),
+  deleteConv: id => apiJSON(`/api/conversations/${enc(id)}`, { method: 'DELETE' }),
+  listIncidents: () => apiJSON('/api/incidents'),
+  newIncident: payload => apiJSON('/api/incidents', { method: 'POST', body: payload }),
+  getIncident: id => apiJSON(`/api/incidents/${enc(id)}`),
+  updateIncident: (id, payload) => apiJSON(`/api/incidents/${enc(id)}`, { method: 'PATCH', body: payload }),
+  deleteIncident: id => apiJSON(`/api/incidents/${enc(id)}`, { method: 'DELETE' }),
+  linkConvToIncident: (incId, convId) => apiJSON(`/api/incidents/${enc(incId)}/conversations`, { method: 'POST', body: { conversation_id: convId } }),
+  unlinkConvFromIncident: (incId, convId) => apiJSON(`/api/incidents/${enc(incId)}/conversations/${enc(convId)}`, { method: 'DELETE' }),
+  incidentsForConv: convId => apiJSON(`/api/conversations/${enc(convId)}/incidents`),
+  listAlerts: (status, limit = 100) => apiJSON(`/api/alerts?limit=${limit}${status ? `&status=${enc(status)}` : ''}`),
+  getAlert: id => apiJSON(`/api/alerts/${enc(id)}`),
+  investigateAlert: (id, fork = false) => apiJSON(`/api/alerts/${enc(id)}/investigate${fork ? '?fork=1' : ''}`, { method: 'POST' }),
+  dismissAlert: id => apiJSON(`/api/alerts/${enc(id)}/dismiss`, { method: 'POST' }),
+  syncAlerts: () => apiJSON('/api/alerts/sync', { method: 'POST' }),
+  prefs: () => apiJSON('/api/me/prefs'),
+  savePrefs: prefs => apiJSON('/api/me/prefs', { method: 'PUT', body: { prefs } }),
+  dashboard: hours => apiJSON(`/api/dashboard?hours=${hours}`),
+  agents: () => apiJSON('/api/agents'),
+}
 
-function setStatus(state, text) {
-  statusDot.className = 'status-dot ' + (state === 'online' ? '' : state === 'offline' ? 'offline' : 'thinking')
-  statusText.textContent = text
+// ─── Toast + screen-reader announcements ─────────────────────────
+let _toastTimer = null
+function notify(msg, action) {
+  const t = $('toast')
+  t.replaceChildren(document.createTextNode(msg))
+  if (action) {
+    const a = document.createElement('a')
+    a.href = action.href
+    a.textContent = action.label
+    a.onclick = () => { t.hidden = true }
+    t.append(' ', a)
+  }
+  const x = Object.assign(document.createElement('button'), { type: 'button', className: 'x', textContent: '✕' })
+  x.setAttribute('aria-label', 'Dismiss notification')
+  x.onclick = () => { t.hidden = true }
+  t.append(x)
+  t.hidden = false
+  clearTimeout(_toastTimer)
+  _toastTimer = setTimeout(() => { t.hidden = true }, action ? 9000 : 6000)
+}
+function announce(msg) {
+  const s = $('srStatus')
+  s.textContent = ''
+  setTimeout(() => { s.textContent = msg }, 60)
+}
+
+// ─── Connection status pill ──────────────────────────────────────
+// Derived from state, so the 60s ping can't claim "online" while an investigation runs.
+const conn = { ok: null, user: '', ready: true, role: '' }
+function renderStatus() {
+  const running = [...sessions.values()].filter(s => s.inflight && !s.deleted).length
+  let state, text
+  if (running) { state = 'thinking'; text = running === 1 ? 'Investigating…' : `Investigating (${running})…` }
+  else if (conn.ok === false) { state = 'offline'; text = 'Offline' }
+  else if (conn.ok === null) { state = 'thinking'; text = 'Connecting…' }
+  else { state = 'online'; text = conn.user + (conn.ready ? '' : ' · no LLM key') }
+  $('statusDot').className = 'status-dot' + (state === 'online' ? '' : ' ' + state)
+  $('statusText').textContent = text
 }
 
 // ─── Markdown renderer ───────────────────────────────────────────
+// Text is escaped once, up front; every transform after that works on escaped text,
+// so model or alert content can never inject HTML.
 function renderMarkdown(raw) {
-  // Protect code blocks first
   const blocks = []
-  let s = raw.replace(/```([\s\S]*?)```/g, (_, code) => {
-    blocks.push(`<pre><code>${esc(code)}</code></pre>`)
-    return `\x00BLK${blocks.length - 1}\x00`
+  let s = String(raw ?? '').replace(/\r\n?/g, '\n')
+  s = s.replace(/```(?:[^\n`]*\n)?([\s\S]*?)```/g, (_, code) => {
+    blocks.push(`<pre><code>${esc(code.replace(/\n$/, ''))}</code></pre>`)
+    return `\n\x00${blocks.length - 1}\x00\n`
   })
-
-  // Tables
-  s = s.replace(/((?:\|.+\|\n?)+)/g, tableMatch => {
-    const rows = tableMatch.trim().split('\n').filter(r => r.trim())
-    if (rows.length < 2) return tableMatch
-    const isSep = r => /^\|?[\s\-:|]+\|/.test(r)
-    const parseRow = r => r.replace(/^\||\|$/g, '').split('|').map(c => c.trim())
-    const headers = parseRow(rows[0])
-    const dataRows = rows.filter((r, i) => i > 0 && !isSep(r))
-    let html = '<table><thead><tr>' + headers.map(h => `<th>${esc(h)}</th>`).join('') + '</tr></thead><tbody>'
-    dataRows.forEach(r => {
-      html += '<tr>' + parseRow(r).map(c => `<td>${renderInline(c)}</td>`).join('') + '</tr>'
-    })
-    return html + '</tbody></table>'
-  })
-
-  // SOC section headers with per-section copy button
-  s = s.replace(/^(SECTION\s*1\s*[—–-]+.*?)$/gm,
-    m => `<div class="section-header s1" data-section="1">▸ ${esc(m)}<button class="section-copy" onclick="copySectionContent(this,1)" title="Copy section">⎘</button></div>`)
-  s = s.replace(/^(SECTION\s*2\s*[—–-]+.*?)$/gm,
-    m => `<div class="section-header s2" data-section="2">◈ ${esc(m)}<button class="section-copy" onclick="copySectionContent(this,2)" title="Copy section">⎘</button></div>`)
-  s = s.replace(/^(SECTION\s*3\s*[—–-]+.*?)$/gm,
-    m => `<div class="section-header s3" data-section="3">✦ ${esc(m)}<button class="section-copy" onclick="copySectionContent(this,3)" title="Copy section">⎘</button></div>`)
-
-  // Headings
-  s = s.replace(/^###\s+(.+)$/gm, (_, t) => `<h3>${renderInline(t)}</h3>`)
-  s = s.replace(/^##\s+(.+)$/gm,  (_, t) => `<h2>${renderInline(t)}</h2>`)
-  s = s.replace(/^#\s+(.+)$/gm,   (_, t) => `<h1>${renderInline(t)}</h1>`)
-
-  // HR
-  s = s.replace(/^---+$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:10px 0"/>')
-
-  // Lists
-  s = s.replace(/^[ \t]*[-*]\s+(.+)$/gm, (_, t) => `<li>${renderInline(t)}</li>`)
-  s = s.replace(/(<li>[\s\S]*?<\/li>)(?=\s*(?!<li>))/g, match => `<ul>${match}</ul>`)
-
-  // Paragraphs (double newlines → <p> blocks)
-  s = s.split(/\n{2,}/).map(block => {
-    block = block.trim()
-    if (!block) return ''
-    if (/^<(ul|ol|li|h[1-6]|table|pre|div|hr)/.test(block)) return block
-    if (block.includes('\x00BLK')) return block
-    return `<p>${renderInline(block)}</p>`
-  }).join('\n')
-
-  // Restore code blocks
-  s = s.replace(/\x00BLK(\d+)\x00/g, (_, i) => blocks[+i])
-  return s
+  const lines = esc(s).split('\n')
+  const out = []
+  let para = [], list = null
+  const flushPara = () => { if (para.length) { out.push(`<p>${para.map(renderInline).join('<br>')}</p>`); para = [] } }
+  const flushList = () => {
+    if (list) { out.push(`<${list.type}>${list.items.map(i => `<li>${renderInline(i)}</li>`).join('')}</${list.type}>`); list = null }
+  }
+  const flush = () => { flushPara(); flushList() }
+  const isRow = l => /^\s*\|.*\|\s*$/.test(l)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    let m
+    if ((m = line.match(/^\x00(\d+)\x00$/))) { flush(); out.push(blocks[+m[1]]); continue }
+    if (!line.trim()) { flush(); continue }
+    if ((m = line.match(/^(#{1,3})\s+(.+)$/))) { flush(); out.push(`<h${m[1].length}>${renderInline(m[2])}</h${m[1].length}>`); continue }
+    if ((m = line.match(/^SECTION\s*([123])\s*[—–-]+/))) {
+      flush()
+      const icon = { 1: '▸', 2: '◈', 3: '✦' }[m[1]]
+      out.push(`<div class="section-header s${m[1]}" data-section="${m[1]}">${icon} ${line}<button type="button" class="section-copy" aria-label="Copy section">⎘</button></div>`)
+      continue
+    }
+    if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flush(); out.push('<hr style="border:none;border-top:1px solid var(--border);margin:10px 0"/>'); continue }
+    if (isRow(line) && i + 1 < lines.length && isRow(lines[i + 1])) {
+      flush()
+      const rows = [line]
+      while (i + 1 < lines.length && isRow(lines[i + 1])) rows.push(lines[++i])
+      out.push(renderTable(rows))
+      continue
+    }
+    if ((m = line.match(/^\s*[-*+]\s+(.*)$/))) {
+      flushPara()
+      if (list?.type !== 'ul') { flushList(); list = { type: 'ul', items: [] } }
+      list.items.push(m[1])
+      continue
+    }
+    if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+      flushPara()
+      if (list?.type !== 'ol') { flushList(); list = { type: 'ol', items: [] } }
+      list.items.push(m[1])
+      continue
+    }
+    if (list && /^\s{2,}\S/.test(line)) { list.items[list.items.length - 1] += ' ' + line.trim(); continue }
+    flushList()
+    para.push(line)
+  }
+  flush()
+  return out.join('\n')
 }
 
+function renderTable(rows) {
+  const cells = r => r.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim())
+  const isSep = r => /^\s*\|?[\s\-:|]+\|?\s*$/.test(r)
+  const head = cells(rows[0])
+  const body = rows.slice(1).filter(r => !isSep(r))
+  return `<div class="tbl-wrap"><table><thead><tr>${head.map(h => `<th>${renderInline(h)}</th>`).join('')}</tr></thead><tbody>${
+    body.map(r => `<tr>${cells(r).map(c => `<td>${renderInline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+}
+
+// s is already HTML-escaped.
 function renderInline(s) {
-  s = esc(s)
-  s = s.replace(/`([^`]+)`/g, '<code>$1</code>')
+  const codes = []
+  s = s.replace(/`([^`]+)`/g, (_, c) => { codes.push(`<code>${c}</code>`); return `\x01${codes.length - 1}\x01` })
   s = s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
-  s = s.replace(/\*([^*]+)\*/g, '<i>$1</i>')
-  // Highlight IPs and hashes in monospace
+  s = s.replace(/(^|[^*\w])\*([^*\s][^*]*?)\*(?!\w)/g, '$1<i>$2</i>')
   s = s.replace(/(\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b)/g, '<code>$1</code>')
-  return s
+  return s.replace(/\x01(\d+)\x01/g, (_, i) => codes[+i])
 }
 
-// ─── Per-section copy ────────────────────────────────────────────
-function copySectionContent(btn, sectionNum) {
+function copySectionContent(btn) {
   const header = btn.closest('.section-header')
   if (!header) return
-  // Collect sibling nodes until next section-header or end of bubble
   let text = ''
-  let el = header.nextElementSibling
-  while (el && !el.classList.contains('section-header')) {
+  for (let el = header.nextElementSibling; el && !el.classList.contains('section-header'); el = el.nextElementSibling) {
     text += (el.textContent || '') + '\n'
-    el = el.nextElementSibling
   }
-  navigator.clipboard.writeText(text.trim())
+  copyText(text.trim(), btn, '✓')
+}
+
+function copyText(text, btn, done = 'Copied!') {
   const orig = btn.textContent
-  btn.textContent = '✓'
-  btn.style.opacity = '1'
-  setTimeout(() => { btn.textContent = orig; btn.style.opacity = ''; }, 1500)
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = done
+    setTimeout(() => { btn.textContent = orig }, 1500)
+  }, () => notify('Copy failed: the browser blocked clipboard access'))
 }
 
 // ─── Verdict detection ───────────────────────────────────────────
@@ -1411,431 +1474,1199 @@ function extractVerdict(text) {
   const c = text.match(/\*{0,2}Confidence:?\*{0,2}\s*(Low|Medium|High)/i)
   if (!m) return null
   const verdict = m[1].trim()
-  const conf = c ? c[1] : null
-  let cls, icon
   const vl = verdict.toLowerCase()
-  if (vl.includes('benign'))         { cls = 'benign';       icon = '✓' }
-  else if (vl.includes('malicious')) { cls = 'malicious';    icon = '✕' }
-  else if (vl.includes('suspicious')){ cls = 'suspicious';   icon = '⚠' }
-  else                                { cls = 'inconclusive'; icon = '?' }
-  return { verdict, conf, cls, icon }
+  const [cls, icon] = vl.includes('benign') ? ['benign', '✓'] : vl.includes('malicious') ? ['malicious', '✕']
+    : vl.includes('suspicious') ? ['suspicious', '⚠'] : ['inconclusive', '?']
+  return { verdict, conf: c ? c[1] : null, cls, icon }
+}
+function verdictClass(verdict) {
+  const vl = String(verdict || '').toLowerCase()
+  return vl.includes('benign') ? 'benign' : vl.includes('malicious') ? 'malicious' : vl.includes('suspicious') ? 'suspicious' : 'inconclusive'
 }
 
-// ─── Render message ──────────────────────────────────────────────
-function addMessage(role, content, debugTrace, timestamp, images) {
-  welcomeEl.style.display = 'none'
+// ─── DOM refs ────────────────────────────────────────────────────
+const chatArea    = $('chatArea')
+const chatLog     = $('chatLog')
+const welcomeEl   = $('welcomeScreen')
+const inputEl     = $('inputBox')
+const sendBtn     = $('sendBtn')
+const debugToggle = $('debugToggle')
+const viewTitleEl = $('viewTitle')
+const convList    = $('convList')
 
+function setViewTitle(text) {
+  viewTitleEl.textContent = text
+  document.title = `${text} · NullShift`
+}
+
+// ─── Chat sessions ───────────────────────────────────────────────
+// One session per conversation: its own transcript DOM, investigation state and
+// composer draft. A stream only ever writes into its own session, so navigating
+// away never loses or misplaces a reply, and other chats stay usable meanwhile.
+const sessions = new Map()
+const NEW = 'new'          // composer key for the unsaved new-chat draft
+let lastChatId = null
+
+function getSession(id, title) {
+  let s = sessions.get(id)
+  if (!s) {
+    s = { id, title: '', el: document.createElement('div'), loaded: false, count: 0, inflight: null,
+          indicator: null, pollTimer: null, polling: false, unread: false, scrollTop: null, deleted: false }
+    s.el.className = 'chat-session'
+    sessions.set(id, s)
+  }
+  if (title) s.title = title
+  return s
+}
+
+function isVisible(s) { return route.view === 'chat' && route.id === s.id }
+
+function nearBottom() { return chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight < 80 }
+function scrollChatToEnd() { chatArea.scrollTop = chatArea.scrollHeight }
+
+function buildMessage(role, content, { debugTrace = null, timestamp = null, images = [] } = {}) {
   const wrap = document.createElement('div')
   wrap.className = `msg-wrap ${role}`
 
   const meta = document.createElement('div')
   meta.className = 'msg-meta'
-
   const av = document.createElement('div')
   av.className = 'msg-avatar ' + (role === 'user' ? 'user-av' : 'bot-av')
   av.textContent = role === 'user' ? 'U' : 'L1'
-
+  av.setAttribute('aria-hidden', 'true')
   const ts = document.createElement('div')
   ts.className = 'msg-time'
-  ts.textContent = timestamp ? fmtShort(timestamp) : fmtShort(new Date().toISOString())
-
-  meta.appendChild(av)
-  meta.appendChild(ts)
-
+  ts.textContent = fmtShort(timestamp || new Date().toISOString())
+  meta.append(av, ts)
   if (role !== 'user') {
-    const copyBtn = document.createElement('button')
-    copyBtn.className = 'msg-copy'
-    copyBtn.textContent = '⎘'
-    copyBtn.title = 'Copy message'
-    copyBtn.onclick = () => {
-      navigator.clipboard.writeText(content)
-      copyBtn.textContent = '✓'
-      setTimeout(() => { copyBtn.textContent = '⎘' }, 1500)
-    }
+    const copyBtn = Object.assign(document.createElement('button'), { type: 'button', className: 'msg-copy', textContent: '⎘' })
+    copyBtn.setAttribute('aria-label', 'Copy message')
+    copyBtn.onclick = () => copyText(content, copyBtn, '✓')
     meta.appendChild(copyBtn)
   }
 
   const bubble = document.createElement('div')
   bubble.className = 'bubble'
-
   if (role === 'user') {
-    if (images && images.length) {
+    if (images.length) {
       const strip = document.createElement('div')
       strip.className = 'bubble-images'
-      images.forEach(src => {
-        const img = document.createElement('img')
-        img.className = 'bubble-image'
-        img.src = src
-        img.onclick = () => window.open(src)
-        strip.appendChild(img)
+      images.forEach((src, i) => {
+        const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'bubble-image-btn' })
+        btn.setAttribute('aria-label', `Open screenshot ${i + 1}`)
+        const img = Object.assign(document.createElement('img'), { className: 'bubble-image', src, alt: `Attached screenshot ${i + 1}` })
+        btn.onclick = () => openLightbox(src, `Attached screenshot ${i + 1}`)
+        btn.appendChild(img)
+        strip.appendChild(btn)
       })
       bubble.appendChild(strip)
     }
     bubble.appendChild(document.createTextNode(content))
   } else {
-    // Verdict banner
     const vd = extractVerdict(content)
     if (vd) {
       const banner = document.createElement('div')
       banner.className = `verdict-banner ${vd.cls}`
-      banner.innerHTML = `<span class="verdict-icon">${vd.icon}</span>
-        <span>${esc(vd.verdict)}</span>
+      banner.innerHTML = `<span class="verdict-icon" aria-hidden="true">${vd.icon}</span>
+        <span>Verdict: ${esc(vd.verdict)}</span>
         ${vd.conf ? `<span class="conf-pill">${esc(vd.conf)} confidence</span>` : ''}`
       bubble.appendChild(banner)
     }
-    // Content
     const body = document.createElement('div')
     body.innerHTML = renderMarkdown(content)
     bubble.appendChild(body)
   }
+  wrap.append(meta, bubble)
 
-  wrap.appendChild(meta)
-  wrap.appendChild(bubble)
-
-  // Actions
   if (role === 'assistant') {
     const actions = document.createElement('div')
     actions.className = 'msg-actions'
-
-    const copyBtn = document.createElement('button')
-    copyBtn.className = 'act-btn'
-    copyBtn.textContent = 'Copy'
-    copyBtn.onclick = () => {
-      navigator.clipboard.writeText(content)
-      copyBtn.textContent = 'Copied!'
-      setTimeout(() => { copyBtn.textContent = 'Copy' }, 1600)
-    }
+    const copyBtn = Object.assign(document.createElement('button'), { type: 'button', className: 'act-btn', textContent: 'Copy' })
+    copyBtn.onclick = () => copyText(content, copyBtn)
     actions.appendChild(copyBtn)
-
-    // Debug trace
-    if (debugTrace && Array.isArray(debugTrace) && debugTrace.length) {
+    wrap.appendChild(actions)
+    if (Array.isArray(debugTrace) && debugTrace.length) {
       const dbg = document.createElement('div')
       dbg.className = 'debug-panel'
-
-      const togBtn = document.createElement('button')
-      togBtn.className = 'debug-toggle'
-      togBtn.innerHTML = `<span class="dbg-arrow">▶</span> debug trace (${debugTrace.length} steps)`
-
-      const pre = document.createElement('div')
-      pre.className = 'debug-pre'
-      pre.textContent = JSON.stringify(debugTrace, null, 2)
-
-      togBtn.onclick = () => {
+      const tog = Object.assign(document.createElement('button'), { type: 'button', className: 'debug-toggle' })
+      tog.innerHTML = `<span class="dbg-arrow" aria-hidden="true">▶</span> debug trace (${debugTrace.length} steps)`
+      tog.setAttribute('aria-expanded', 'false')
+      const pre = Object.assign(document.createElement('div'), { className: 'debug-pre', textContent: JSON.stringify(debugTrace, null, 2) })
+      tog.onclick = () => {
         const open = pre.style.display === 'block'
         pre.style.display = open ? 'none' : 'block'
-        togBtn.classList.toggle('open', !open)
+        tog.classList.toggle('open', !open)
+        tog.setAttribute('aria-expanded', String(!open))
       }
-
-      const copyDbg = document.createElement('button')
-      copyDbg.className = 'act-btn'
-      copyDbg.textContent = 'Copy debug'
-      copyDbg.onclick = () => navigator.clipboard.writeText(pre.textContent)
-
-      dbg.appendChild(togBtn)
-      dbg.appendChild(pre)
+      const copyDbg = Object.assign(document.createElement('button'), { type: 'button', className: 'act-btn', textContent: 'Copy debug' })
+      copyDbg.onclick = () => copyText(pre.textContent, copyDbg)
       actions.appendChild(copyDbg)
-      wrap.appendChild(actions)
+      dbg.append(tog, pre)
       wrap.appendChild(dbg)
-    } else {
-      wrap.appendChild(actions)
     }
   }
-
-  chatEl.appendChild(wrap)
-  chatEl.scrollTop = chatEl.scrollHeight
+  return wrap
 }
 
-// Investigation status indicator
-const _statusStages = [
-  'Analyzing query…',
-  'Querying SIEM…',
-  'Retrieving playbooks…',
-  'Generating response…',
-]
-let _statusTimer = null
+function appendMessage(s, role, content, opts = {}) {
+  const stick = !isVisible(s) || role === 'user' || nearBottom()
+  const el = buildMessage(role, content, opts)
+  if (s.indicator) s.el.insertBefore(el, s.indicator)
+  else s.el.appendChild(el)
+  if (isVisible(s) && stick) scrollChatToEnd()
+  return el
+}
 
-function showTyping() {
+function renderTranscript(s, data) {
+  const msgs = data.messages || []
+  const frag = document.createDocumentFragment()
+  msgs.forEach(m => frag.appendChild(buildMessage(m.role, m.content, { timestamp: m.created_at })))
+  if (s.inflight && s.indicator) frag.appendChild(s.indicator)
+  s.el.replaceChildren(frag)
+  s.loaded = true
+  s.count = msgs.length
+  if (data.title) s.title = data.title
+  if (isVisible(s)) { setViewTitle(s.title || 'Investigation'); scrollChatToEnd() }
+}
+
+// ─── In-flight investigations ────────────────────────────────────
+function buildIndicator() {
   const t = document.createElement('div')
   t.className = 'msg-wrap assistant'
-  t.id = 'typingIndicator'
-  const ti = document.createElement('div')
-  ti.className = 'typing-indicator'
-  ti.innerHTML = '<span></span><span></span><span></span>'
-  t.appendChild(ti)
-  const statusLabel = document.createElement('div')
-  statusLabel.id = 'statusStageLabel'
-  statusLabel.style.cssText = 'font-family:var(--font-mono);font-size:11px;color:var(--muted);padding:0 16px 10px;'
-  statusLabel.textContent = _statusStages[0]
-  t.appendChild(statusLabel)
-  chatEl.appendChild(t)
-  chatEl.scrollTop = chatEl.scrollHeight
-
-  // Cycle through stages
-  let stage = 0
-  _statusTimer = setInterval(() => {
-    stage = Math.min(stage + 1, _statusStages.length - 1)
-    const el = document.getElementById('statusStageLabel')
-    if (el) el.textContent = _statusStages[stage]
-  }, 2000)
+  t.setAttribute('aria-hidden', 'true')
+  t.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>' +
+    '<div class="stage" style="font-family:var(--font-mono);font-size:11px;color:var(--muted);padding:0 16px 10px"></div>'
+  return t
 }
 
-function removeTyping() {
-  if (_statusTimer) { clearInterval(_statusTimer); _statusTimer = null }
-  const t = document.getElementById('typingIndicator')
-  if (t) t.remove()
+function setInflight(s, { stage = 'Working…', since = null, remote = false } = {}) {
+  s.inflight = { stage, since: (since && Date.parse(since)) || Date.now(), remote, run: since || null }
+  if (!s.indicator) s.indicator = buildIndicator()
+  s.el.appendChild(s.indicator)
+  updateIndicator(s)
+  if (isVisible(s) && nearBottom()) scrollChatToEnd()
+  renderStatus(); renderList(); updateComposer()
+  watchInflight()
 }
 
-// ─── Conversation list ───────────────────────────────────────────
-let _allConvs = []
-
-function verdictDotHtml(verdict) {
-  if (!verdict) return ''
-  const vl = verdict.toLowerCase()
-  let cls = ''
-  if (vl.includes('benign'))      cls = 'vd-benign'
-  else if (vl.includes('malicious')) cls = 'vd-malicious'
-  else if (vl.includes('suspicious')) cls = 'vd-suspicious'
-  else cls = 'vd-inconclusive'
-  return `<span class="verdict-dot ${cls}" title="${esc(verdict)}"></span>`
+function updateIndicator(s) {
+  if (!s.indicator || !s.inflight) return
+  const secs = Math.max(0, Math.round((Date.now() - s.inflight.since) / 1000))
+  s.indicator.querySelector('.stage').textContent = `${s.inflight.stage} · ${secs}s`
 }
 
-function renderConvList(items) {
-  _allConvs = items
-  const q = (document.getElementById('convSearch')?.value || '').toLowerCase().trim()
-  const filtered = q ? items.filter(it => (it.title || '').toLowerCase().includes(q)) : items
-  convListEl.innerHTML = ''
-  if (!filtered.length) {
-    convListEl.innerHTML = `<div style="padding:16px 14px;font-size:12px;color:var(--muted)">${q ? 'No matches' : 'No conversations yet'}</div>`
+function clearInflight(s) {
+  // Remember which run just ended, so a snapshot sent before it ended can't bring it back.
+  if (s.inflight) { s.doneRun = s.inflight.run; s.doneAt = Date.now() }
+  s.inflight = null
+  s.indicator?.remove()
+  s.indicator = null
+  stopPoll(s)
+  renderStatus(); renderList(); updateComposer()
+  watchInflight()
+}
+
+// Follow a job the server is running without a live stream of its own (after a reload,
+// a dropped connection, another tab, or an agent). Poll every 3 s until the reply is
+// saved, or until the /api/inflight stream lists the job; from then on the stream says
+// when it ends. (A short job can end before the stream ever lists it.)
+function startPoll(s) {
+  watchInflight()
+  if (!s.pollTimer && !(live.ok && s.id in live.pending)) s.pollTimer = setInterval(() => pollSession(s), 3000)
+}
+function stopPoll(s) { clearInterval(s.pollTimer); s.pollTimer = null }
+
+// ─── Live in-flight stream ───────────────────────────────────────
+// One stream per visible tab lists every investigation this analyst has running (this tab's,
+// other tabs', agents'). It is open while something runs here, and for a minute after.
+// Hidden tabs hold none (all tabs share the browser's few connections per host). If it
+// fails, goes silent, ends early or the server lacks it, remote chats fall back to polling.
+const live = { ctl: null, ok: false, pending: {}, seen: new Set(), lastData: 0, retryMs: 0, retryTimer: null, idleTimer: null }
+const LIVE_IDLE_MS = 60_000, LIVE_MAX_S = 300, LIVE_SILENT_MS = 40_000  // the server pings after 15 s of quiet
+const goneIds = new Set()  // deleted chats: a stale snapshot must not bring them back
+
+function anyRunning() { return [...sessions.values()].some(s => s.inflight && !s.deleted) }
+function pollRemote() { sessions.forEach(s => { if (s.inflight?.remote && !s.deleted) startPoll(s) }) }
+
+function watchInflight() {
+  if (document.hidden) return  // remote chats poll meanwhile (see the visibilitychange handler)
+  if (anyRunning()) {
+    clearTimeout(live.idleTimer); live.idleTimer = null
+    if (!live.ctl && !live.retryTimer) openInflight()
+  } else if (live.ctl && !live.idleTimer) {
+    live.idleTimer = setTimeout(() => { live.idleTimer = null; if (!anyRunning()) closeInflight() }, LIVE_IDLE_MS)
+  }
+}
+
+function closeInflight() {
+  clearTimeout(live.retryTimer); clearTimeout(live.idleTimer)
+  live.retryTimer = live.idleTimer = null
+  const ctl = live.ctl
+  live.ctl = null
+  live.ok = false
+  live.pending = {}
+  ctl?.abort()
+}
+
+async function openInflight() {
+  const ctl = live.ctl = new AbortController()
+  const opened = live.lastData = Date.now()
+  let healthy = false, ended = false
+  try {
+    const r = await apiRaw('/api/inflight', { signal: ctl.signal, headers: { Accept: 'text/event-stream' } })
+    if (!r.ok || !/text\/event-stream/.test(r.headers.get('Content-Type') || '')) throw new Error('no in-flight stream')
+    const reader = r.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    while (live.ctl === ctl) {
+      const { done, value } = await reader.read()
+      if (done) { ended = true; break }
+      live.lastData = Date.now()
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop()
+      for (const raw of lines) {
+        const line = raw.replace(/\r$/, '')
+        if (live.ctl !== ctl) break
+        if (line.startsWith('data:')) {
+          let ev
+          try { ev = JSON.parse(line.slice(5)) } catch { continue }
+          if (ev?.type !== 'pending' || !ev.pending || typeof ev.pending !== 'object') continue
+          if (!healthy) { healthy = true; live.ok = true; live.retryMs = 0 }
+          applyPending(ev.pending)
+        } else if (line.startsWith(':') && healthy) reconcileRemote()  // heartbeat: retry a finish that failed to load
+      }
+    }
+  } catch {}
+  if (live.ctl !== ctl) return  // closed on purpose
+  live.ctl = null
+  live.ok = false
+  if (ended && healthy && Date.now() - opened >= (LIVE_MAX_S - 20) * 1000 && !document.hidden) { watchInflight(); return }  // the server's regular cut-off
+  // Failed, went silent, ended early, or not there: try the stream again later and poll the remote chats meanwhile.
+  live.retryMs = Math.min(live.retryMs ? live.retryMs * 2 : 5000, 120_000)
+  live.retryTimer = setTimeout(() => { live.retryTimer = null; watchInflight() }, live.retryMs)
+  pollRemote()
+}
+
+// The snapshot is the full set of running chats: { id: { stage, since } }.
+function applyPending(pending) {
+  live.pending = pending
+  live.seen = new Set(Object.keys(pending))
+  let added = false
+  for (const [id, p] of Object.entries(pending)) {
+    const s = sessions.get(id)
+    if (s?.inflight) {
+      if (p?.since) s.inflight.run = p.since
+      if (!s.inflight.remote) continue  // its own stream reports progress
+      stopPoll(s)  // the stream follows it now
+      if (p?.stage) s.inflight.stage = p.stage
+      if (p?.since && Date.parse(p.since)) s.inflight.since = Date.parse(p.since)
+      updateIndicator(s)
+    } else if (!goneIds.has(id) && !endedHere(s, p)) {
+      // Started elsewhere (another tab or an agent).
+      const known = listData.chat.find(c => c.id === id)
+      setInflight(getSession(id, known?.title), { stage: p?.stage || 'Running…', since: p?.since, remote: true })
+      added = true
+    }
+  }
+  reconcileRemote()
+  if (added) refreshList('chat')
+}
+
+// A snapshot or list sent just before a run ended here can still show that run. Its start
+// time (`since`) tells it apart from a new run in the same chat.
+function endedHere(s, p) {
+  return !!s && (s.doneRun && p?.since ? p.since === s.doneRun : Date.now() - (s.doneAt || 0) < 5000)
+}
+
+// Remote chats the server no longer lists as running are done: load the reply.
+function reconcileRemote() {
+  sessions.forEach(s => { if (s.inflight?.remote && !s.deleted && !(s.id in live.pending)) pollSession(s) })
+}
+
+async function pollSession(s) {
+  if (s.polling || s.deleted) return
+  s.polling = true
+  try {
+    const d = await api.getMessages(s.id)
+    if (d.pending) {
+      if (s.inflight) { s.inflight.stage = d.pending.stage || s.inflight.stage; updateIndicator(s) }
+      return
+    }
+    const visible = isVisible(s)
+    const grew = (d.messages || []).length > s.count
+    clearInflight(s)
+    renderTranscript(s, d)
+    if (grew && !visible) markUnread(s, false)
+    else if (visible) announce('Reply received')
+    refreshList('chat')
+  } catch (e) {
+    if (e.status === 404) { goneIds.add(s.id); stopPoll(s); clearInflight(s) }
+  } finally {
+    s.polling = false
+  }
+}
+
+function markUnread(s, failed) {
+  if (s.deleted) return
+  s.unread = true
+  renderList()
+  notify(`${failed ? 'Investigation failed' : 'Reply ready'}: ${s.title || 'investigation'}`, { label: 'Open', href: `#/chat/${enc(s.id)}` })
+}
+
+// An error event can mean "the stream gave up, the job didn't" (the 3-minute cap): keep following it.
+async function failOrFollow(s, text) {
+  let d = null
+  try { d = await api.getMessages(s.id) } catch {}
+  if (d?.pending && s.inflight && !s.deleted) {
+    s.inflight.remote = true
+    s.inflight.stage = d.pending.stage || 'Still investigating…'
+    if (d.pending.since) s.inflight.run = d.pending.since
+    updateIndicator(s)
+    startPoll(s)
     return
   }
-  filtered.forEach(it => {
-    const d = document.createElement('div')
-    d.className = 'conv-item' + (currentConv === it.id ? ' active' : '')
-    d.dataset.convId = it.id
-    d.onclick = () => loadConversation(it.id)
-    d.innerHTML = `
-      <div style="display:flex;align-items:flex-start;gap:6px;">
-        ${verdictDotHtml(it.last_verdict)}
-        <div class="ctitle" style="flex:1">${esc(it.title || 'Untitled')}</div>
-      </div>
-      <div class="ctime">${fmtTime(it.updated_at || '')}</div>`
-    const btn = document.createElement('button')
-    btn.className = 'del-btn'
-    btn.textContent = '✕'
-    btn.title = 'Delete conversation'
-    btn.onclick = e => { e.stopPropagation(); deleteConversation(it.id) }
-    d.appendChild(btn)
-    convListEl.appendChild(d)
-  })
+  finishReply(s, '⚠ ' + text, null, true)
 }
 
-document.getElementById('convSearch').addEventListener('input', () => {
-  if (sideTab === 'cases') renderIncidentList(_allIncs)
-  else if (sideTab === 'alerts') renderAlertList(_allAlerts)
-  else renderConvList(_allConvs)
-})
+function finishReply(s, text, trace, failed = false) {
+  clearInflight(s)
+  if (s.deleted) return
+  if (text) { appendMessage(s, 'assistant', text, { debugTrace: trace }); s.count++ }
+  if (isVisible(s)) announce(failed ? 'The investigation failed' : 'Reply received')
+  else markUnread(s, failed)
+  refreshList('chat')
+}
 
-async function refreshList() {
+// ─── Composer (per-conversation drafts) ──────────────────────────
+let composerKey = null  // so the first useComposer() always loads its (restored) draft
+let pendingImages = []
+let pendingFiles = []      // CSV uploads: { name, content, size }
+let imageReads = 0         // images still being read (limit counts them too)
+const drafts = new Map()   // key -> { text, images, files }
+const MAX_CSV_FILES = 3, MAX_CSV_MB = 5  // mirror the server-side limits
+
+function saveComposer() {
+  if (inputEl.value || pendingImages.length || pendingFiles.length) {
+    drafts.set(composerKey, { text: inputEl.value, images: pendingImages, files: pendingFiles })
+  } else drafts.delete(composerKey)
+}
+function useComposer(key) {
+  if (key !== composerKey) {
+    saveComposer()
+    composerKey = key
+    const d = drafts.get(key) || { text: '', images: [], files: [] }
+    inputEl.value = d.text
+    pendingImages = [...d.images]
+    pendingFiles = [...d.files]
+    autoGrow()
+    renderPreviewStrip()
+  }
+  updateComposer()
+}
+function restoreDraft(key, text, images, files) {
+  if (key === composerKey) {
+    inputEl.value = text + (inputEl.value ? '\n' + inputEl.value : '')
+    pendingImages = [...images, ...pendingImages]
+    pendingFiles = [...files, ...pendingFiles]
+    autoGrow(); renderPreviewStrip()
+  } else {
+    const d = drafts.get(key) || { text: '', images: [], files: [] }
+    drafts.set(key, { text: text + (d.text ? '\n' + d.text : ''), images: [...images, ...d.images], files: [...files, ...d.files] })
+  }
+}
+// Unsent text survives a reload or a trip through the login page.
+// They are tagged with the analyst, and dropped if someone else signs in (see ping).
+let draftsUser = ''
+function saveDrafts() {
+  if (composerKey != null) saveComposer()
+  const texts = {}
+  drafts.forEach((d, k) => { if (d.text) texts[k] = d.text })
+  try { sessionStorage.setItem('ns.drafts', JSON.stringify({ user: conn.user, texts })) } catch {}
+}
+function loadDrafts() {
   try {
-    if (sideTab === 'cases') {
-      const data = await api.listIncidents()
-      renderIncidentList(data.incidents || [])
-    } else if (sideTab === 'alerts') {
-      const data = await api.listAlerts()
-      updateAlertBadge(data.new_count || 0)
-      // Polled every second: only touch the DOM when the inbox actually changed.
-      const sig = JSON.stringify(data.alerts)
-      if (sig !== _alertsSig) { _alertsSig = sig; renderAlertList(data.alerts || []) }
-    } else {
-      const data = await api.listConvs()
-      renderConvList(data.conversations || [])
-    }
+    const saved = JSON.parse(sessionStorage.getItem('ns.drafts') || '{}')
+    draftsUser = saved.user || ''
+    Object.entries(saved.texts || {}).forEach(([k, text]) => drafts.set(k, { text, images: [], files: [] }))
+    sessionStorage.removeItem('ns.drafts')
   } catch {}
 }
 
-// ─── Cases (incidents) ────────────────────────────────────────────
-let sideTab = 'chats'
-let _allIncs = []
-let _allAlerts = []
-let _alertsSig = null
-let currentIncident = null
-
-const tabChatsEl  = document.getElementById('tabChats')
-const tabCasesEl  = document.getElementById('tabCases')
-const tabAlertsEl = document.getElementById('tabAlerts')
-const alertSyncBtn = document.getElementById('alertSyncBtn')
-
-function setSideTab(tab) {
-  sideTab = tab
-  _alertsSig = null
-  tabChatsEl.classList.toggle('active', tab === 'chats')
-  tabCasesEl.classList.toggle('active', tab === 'cases')
-  tabAlertsEl.classList.toggle('active', tab === 'alerts')
-  alertSyncBtn.style.display = tab === 'alerts' ? '' : 'none'
-  document.getElementById('convSearch').placeholder =
-    tab === 'cases' ? 'Search cases…' : tab === 'alerts' ? 'Search alerts…' : 'Search investigations…'
-  refreshList()
+function updateComposer() {
+  const s = composerKey !== NEW ? sessions.get(composerKey) : null
+  const busy = !!s?.inflight
+  sendBtn.disabled = busy || !!s?.loading
+  const notice = $('composerNotice')
+  notice.hidden = !busy
+  notice.textContent = busy ? 'An investigation is running in this chat. You can type your next question; Send unlocks when it finishes.' : ''
 }
-tabChatsEl.onclick  = () => setSideTab('chats')
-tabCasesEl.onclick  = () => setSideTab('cases')
-tabAlertsEl.onclick = () => setSideTab('alerts')
-alertSyncBtn.onclick = async () => {
-  alertSyncBtn.disabled = true
-  alertSyncBtn.textContent = 'Syncing…'
-  try { await api.syncAlerts() } catch (e) { alert('Refresh failed: ' + e.message) }
-  alertSyncBtn.disabled = false
-  alertSyncBtn.textContent = 'Refresh'
-  refreshList()
+
+function autoGrow() {
+  inputEl.style.height = 'auto'
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + 'px'
 }
+
+function renderPreviewStrip() {
+  const strip = $('previewStrip')
+  strip.replaceChildren()
+  strip.hidden = !pendingImages.length && !pendingFiles.length
+  pendingFiles.forEach((f, i) => {
+    const chip = Object.assign(document.createElement('div'), { className: 'file-chip' })
+    const name = Object.assign(document.createElement('span'), { className: 'name', textContent: f.name, title: f.name })
+    const kind = Object.assign(document.createElement('span'), { className: 'kind', textContent: 'CSV' })
+    const size = Object.assign(document.createElement('span'), { className: 'size', textContent: fmtBytes(f.size) })
+    const rm = Object.assign(document.createElement('button'), { type: 'button', className: 'rm', textContent: '✕' })
+    rm.setAttribute('aria-label', `Remove ${f.name}`)
+    rm.onclick = () => { pendingFiles.splice(i, 1); renderPreviewStrip(); inputEl.focus() }
+    chip.append(kind, name, size, rm)
+    strip.appendChild(chip)
+  })
+  pendingImages.forEach((src, i) => {
+    const thumb = Object.assign(document.createElement('div'), { className: 'img-thumb' })
+    const img = Object.assign(document.createElement('img'), { src, alt: `Screenshot ${i + 1} to send` })
+    const rm = Object.assign(document.createElement('button'), { type: 'button', className: 'rm', textContent: '✕' })
+    rm.setAttribute('aria-label', `Remove screenshot ${i + 1}`)
+    rm.onclick = () => { pendingImages.splice(i, 1); renderPreviewStrip(); inputEl.focus() }
+    thumb.append(img, rm)
+    strip.appendChild(thumb)
+  })
+}
+
+let visionCfg = { supported: null, provider_note: '', max_images: 4, max_size_mb: 5 }
+function applyVisionHint(cfg) {
+  visionCfg = { ...visionCfg, ...cfg }
+  const btn = $('attachBtn')
+  btn.title = `${cfg.provider_note || 'Attach screenshots'} · CSV files (max ${MAX_CSV_FILES}, ${MAX_CSV_MB} MB each) are analyzed as data`
+  btn.style.borderColor = cfg.supported === false ? 'var(--orange)' : cfg.supported == null ? 'var(--yellow)' : ''
+  btn.style.color = btn.style.borderColor
+}
+
+$('attachBtn').onclick = () => $('fileInput').click()
+$('fileInput').onchange = e => {
+  const key = composerKey
+  let csvCount = pendingFiles.length
+  const add = fn => { if (key === composerKey) fn(); else { const d = drafts.get(key) || { text: '', images: [], files: [] }; drafts.set(key, d); fn(d) } }
+  Array.from(e.target.files || []).forEach(file => {
+    if (/\.csv$/i.test(file.name) || file.type === 'text/csv') {
+      if (csvCount >= MAX_CSV_FILES) { notify(`Max ${MAX_CSV_FILES} CSV files per message`); return }
+      if (file.size > MAX_CSV_MB * 1024 * 1024) { notify(`${file.name} is too large (max ${MAX_CSV_MB} MB)`); return }
+      csvCount++
+      const reader = new FileReader()
+      reader.onload = ev => add(d => {
+        const f = { name: file.name, content: ev.target.result, size: file.size }
+        if (d) d.files.push(f); else { pendingFiles.push(f); renderPreviewStrip() }
+      })
+      reader.readAsText(file)
+      return
+    }
+    if (pendingImages.length + imageReads >= visionCfg.max_images) { notify(`Max ${visionCfg.max_images} images per message (set by admin)`); return }
+    if (file.size > visionCfg.max_size_mb * 1024 * 1024) { notify(`Image too large (admin limit: ${visionCfg.max_size_mb} MB per image)`); return }
+    imageReads++
+    const reader = new FileReader()
+    reader.onload = ev => add(d => {
+      if (d) d.images.push(ev.target.result); else { pendingImages.push(ev.target.result); renderPreviewStrip() }
+    })
+    reader.onloadend = () => { imageReads-- }
+    reader.readAsDataURL(file)
+  })
+  e.target.value = ''
+}
+
+// ─── Send ────────────────────────────────────────────────────────
+async function send() {
+  const key = composerKey
+  const text = inputEl.value.trim()
+  const images = [...pendingImages], files = [...pendingFiles]
+  if (!text && !images.length && !files.length) return
+  if (key !== NEW && (sessions.get(key)?.inflight || sessions.get(key)?.loading)) return  // loading: the transcript is about to be replaced
+  // Take the composer contents now; they come back if the message is rejected.
+  inputEl.value = ''
+  pendingImages = []; pendingFiles = []
+  drafts.delete(key)
+  autoGrow(); renderPreviewStrip()
+  let convId = key === NEW ? null : key
+  let restoreKey = key
+  if (!convId) {
+    sendBtn.disabled = true
+    try {
+      const title = firstLine(text) || (files[0] ? `CSV: ${files[0].name}` : 'Screenshot analysis')
+      const nc = await api.newConv(title)
+      convId = nc.id
+      const s = getSession(convId, nc.title || title)
+      s.loaded = true
+      // Still looking at the draft? Then this new chat is what's on screen now.
+      if (route.view === 'chat' && !route.id) {
+        const keep = document.activeElement === inputEl
+        navigate(`#/chat/${enc(convId)}`, { replace: true })
+        if (keep) inputEl.focus({ preventScroll: true })
+        restoreKey = convId  // a rejected message comes back where the analyst is looking
+      }
+    } catch (e) {
+      restoreDraft(key, text, images, files)
+      updateComposer()
+      if (e.status !== 401) notify(`Could not start the investigation: ${e.message}`)
+      return
+    }
+  }
+  await sendInConv(convId, text, images, files, restoreKey)
+}
+
+// Send a message into a specific conversation, whatever is on screen.
+async function sendInConv(convId, text, images = [], files = [], restoreKey = null) {
+  const s = getSession(convId)
+  if (s.inflight) { notify('An investigation is already running in that chat.'); return false }
+  const shown = [text, ...files.map(f => `[Attached CSV: ${f.name}]`)].filter(Boolean).join('\n')
+  const bubble = appendMessage(s, 'user', shown, { images })
+  s.count++
+  setInflight(s, { stage: 'Starting…' })
+  announce('Investigation started')
+  if (!s.title || s.title === 'New chat') { s.title = firstLine(text) || s.title; if (isVisible(s)) setViewTitle(s.title) }
+  const rollback = msg => {
+    bubble.remove(); s.count--
+    clearInflight(s)
+    if (restoreKey) restoreDraft(restoreKey, text, images, files)
+    if (msg) notify(msg)
+  }
+  let gotResponse = false, terminal = false
+  try {
+    const body = { message: text, debug: !!debugToggle.checked }
+    if (images.length) body.images = images
+    if (files.length) body.files = files.map(({ name, content }) => ({ name, content }))
+    const resp = await apiRaw(`/api/conversations/${enc(convId)}/messages/stream`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
+    gotResponse = true
+    if (resp.status === 409) {
+      // Already running (another tab or an agent): follow that job instead.
+      const msg = errorText(await resp.text(), 409)
+      bubble.remove(); s.count--
+      if (restoreKey) restoreDraft(restoreKey, text, images, files)
+      s.inflight.remote = true
+      s.inflight.stage = 'Running…'
+      startPoll(s)
+      terminal = true
+      notify(msg)
+      return false
+    }
+    if (!resp.ok) { terminal = true; rollback(`Not sent: ${errorText(await resp.text(), resp.status)}`); return false }
+    refreshList('chat')  // the server has stored the question and titled the chat
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    const handle = line => {
+      if (!line.startsWith('data: ')) return
+      let ev
+      try { ev = JSON.parse(line.slice(6)) } catch { return }
+      if (ev.type === 'status') { if (s.inflight) { s.inflight.stage = ev.text; updateIndicator(s) } }
+      else if (ev.type === 'done') { terminal = true; finishReply(s, ev.reply, ev.debug_trace) }
+      else if (ev.type === 'error') { terminal = true; failOrFollow(s, ev.text) }
+    }
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop()
+      lines.forEach(handle)
+    }
+    buf += decoder.decode()
+    if (buf.trim()) handle(buf.trim())
+  } catch (e) {
+    if (e.status === 401) { terminal = true; rollback(''); return false }
+    if (!gotResponse) { terminal = true; rollback(`Could not reach NullShift: ${e.message}`); return false }
+  } finally {
+    // The stream dropped before the reply: the server keeps working and saves it, so follow along.
+    if (!terminal && s.inflight && !s.deleted) {
+      s.inflight.remote = true
+      s.inflight.stage = 'Still investigating (reconnecting)…'
+      updateIndicator(s)
+      startPoll(s)
+    }
+    updateComposer()
+    renderStatus()
+  }
+  return true
+}
+
+sendBtn.onclick = send
+inputEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send() }
+})
+inputEl.addEventListener('input', autoGrow)
+welcomeEl.addEventListener('click', e => {
+  const b = e.target.closest('[data-hint]')
+  if (b) { inputEl.value = b.dataset.hint; autoGrow(); inputEl.focus() }
+})
+chatLog.addEventListener('click', e => {
+  const b = e.target.closest('.section-copy')
+  if (b) copySectionContent(b)
+})
+
+function openLightbox(src, alt) {
+  const dlg = $('imgDialog')
+  $('imgDialogImg').src = src
+  $('imgDialogImg').alt = alt
+  dlg.showModal()
+}
+$('imgDialogClose').onclick = () => $('imgDialog').close()
+$('imgDialog').addEventListener('click', e => { if (e.target === $('imgDialog')) $('imgDialog').close() })
+
+// Temperature: saved per analyst
+;(async () => {
+  const slider = $('tempSlider'), label = $('tempVal')
+  try {
+    const saved = (await api.prefs())?.prefs?.temperature_override
+    if (saved != null) { slider.value = saved; label.textContent = parseFloat(saved).toFixed(2) }
+  } catch {}
+  slider.addEventListener('input', () => { label.textContent = parseFloat(slider.value).toFixed(2) })
+  slider.addEventListener('change', () => {
+    api.savePrefs({ temperature_override: parseFloat(slider.value) }).catch(e => notify(`Could not save temperature: ${e.message}`))
+  })
+})()
+
+// ─── List pane: investigations / alerts / cases ──────────────────
+const LISTS = {
+  chat:   { title: 'Investigations', search: 'Search investigations…', empty: 'No investigations yet. Start one with “New”.' },
+  alerts: { title: 'Alerts', search: 'Search alerts…', empty: 'No alerts. Point your SIEM webhook at POST /api/alerts/ingest.' },
+  cases:  { title: 'Cases', search: 'Search cases…', empty: 'No cases yet. Open an investigation and press “+ Case”.' },
+}
+const listData = { chat: [], alerts: [], cases: [] }
+const listQuery = { chat: '', alerts: '', cases: '' }
+const listSeq = { chat: 0, alerts: 0, cases: 0 }
+const listSig = { chat: null, alerts: null, cases: null }
+const listLoaded = { chat: false, alerts: false, cases: false }
+const alertsMeta = { limit: 100, total: null, note: '' }
+let listSection = 'chat'
+const listSearch = $('listSearch')
 
 function statusBadgeHtml(status) {
   return `<span class="case-status st-${esc(status)}">${esc(status)}</span>`
 }
-
-function renderIncidentList(items) {
-  _allIncs = items
-  const q = (document.getElementById('convSearch')?.value || '').toLowerCase().trim()
-  const filtered = q ? items.filter(it =>
-    (it.title || '').toLowerCase().includes(q) ||
-    (it.case_number || '').toLowerCase().includes(q)) : items
-  convListEl.innerHTML = ''
-  if (!filtered.length) {
-    convListEl.innerHTML = `<div style="padding:16px 14px;font-size:12px;color:var(--muted)">${q ? 'No matches' : 'No cases yet. Open an investigation and press “+ Case”.'}</div>`
-    return
-  }
-  filtered.forEach(it => {
-    const d = document.createElement('div')
-    d.className = 'conv-item' + (currentIncident === it.id ? ' active' : '')
-    d.onclick = () => openIncident(it.id)
-    d.innerHTML = `
-      <div style="display:flex;align-items:flex-start;gap:6px;">
-        <span class="sev-dot sev-${esc(it.severity)}" title="${esc(it.severity)}"></span>
-        <div class="ctitle" style="flex:1">${esc(it.title || 'Untitled case')}</div>
-      </div>
-      <div class="ctime">${esc(it.case_number)} · ${it.conversation_count || 0} chat${(it.conversation_count || 0) === 1 ? '' : 's'} ${statusBadgeHtml(it.status)}</div>`
-    const btn = document.createElement('button')
-    btn.className = 'del-btn'
-    btn.textContent = '✕'
-    btn.title = 'Delete case'
-    btn.onclick = e => { e.stopPropagation(); deleteIncident(it.id) }
-    d.appendChild(btn)
-    convListEl.appendChild(d)
-  })
-}
-
-async function deleteIncident(id) {
-  if (!confirm('Delete this case? Linked conversations are kept.')) return
-  try {
-    await api.deleteIncident(id)
-    if (currentIncident === id) showWelcome()
-    refreshList()
-  } catch {}
-}
-
-// ─── Alert inbox ──────────────────────────────────────────────────
-function updateAlertBadge(count) {
-  const el = document.getElementById('alertCount')
-  el.textContent = count > 99 ? '99+' : String(count)
-  el.style.display = count > 0 ? '' : 'none'
-}
-
 function alertStatusBadgeHtml(status) {
   const cls = status === 'new' ? 'st-open' : status === 'investigating' ? 'st-investigating' : 'st-closed'
   return `<span class="case-status ${cls}">${esc(status)}</span>`
 }
+function sevTag(sev) { return `<span class="tag tag-${esc(sev)}">${esc(sev)}</span>` }
+function verdictTag(v) { return v ? `<span class="tag tag-${verdictClass(v)}" title="Last verdict">${esc(v)}</span>` : '' }
 
-function renderAlertList(items) {
-  _allAlerts = items
-  const q = (document.getElementById('convSearch')?.value || '').toLowerCase().trim()
-  const filtered = q ? items.filter(it =>
-    (it.title || '').toLowerCase().includes(q) ||
-    (it.source || '').toLowerCase().includes(q)) : items
-  convListEl.innerHTML = ''
-  if (!filtered.length) {
-    convListEl.innerHTML = `<div style="padding:16px 14px;font-size:12px;color:var(--muted)">${q ? 'No matches' : 'No alerts. Point your SIEM webhook at POST /api/alerts/ingest.'}</div>`
-    return
-  }
-  filtered.forEach(it => {
-    const d = document.createElement('div')
-    d.className = 'conv-item'
-    d.style.opacity = it.status === 'dismissed' ? '0.5' : ''
-    d.onclick = () => openAlert(it.id)
-    d.innerHTML = `
-      <div style="display:flex;align-items:flex-start;gap:6px;">
-        <span class="sev-dot sev-${esc(it.severity)}" title="${esc(it.severity)}"></span>
-        <div class="ctitle" style="flex:1">${esc(it.title || 'Untitled alert')}</div>
-      </div>
-      <div class="ctime">${esc(it.source)} · ${fmtTime(it.created_at || '')} ${alertStatusBadgeHtml(it.status)}</div>`
-    convListEl.appendChild(d)
-  })
+function updateAlertBadge(count) {
+  const el = $('alertCount')
+  el.textContent = count > 99 ? '99+' : String(count)
+  el.hidden = !(count > 0)
+  el.title = `${count} new alert${count === 1 ? '' : 's'}`
 }
 
-async function openAlert(id) {
-  let alert_
-  try { alert_ = await api.getAlert(id) } catch { return }
-  currentIncident = null
-  currentConv = null
-  updateCaseControls()
-  convTitleEl.textContent = `Alert — ${alert_.title}`
-
-  chatEl.innerHTML = ''
-  chatEl.appendChild(welcomeEl)
-  welcomeEl.style.display = 'none'
-
-  let payloadPretty = alert_.payload_json || '{}'
-  try { payloadPretty = JSON.stringify(JSON.parse(payloadPretty), null, 2) } catch {}
-
-  const panel = document.createElement('div')
-  panel.className = 'case-panel'
-  panel.innerHTML = `
-    <div class="case-card">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="sev-dot sev-${esc(alert_.severity)}"></span>
-        <h2 style="margin:0">${esc(alert_.title)}</h2>
-      </div>
-      <div class="alert-meta">
-        <span>Source: <b>${esc(alert_.source)}</b></span>
-        <span>Severity: <b>${esc(alert_.severity)}</b></span>
-        <span>Status: <b>${esc(alert_.status)}</b></span>
-        <span>Received: <b>${fmtTime(alert_.created_at)}</b></span>
-      </div>
-      ${alert_.agent_note ? `<div class="alert-meta"><span>Agent: <b>${esc(alert_.agent_note)}</b></span></div>` : ''}
-      <div class="alert-payload">${esc(payloadPretty)}</div>
-      <div class="case-actions">
-        ${alert_.status !== 'dismissed' ? '<button class="btn-case" id="alertInvestigateBtn">Investigate</button>' : ''}
-        ${alert_.status === 'new' ? '<button class="btn-case danger" id="alertDismissBtn">Dismiss</button>' : ''}
-        ${alert_.conversation_id ? '<button class="btn-case" id="alertOpenConvBtn">Open investigation chat</button>' : ''}
-      </div>
-    </div>`
-  chatEl.appendChild(panel)
-
-  const invBtn = panel.querySelector('#alertInvestigateBtn')
-  if (invBtn) invBtn.onclick = async () => {
-    invBtn.disabled = true
-    try {
-      const res = await api.investigateAlert(id)
-      if (!res.conversation_id) { alert('Alert already claimed'); return }
-      setSideTab('chats')
-      await loadConversation(res.conversation_id)
-      if (res.seed_message) {
-        inputEl.value = res.seed_message
-        send()
-      }
-    } catch (e) { alert('Investigate failed: ' + e.message); invBtn.disabled = false }
+function setListSection(sec) {
+  if (sec !== listSection) {
+    listQuery[listSection] = listSearch.value
+    listSection = sec
+    listSearch.value = listQuery[sec]
   }
-  const disBtn = panel.querySelector('#alertDismissBtn')
-  if (disBtn) disBtn.onclick = async () => {
-    try { await api.dismissAlert(id); refreshList(); openAlert(id) } catch {}
+  $('listTitle').textContent = LISTS[sec].title
+  listSearch.placeholder = LISTS[sec].search
+  $('newChatBtn').hidden = sec !== 'chat'
+  $('alertSyncBtn').hidden = sec !== 'alerts'
+  renderList()
+  if (!listLoaded[sec]) refreshList(sec)
+}
+
+async function refreshList(sec = listSection) {
+  const seq = ++listSeq[sec]
+  try {
+    let items
+    if (sec === 'chat') items = (await api.listConvs()).conversations || []
+    else if (sec === 'cases') items = (await api.listIncidents()).incidents || []
+    else {
+      const d = await api.listAlerts(null, alertsMeta.limit)
+      items = d.alerts || []
+      alertsMeta.total = d.total ?? null
+      updateAlertBadge(d.new_count || 0)
+    }
+    if (seq !== listSeq[sec]) return  // a newer refresh already answered
+    listLoaded[sec] = true
+    if (sec === 'chat') syncSessionsFromList(items)
+    const sig = JSON.stringify(items) + (sec === 'alerts' ? `|${alertsMeta.total}` : '')
+    if (sig === listSig[sec]) return
+    listSig[sec] = sig
+    listData[sec] = items
+    if (sec === listSection) renderList()
+  } catch (e) {
+    if (seq === listSeq[sec] && sec === listSection && !listLoaded[sec] && e.status !== 401) {
+      convList.innerHTML = `<li class="list-empty">Could not load: ${esc(e.message)}</li>`
+    }
   }
-  const openBtn = panel.querySelector('#alertOpenConvBtn')
-  if (openBtn) openBtn.onclick = () => { setSideTab('chats'); loadConversation(alert_.conversation_id) }
+}
+
+// Conversations the server reports as still running (after a reload, or started by
+// an agent) show their progress when opened.
+function syncSessionsFromList(items) {
+  for (const it of items) {
+    const s = sessions.get(it.id)
+    if (s && it.title) s.title = it.title
+    if (it.pending && !(s && s.inflight) && !endedHere(s, it.pending)) {
+      const ss = getSession(it.id, it.title)
+      setInflight(ss, { stage: it.pending.stage || 'Running…', since: it.pending.since, remote: true })
+      startPoll(ss)
+    }
+  }
+  if (route.view === 'chat' && route.id) {
+    const cur = items.find(it => it.id === route.id)
+    if (cur?.title) setViewTitle(cur.title)
+  }
+}
+
+function matches(sec, it, q) {
+  const hay = sec === 'cases' ? `${it.title} ${it.case_number}` : sec === 'alerts' ? `${it.title} ${it.source} ${it.severity}` : `${it.title}`
+  return String(hay || '').toLowerCase().includes(q)
+}
+
+function activeId(sec) {
+  const view = route.view === 'chat' ? 'chat' : route.view
+  return view === sec ? route.id : null
+}
+
+function rowHtml(sec, it) {
+  const cur = activeId(sec) === it.id ? ' aria-current="page"' : ''
+  if (sec === 'chat') {
+    const s = sessions.get(it.id)
+    const running = s?.inflight || it.pending
+    const flags = (running ? '<span class="run-dot" title="Investigation running"></span>' : '') +
+      (s?.unread ? '<span class="unread-dot" title="New reply"></span>' : '')
+    const extra = running ? ' · running' : s?.unread ? ' · new reply' : ''
+    return `<li class="row" data-key="${esc(it.id)}">
+      <a class="row-main" href="#/chat/${enc(it.id)}"${cur}>
+        <span class="row-title">${flags}<span class="t">${esc(it.title || 'Untitled investigation')}</span></span>
+        <span class="row-meta"><span class="m">${esc(fmtAlertTime(it.updated_at))}${extra}</span>${verdictTag(it.last_verdict)}</span>
+      </a>
+      <button type="button" class="del-btn" data-del-conv="${esc(it.id)}" aria-label="Delete investigation ${esc(it.title || '')}">✕</button>
+    </li>`
+  }
+  if (sec === 'cases') {
+    const n = it.conversation_count || 0
+    return `<li class="row" data-key="${esc(it.id)}">
+      <a class="row-main" href="#/cases/${enc(it.id)}"${cur}>
+        <span class="row-title">${sevTag(it.severity)}<span class="t">${esc(it.title || 'Untitled case')}</span></span>
+        <span class="row-meta"><span class="m">${esc(it.case_number)} · ${n} chat${n === 1 ? '' : 's'}</span>${statusBadgeHtml(it.status)}</span>
+      </a>
+      <button type="button" class="del-btn" data-del-case="${esc(it.id)}" aria-label="Delete case ${esc(it.case_number)}">✕</button>
+    </li>`
+  }
+  return `<li class="row${it.status === 'dismissed' ? ' dim' : ''}" data-key="${esc(it.id)}">
+    <a class="row-main" href="#/alerts/${enc(it.id)}"${cur}>
+      <span class="row-title">${sevTag(it.severity)}<span class="t">${esc(it.title || 'Untitled alert')}</span></span>
+      <span class="row-meta"><span class="m">${esc(it.source)} · ${esc(fmtAlertTime(it.created_at))}</span>${alertStatusBadgeHtml(it.status)}</span>
+    </a>
+  </li>`
+}
+
+function renderList() {
+  const sec = listSection
+  const q = listSearch.value.toLowerCase().trim()
+  listQuery[sec] = listSearch.value
+  const items = listData[sec].filter(it => !q || matches(sec, it, q))
+  const focusKey = convList.contains(document.activeElement) ? document.activeElement.closest('.row')?.dataset.key : null
+  const focusDel = document.activeElement?.classList?.contains('del-btn')
+  convList.innerHTML = items.length ? items.map(it => rowHtml(sec, it)).join('')
+    : `<li class="list-empty">${!listLoaded[sec] ? 'Loading…' : q ? 'No matches' : LISTS[sec].empty}</li>`
+  if (focusKey) {
+    const row = convList.querySelector(`.row[data-key="${CSS.escape(focusKey)}"]`)
+    ;(focusDel ? row?.querySelector('.del-btn') : row?.querySelector('.row-main'))?.focus({ preventScroll: true })
+  }
+  renderListFoot()
+}
+
+function renderListFoot() {
+  const foot = $('listFoot')
+  if (listSection !== 'alerts') { foot.hidden = true; return }
+  const shown = listData.alerts.length, total = alertsMeta.total
+  const parts = []
+  if (total != null && total > shown) {
+    parts.push(`<span>Showing ${shown} of ${fmtCount(total)}</span>`)
+    if (alertsMeta.limit < 500) parts.push('<button type="button" class="btn-mini" id="alertsMoreBtn">Load more</button>')
+  }
+  if (alertsMeta.note) parts.push(`<span>${esc(alertsMeta.note)}</span>`)
+  foot.innerHTML = parts.join('')
+  foot.hidden = !parts.length
+}
+
+listSearch.addEventListener('input', renderList)
+
+$('listFoot').addEventListener('click', e => {
+  if (e.target.id === 'alertsMoreBtn') {
+    alertsMeta.limit = Math.min(alertsMeta.limit + 100, 500)
+    refreshList('alerts').then(() => ($('alertsMoreBtn') || listSearch).focus({ preventScroll: true }))
+  }
+})
+
+$('alertSyncBtn').onclick = async () => {
+  const btn = $('alertSyncBtn')
+  btn.disabled = true
+  btn.textContent = 'Pulling…'
+  try {
+    const res = await api.syncAlerts()
+    alertsMeta.note = res.note || `Pulled ${res.pulled ?? 0}, ${res.added ?? 0} new`
+  } catch (e) {
+    alertsMeta.note = ''
+    if (e.status !== 401) notify(`Pull failed: ${e.message}`)
+  } finally {
+    btn.disabled = false
+    btn.textContent = 'Pull missed'
+  }
+  renderListFoot()
+  refreshList('alerts')
+}
+
+convList.addEventListener('click', async e => {
+  const del = e.target.closest('[data-del-conv],[data-del-case]')
+  if (!del) { if (e.target.closest('.row-main') && document.body.classList.contains('drawer-open')) { closeDrawer(); viewTitleEl.focus({ preventScroll: true }) } return }
+  e.preventDefault()
+  if (del.dataset.delConv) deleteConversation(del.dataset.delConv)
+  else deleteIncident(del.dataset.delCase)
+})
+
+// Arrow keys move between rows while focus is in the list (Enter opens).
+convList.addEventListener('keydown', e => {
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key) || e.altKey || e.ctrlKey || e.metaKey) return
+  const links = [...convList.querySelectorAll('.row-main')]
+  if (!links.length) return
+  const i = links.indexOf(document.activeElement.closest('.row')?.querySelector('.row-main'))
+  const next = e.key === 'Home' ? 0 : e.key === 'End' ? links.length - 1
+    : Math.max(0, Math.min(links.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))
+  e.preventDefault()
+  links[next].focus()
+  links[next].scrollIntoView({ block: 'nearest' })
+})
+
+async function deleteConversation(id) {
+  const s = sessions.get(id)
+  const warn = s?.inflight ? ' Its investigation is still running and its reply will be discarded.' : ''
+  if (!confirm(`Delete this investigation? This cannot be undone.${warn}`)) return
+  try {
+    await api.deleteConv(id)
+    goneIds.add(id)
+    if (s) { s.deleted = true; stopPoll(s); clearInflight(s); sessions.delete(id) }
+    if (lastChatId === id) lastChatId = null
+    if (route.view === 'chat' && route.id === id) navigate('#/new', { replace: true })
+    drafts.delete(id)  // after leaving it, which saves its composer
+    refreshList('chat')
+  } catch (e) {
+    if (e.status !== 401) notify(`Delete failed: ${e.message}`)
+  }
+}
+
+async function deleteIncident(id) {
+  if (!confirm('Delete this case? Linked investigations are kept.')) return
+  try {
+    await api.deleteIncident(id)
+    if (route.view === 'cases' && route.id === id) { caseDirty = false; navigate('#/cases', { replace: true }) }
+    refreshList('cases')
+  } catch (e) {
+    if (e.status !== 401) notify(`Delete failed: ${e.message}`)
+  }
 }
 
 async function pollAlertBadge() {
+  try { updateAlertBadge((await api.listAlerts('new', 1)).new_count || 0) } catch {}
+}
+
+// ─── Mobile drawer for the list pane ─────────────────────────────
+function openDrawer() {
+  document.body.classList.add('drawer-open')
+  $('menuBtn').setAttribute('aria-expanded', 'true')
+  if (isNarrow()) $('main').inert = true
+  setTimeout(() => (convList.querySelector('[aria-current]') || listSearch).focus({ preventScroll: true }), 50)
+}
+function closeDrawer() {
+  if (!document.body.classList.contains('drawer-open')) return
+  document.body.classList.remove('drawer-open')
+  $('menuBtn').setAttribute('aria-expanded', 'false')
+  $('main').inert = false
+}
+$('menuBtn').onclick = () => document.body.classList.contains('drawer-open') ? closeDrawer() : openDrawer()
+$('drawerBackdrop').onclick = closeDrawer
+
+// ─── Chat view ───────────────────────────────────────────────────
+async function enterChat(id) {
+  if (!id) {
+    chatLog.replaceChildren()
+    welcomeEl.hidden = false
+    useComposer(NEW)
+    setViewTitle('New investigation')
+    return
+  }
+  lastChatId = id
+  const known = listData.chat.find(c => c.id === id)
+  const s = getSession(id, known?.title)
+  s.unread = false
+  welcomeEl.hidden = true
+  chatLog.replaceChildren(s.el)
+  useComposer(id)
+  setViewTitle(s.title || 'Investigation')
+  // A reply that arrived while away: show it from its start rather than the old scroll position.
+  const unseen = s.seenCount != null && s.count > s.seenCount ? s.el.querySelectorAll('.msg-wrap')[s.seenCount] : null
+  if (unseen) unseen.scrollIntoView({ block: 'start' })
+  else if (s.scrollTop != null) chatArea.scrollTop = s.scrollTop
+  else scrollChatToEnd()
+  renderList()
+  if (!s.loaded && !s.inflight) s.el.replaceChildren(Object.assign(document.createElement('div'), { className: 'chat-note', textContent: 'Loading…' }))
+  if (s.inflight && !s.inflight.remote) return  // a live stream owns this transcript
+  s.loading = (s.loading || 0) + 1
+  updateComposer()
   try {
-    const data = await api.listAlerts('new')
-    updateAlertBadge(data.new_count || 0)
-  } catch {}
+    const d = await api.getMessages(id)
+    if (s.deleted || (s.inflight && !s.inflight.remote)) return
+    if (!s.loaded || (d.messages || []).length !== s.count || d.pending) renderTranscript(s, d)
+    else if (d.title && d.title !== s.title) { s.title = d.title; if (isVisible(s)) setViewTitle(s.title) }
+    if (d.pending && !s.inflight) { setInflight(s, { stage: d.pending.stage || 'Running…', since: d.pending.since, remote: true }); startPoll(s) }
+    else if (!d.pending && s.inflight?.remote) { clearInflight(s); renderTranscript(s, d) }  // the reply may have landed between polls
+  } catch (e) {
+    if (e.status === 401) return
+    const note = document.createElement('div')
+    note.className = 'chat-note'
+    if (e.status === 404) {
+      note.textContent = 'This investigation no longer exists.'
+      goneIds.add(id)
+      sessions.delete(id)
+      if (lastChatId === id) lastChatId = null
+    } else {
+      note.textContent = `Could not load this investigation: ${e.message}`
+      const retry = Object.assign(document.createElement('button'), { type: 'button', className: 'btn-mini', textContent: 'Retry' })
+      retry.onclick = () => enterChat(id)
+      note.appendChild(retry)
+    }
+    if (!s.loaded) s.el.replaceChildren(note)
+    else s.el.appendChild(note)
+  } finally {
+    s.loading--
+    updateComposer()
+  }
+}
+
+// ─── Alert view ──────────────────────────────────────────────────
+const alertBody = $('alertBody')
+
+async function enterAlerts(id, seq) {
+  if (!id) {
+    setViewTitle('Alerts')
+    alertBody.innerHTML = `<div class="empty-panel">Select an alert from the list to see its details and investigate it.
+      ${isNarrow() ? '<br><button type="button" class="btn-case" data-open-drawer>Browse alerts</button>' : ''}</div>`
+    return
+  }
+  setViewTitle('Alert')
+  alertBody.innerHTML = '<div class="empty-panel">Loading alert…</div>'
+  let a
+  try { a = await api.getAlert(id) } catch (e) {
+    if (seq === navSeq && e.status !== 401) alertBody.innerHTML = `<div class="panel-error">Could not load this alert: ${esc(e.message)}</div>`
+    return
+  }
+  if (seq !== navSeq) return
+  renderAlert(a)
+}
+
+function renderAlert(a) {
+  setViewTitle(`Alert — ${a.title}`)
+  let payload = a.payload_json || '{}'
+  try { payload = JSON.stringify(JSON.parse(payload), null, 2) } catch {}
+  const mine = a.conversation_is_mine ?? true
+  const claimedByOther = a.status === 'investigating' && a.conversation_id && !mine
+  // Someone else's chat, or dismissed: the analyst can still take their own look.
+  const canFork = a.conversation_is_mine === false && (!!a.conversation_id || a.status === 'dismissed')
+  alertBody.innerHTML = `
+    <div class="case-card">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        ${sevTag(a.severity)}
+        <h2 style="margin:0;flex:1;min-width:0;overflow-wrap:anywhere">${esc(a.title)}</h2>
+      </div>
+      <div class="alert-meta">
+        <span>Source: <b>${esc(a.source)}</b></span>
+        <span>Severity: <b>${esc(a.severity)}</b></span>
+        <span>Status: <b>${esc(a.status)}</b></span>
+        <span>Received: <b>${esc(fmtTime(a.created_at))}</b></span>
+        ${a.claimed_by_username ? `<span>Claimed by: <b>${esc(a.claimed_by_username)}</b></span>` : ''}
+      </div>
+      ${a.agent_note ? `<div class="alert-meta"><span>Agent: <b>${esc(a.agent_note)}</b></span></div>` : ''}
+      <div class="alert-payload" tabindex="0" aria-label="Raw alert payload">${esc(payload)}</div>
+      <div class="case-actions">
+        ${a.status !== 'dismissed' && !claimedByOther ? '<button type="button" class="btn-case" data-act="investigate">Investigate</button>' : ''}
+        ${!canFork ? '' : a.conversation_id
+          ? '<button type="button" class="btn-case" data-act="fork" title="Start your own investigation chat; the alert itself is left as it is">Investigate separately</button>'
+          : '<button type="button" class="btn-case" data-act="fork" title="Opens a new chat; the alert stays dismissed">Investigate anyway</button>'}
+        ${a.status === 'new' ? '<button type="button" class="btn-case danger" data-act="dismiss">Dismiss</button>' : ''}
+        ${a.conversation_id && mine ? `<a class="btn-case" href="#/chat/${enc(a.conversation_id)}">Open investigation chat</a>` : ''}
+        ${claimedByOther ? `<span class="claim-note">Being investigated by ${esc(a.claimed_by_username || 'another analyst')}.</span>` : ''}
+      </div>
+    </div>`
+  alertBody.dataset.alertId = a.id
+  alertBody.alert = a
+}
+
+alertBody.addEventListener('click', async e => {
+  if (e.target.closest('[data-open-drawer]')) { openDrawer(); return }
+  const b = e.target.closest('[data-act]')
+  const a = alertBody.alert
+  if (!b || !a) return
+  if (b.dataset.act === 'investigate' || b.dataset.act === 'fork') {
+    b.disabled = true
+    const seq = navSeq
+    try {
+      const res = await api.investigateAlert(a.id, b.dataset.act === 'fork')
+      if (!res.conversation_id || res.conversation_is_mine === false) {
+        notify(`This alert is already being investigated by ${res.claimed_by_username || 'someone else'}.`)
+        b.disabled = false
+        // Show who has it, and the button to investigate it separately.
+        const fresh = await api.getAlert(a.id).catch(() => ({ ...a, status: 'investigating', conversation_id: res.conversation_id,
+          conversation_is_mine: false, claimed_by_username: res.claimed_by_username }))
+        if (route.view === 'alerts' && route.id === a.id) renderAlert(fresh)
+        refreshList('alerts')
+        return
+      }
+      getSession(res.conversation_id, `[Alert] ${a.title}`.slice(0, 60))
+      if (res.seed_message) sendInConv(res.conversation_id, res.seed_message)
+      // Moved on while the claim was in flight? Don't pull the analyst back; offer the chat instead.
+      if (seq === navSeq) navigate(`#/chat/${enc(res.conversation_id)}`)
+      else notify(`Investigation started: ${a.title}`, { label: 'Open', href: `#/chat/${enc(res.conversation_id)}` })
+      refreshList('alerts')
+    } catch (err) {
+      b.disabled = false
+      if (err.status !== 401) notify(`Investigate failed: ${err.message}`)
+    }
+  } else if (b.dataset.act === 'dismiss') {
+    if (!confirm('Dismiss this alert? It leaves the queue and can no longer be investigated.')) return
+    b.disabled = true
+    try {
+      const seq = navSeq
+      await api.dismissAlert(a.id)
+      const fresh = await api.getAlert(a.id)
+      if (seq === navSeq) { renderAlert(fresh); viewTitleEl.focus({ preventScroll: true }) }
+      refreshList('alerts')
+    } catch (err) {
+      b.disabled = false
+      if (err.status !== 401) notify(`Dismiss failed: ${err.message}`)
+    }
+  }
+})
+
+// ─── Case view ───────────────────────────────────────────────────
+const caseBody = $('caseBody')
+let caseDirty = false
+
+async function enterCases(id, seq) {
+  caseDirty = false
+  if (!id) {
+    setViewTitle('Cases')
+    caseBody.innerHTML = `<div class="empty-panel">Select a case from the list, or open an investigation and press “+ Case” to start one.
+      ${isNarrow() ? '<br><button type="button" class="btn-case" data-open-drawer>Browse cases</button>' : ''}</div>`
+    return
+  }
+  setViewTitle('Case')
+  caseBody.innerHTML = '<div class="empty-panel">Loading case…</div>'
+  let inc
+  try { inc = await api.getIncident(id) } catch (e) {
+    if (seq === navSeq && e.status !== 401) caseBody.innerHTML = `<div class="panel-error">Could not load this case: ${esc(e.message)}</div>`
+    return
+  }
+  if (seq !== navSeq) return
+  renderCase(inc)
+}
+
+function renderCase(inc) {
+  caseDirty = false
+  setViewTitle(`${inc.case_number} — ${inc.title}`)
+  const opts = (vals, cur) => vals.map(v => `<option value="${v}" ${cur === v ? 'selected' : ''}>${v}</option>`).join('')
+  const convs = inc.conversations || []
+  caseBody.innerHTML = `
+    <div class="case-card">
+      <div class="case-num">${esc(inc.case_number)}</div>
+      <h2 style="overflow-wrap:anywhere">${esc(inc.title)}</h2>
+      <div class="case-form">
+        <div class="field"><label for="caseSev">Severity</label><select class="fld" id="caseSev">${opts(['low', 'medium', 'high', 'critical'], inc.severity)}</select></div>
+        <div class="field"><label for="caseStatus">Status</label><select class="fld" id="caseStatus">${opts(['open', 'investigating', 'closed'], inc.status)}</select></div>
+        <div class="field"><label for="caseVerdict">Verdict</label>
+          <input type="text" class="fld" id="caseVerdict" placeholder="e.g. True positive — contained" value="${esc(inc.verdict || '')}"/></div>
+        <div class="field top"><label for="caseNotes">Analyst notes</label>
+          <textarea class="fld" id="caseNotes" placeholder="Containment steps, escalation details, ticket refs…">${esc(inc.notes || '')}</textarea></div>
+        <div class="case-actions field-actions">
+          <button type="button" class="btn-case" data-act="save">Save changes</button>
+          <a class="btn-case" href="/api/incidents/${enc(inc.id)}/report" target="_blank" rel="noopener">Export report (HTML)</a>
+          <a class="btn-case" href="/api/incidents/${enc(inc.id)}/report?format=md" download>Export report (MD)</a>
+          <button type="button" class="btn-case danger" data-act="delete">Delete case</button>
+        </div>
+      </div>
+      <div class="case-convs">
+        <h3>Linked investigations (${convs.length})</h3>
+        ${convs.map(c => `
+          <div class="case-conv-row">
+            <a class="case-conv-item" href="#/chat/${enc(c.conversation_id)}">${esc(c.title || 'Untitled investigation')}</a>
+            <button type="button" class="btn-mini" data-unlink="${esc(c.conversation_id)}" aria-label="Unlink ${esc(c.title || 'investigation')} from this case">Unlink</button>
+          </div>`).join('') || '<div style="font-size:12px;color:var(--muted)">None yet — open an investigation and press “+ Case”.</div>'}
+      </div>
+      <div class="ctime" style="margin-top:14px;font-size:11px;color:var(--muted)">
+        Opened ${esc(fmtTime(inc.created_at))}${inc.closed_at ? ' · Closed ' + esc(fmtTime(inc.closed_at)) : ''}
+      </div>
+    </div>`
+  caseBody.dataset.caseId = inc.id
+}
+
+caseBody.addEventListener('input', () => { caseDirty = true })
+caseBody.addEventListener('change', () => { caseDirty = true })
+caseBody.addEventListener('click', async e => {
+  if (e.target.closest('[data-open-drawer]')) { openDrawer(); return }
+  const id = caseBody.dataset.caseId
+  const b = e.target.closest('button')
+  if (!b || !id) return
+  try {
+    if (b.dataset.act === 'save') {
+      b.disabled = true
+      const seq = navSeq
+      caseDirty = false  // saving: leaving now shouldn't ask to discard
+      let inc
+      try {
+        inc = await api.updateIncident(id, {
+          severity: $('caseSev').value, status: $('caseStatus').value,
+          verdict: $('caseVerdict').value, notes: $('caseNotes').value,
+        })
+      } catch (err) { if (seq === navSeq) caseDirty = true; throw err }
+      if (seq !== navSeq) { refreshList('cases'); return }
+      renderCase(inc.case_number ? inc : await api.getIncident(id))
+      caseBody.querySelector('[data-act="save"]')?.focus()
+      announce('Case saved')
+      refreshList('cases')
+    } else if (b.dataset.act === 'delete') {
+      deleteIncident(id)
+    } else if (b.dataset.unlink) {
+      if (caseDirty && !confirm('Unlinking reloads the case and discards your unsaved changes. Continue?')) return
+      const seq = navSeq
+      await api.unlinkConvFromIncident(id, b.dataset.unlink)
+      const fresh = await api.getIncident(id)
+      if (seq === navSeq) { renderCase(fresh); (caseBody.querySelector('[data-unlink]') || viewTitleEl).focus({ preventScroll: true }) }
+      refreshList('cases')
+    }
+  } catch (err) {
+    b.disabled = false
+    if (err.status !== 401) notify(`Case update failed: ${err.message}`)
+  }
+})
+
+// ─── Focus-preserving re-render (dashboard + agents refresh live) ─
+function focusSelector(el) {
+  if (!el || el === document.body) return null
+  for (const a of ['data-move', 'data-hide', 'data-show', 'data-reset', 'data-hours', 'data-alert', 'data-inc', 'data-run',
+                   'data-stop', 'data-prop', 'data-undo', 'data-open-conv', 'data-open-case', 'data-agent', 'id']) {
+    if (el.hasAttribute?.(a)) {
+      let sel = `[${a}="${CSS.escape(el.getAttribute(a))}"]`
+      if (a === 'data-move') sel += `[data-dir="${el.dataset.dir}"]`
+      if (a === 'data-prop') sel += `[data-decision="${el.dataset.decision}"]`
+      if (a === 'data-agent') sel += `[data-key="${el.dataset.key}"]`
+      return sel
+    }
+  }
+  return el.classList?.contains('vcol') ? `.vcol:nth-child(${[...el.parentNode.children].indexOf(el) + 1})` : null
+}
+function withFocus(container, fn) {
+  const sel = container.contains(document.activeElement) ? focusSelector(document.activeElement) : null
+  fn()
+  if (sel) container.querySelector(sel)?.focus({ preventScroll: true })
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────
@@ -1863,10 +2694,10 @@ dashEl.className = 'dash'
 dashEl.innerHTML = `
   <div class="dash-bar">
     <div class="dash-range" role="group" aria-label="Time range">
-      ${Object.entries(DASH_RANGES).map(([h, l]) => `<button data-hours="${h}">${l}</button>`).join('')}
+      ${Object.entries(DASH_RANGES).map(([h, l]) => `<button type="button" data-hours="${h}">${l}</button>`).join('')}
     </div>
     <span class="dash-live" id="dashLive">Loading…</span>
-    <button class="btn-topbar" id="dashCustomizeBtn">Customize</button>
+    <button type="button" class="btn-topbar" id="dashCustomizeBtn">Customize</button>
   </div>
   <div class="dash-tray" id="dashTray"></div>
   <div class="dash-grid" id="dashGrid"></div>`
@@ -1875,20 +2706,6 @@ const dashTip = document.createElement('div')
 dashTip.className = 'dash-tip'
 dashTip.setAttribute('role', 'tooltip')
 document.body.appendChild(dashTip)
-
-function fmtCount(n) {
-  return n < 10000 ? n.toLocaleString() : new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(n)
-}
-function fmtAlertTime(t) {
-  const d = new Date(t)
-  return d.toLocaleString([], d.toDateString() === new Date().toDateString()
-    ? { hour: '2-digit', minute: '2-digit' }
-    : { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-function fmtDur(s) {
-  if (s == null) return '—'
-  return s < 90 ? `${Math.round(s)}s` : s < 5400 ? `${Math.round(s / 60)}m` : s < 172800 ? `${(s / 3600).toFixed(1)}h` : `${Math.round(s / 86400)}d`
-}
 
 // Horizontal bars, one hue unless a row brings its own; value sits at the bar tip.
 // Long labels (rules, hosts) go above the bar; short ones can sit inline.
@@ -1905,10 +2722,10 @@ function dashBars(rows, empty, inline = false) {
     </div>`).join('')
 }
 
-function dashItem(attr, id, severity, title, meta, badge) {
+function dashItem(attr, id, tag, title, meta, badge) {
   return `
-    <button class="dash-item" ${attr}="${esc(id)}">
-      <span class="sev-dot sev-${esc(severity)}"></span>
+    <button type="button" class="dash-item" ${attr}="${esc(id)}">
+      ${tag}
       <span class="dash-item-text">
         <span class="dash-item-title">${esc(title)}</span>
         <span class="dash-item-meta">${esc(meta)}</span>
@@ -1950,11 +2767,11 @@ const DASH_RENDER = {
   rules:    d => dashBars(d.alerts.top_rules, 'No alerts in this window'),
   hosts:    d => dashBars(d.alerts.top_hosts, 'No host names in these alerts'),
   verdicts: d => dashBars(d.verdicts, 'No verdicts in this window'),
-  recent:   d => d.alerts.recent.map(a => dashItem('data-alert', a.id, a.severity, a.title,
-                   `${a.severity} · ${a.source} · ${fmtAlertTime(a.created_at)}`, alertStatusBadgeHtml(a.status))).join('')
+  recent:   d => d.alerts.recent.map(a => dashItem('data-alert', a.id, sevTag(a.severity), a.title,
+                   `${a.source} · ${fmtAlertTime(a.created_at)}`, alertStatusBadgeHtml(a.status))).join('')
                  || '<div class="dash-empty">No alerts in this window</div>',
-  cases:    d => d.cases.map(c => dashItem('data-inc', c.id, c.severity, `${c.case_number} — ${c.title}`,
-                   c.severity, statusBadgeHtml(c.status))).join('')
+  cases:    d => d.cases.map(c => dashItem('data-inc', c.id, sevTag(c.severity), `${c.case_number} — ${c.title}`,
+                   `${c.severity} severity`, statusBadgeHtml(c.status))).join('')
                  || '<div class="dash-empty">No open cases</div>',
 }
 
@@ -1962,10 +2779,12 @@ function renderDashChrome() {
   dashEl.classList.toggle('editing', dashEditing)
   dashEl.querySelectorAll('.dash-range button').forEach(b =>
     b.setAttribute('aria-pressed', String(+b.dataset.hours === dashLayout.hours)))
-  dashEl.querySelector('#dashCustomizeBtn').textContent = dashEditing ? 'Done' : 'Customize'
+  const btn = dashEl.querySelector('#dashCustomizeBtn')
+  btn.textContent = dashEditing ? 'Done' : 'Customize'
+  btn.setAttribute('aria-pressed', String(dashEditing))
   dashEl.querySelector('#dashTray').innerHTML = dashEditing
-    ? dashLayout.hidden.map(id => `<button class="btn-case" data-show="${id}">+ ${esc(DASH_WIDGETS[id].title)}</button>`).join('')
-      + '<button class="btn-case" data-reset="1">Reset layout</button>'
+    ? dashLayout.hidden.map(id => `<button type="button" class="btn-case" data-show="${id}">+ ${esc(DASH_WIDGETS[id].title)}</button>`).join('')
+      + '<button type="button" class="btn-case" data-reset="1">Reset layout</button>'
     : ''
 }
 
@@ -1973,45 +2792,41 @@ function renderDashGrid() {
   dashTip.style.display = 'none'
   if (!dashData) return
   const visible = dashLayout.order.filter(id => !dashLayout.hidden.includes(id))
-  dashGrid.innerHTML = visible.map(id => {
-    const t = esc(DASH_WIDGETS[id].title)
-    return `
-      <section class="dash-card${DASH_WIDGETS[id].wide ? ' wide' : ''}" aria-label="${t}">
-        <header>
-          <h3>${t}</h3>
-          <span class="dash-edit">
-            <button data-move="${id}" data-dir="-1" aria-label="Move ${t} earlier">◀</button>
-            <button data-move="${id}" data-dir="1" aria-label="Move ${t} later">▶</button>
-            <button data-hide="${id}" aria-label="Hide ${t}">✕</button>
-          </span>
-        </header>
-        ${DASH_RENDER[id](dashData)}
-      </section>`
-  }).join('') || '<div class="dash-empty">Every widget is hidden. Click Customize to add some back.</div>'
+  withFocus(dashGrid, () => {
+    dashGrid.innerHTML = visible.map(id => {
+      const t = esc(DASH_WIDGETS[id].title)
+      return `
+        <section class="dash-card${DASH_WIDGETS[id].wide ? ' wide' : ''}" aria-label="${t}">
+          <header>
+            <h2>${t}</h2>
+            <span class="dash-edit">
+              <button type="button" data-move="${id}" data-dir="-1" aria-label="Move ${t} earlier">◀</button>
+              <button type="button" data-move="${id}" data-dir="1" aria-label="Move ${t} later">▶</button>
+              <button type="button" data-hide="${id}" aria-label="Hide ${t}">✕</button>
+            </span>
+          </header>
+          ${DASH_RENDER[id](dashData)}
+        </section>`
+    }).join('') || '<div class="dash-empty">Every widget is hidden. Click Customize to add some back.</div>'
+  })
 }
 
 function saveDashLayout() {
-  fetch('/api/me/prefs', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({ prefs: { ui_dashboard: dashLayout } }),  // ui_* prefs stay out of the LLM prompt
-  }).catch(() => {})
+  api.savePrefs({ ui_dashboard: dashLayout }).catch(e => notify(`Could not save the layout: ${e.message}`))  // ui_* prefs stay out of the LLM prompt
 }
 
 async function loadDashboard() {
-  if (dashLoading) return
+  if (dashLoading || !dashLayout) return
   dashLoading = true
   const live = dashEl.querySelector('#dashLive')
   try {
-    const r = await fetch(`/api/dashboard?hours=${dashLayout.hours}`, { credentials: 'same-origin' })
-    if (!r.ok) throw new Error(`HTTP ${r.status}`)
-    const data = await r.json()
+    const data = await api.dashboard(dashLayout.hours)
     if (data.hours !== dashLayout.hours) return  // range changed mid-flight; next tick fetches the new one
     updateAlertBadge(data.alerts.backlog.new || 0)
     live.textContent = `Live · ${new Date().toLocaleTimeString()}`
     live.classList.remove('off')
-    const sig = JSON.stringify(data)
+    // `since` moves every second; only re-render when the numbers change.
+    const sig = JSON.stringify({ ...data, alerts: { ...data.alerts, since: null } })
     if (sig !== dashSig) { dashSig = sig; dashData = data; renderDashGrid() }
     dashGrid.style.opacity = ''
   } catch {
@@ -2022,24 +2837,20 @@ async function loadDashboard() {
   }
 }
 
-async function showDashboard() {
-  currentIncident = null
-  currentConv = null
-  updateCaseControls()
-  convTitleEl.textContent = 'Dashboard'
-  chatEl.innerHTML = ''
-  chatEl.appendChild(welcomeEl)
-  welcomeEl.style.display = 'none'
-  chatEl.appendChild(dashEl)
+async function enterDashboard(_, seq) {
+  setViewTitle('Dashboard')
   if (!dashLayout) {
     let saved = {}
-    try { saved = (await (await fetch('/api/me/prefs', { credentials: 'same-origin' })).json()).prefs?.ui_dashboard || {} } catch {}
-    const known = Object.keys(DASH_WIDGETS)
-    const order = (saved.order || []).filter(id => known.includes(id))
-    dashLayout = {
-      order: [...order, ...known.filter(id => !order.includes(id))],  // widgets added later land at the end
-      hidden: (saved.hidden || []).filter(id => known.includes(id)),
-      hours: DASH_RANGES[saved.hours] ? saved.hours : 24,
+    try { saved = (await api.prefs()).prefs?.ui_dashboard || {} } catch {}
+    if (seq !== navSeq && route.view !== 'dashboard') return
+    if (!dashLayout) {
+      const known = Object.keys(DASH_WIDGETS)
+      const order = (saved.order || []).filter(id => known.includes(id))
+      dashLayout = {
+        order: [...order, ...known.filter(id => !order.includes(id))],  // widgets added later land at the end
+        hidden: (saved.hidden || []).filter(id => known.includes(id)),
+        hours: DASH_RANGES[saved.hours] ? saved.hours : 24,
+      }
     }
   }
   renderDashChrome()
@@ -2051,8 +2862,8 @@ dashEl.addEventListener('click', e => {
   const b = e.target.closest('button')
   if (!b) return
   const { hours, show, hide, move, dir, reset, alert: alertId, inc } = b.dataset
-  if (alertId) { setSideTab('alerts'); openAlert(alertId); return }
-  if (inc) { setSideTab('cases'); openIncident(inc); return }
+  if (alertId) { navigate(`#/alerts/${enc(alertId)}`); return }
+  if (inc) { navigate(`#/cases/${enc(inc)}`); return }
   if (b.id === 'dashCustomizeBtn') dashEditing = !dashEditing
   else if (hours) { dashLayout.hours = +hours; dashGrid.style.opacity = '.5'; loadDashboard() }
   else if (show) dashLayout.hidden = dashLayout.hidden.filter(id => id !== show)
@@ -2067,9 +2878,8 @@ dashEl.addEventListener('click', e => {
   }
   else return
   saveDashLayout()
-  renderDashChrome()
-  renderDashGrid()
-  if (move) dashGrid.querySelector(`[data-move="${move}"][data-dir="${dir}"]`)?.focus()
+  withFocus(dashEl, () => { renderDashChrome(); renderDashGrid() })
+  if (hide && document.activeElement === document.body) $('dashCustomizeBtn').focus()
 })
 
 function showDashTip(e) {
@@ -2087,7 +2897,6 @@ dashEl.addEventListener('pointerover', showDashTip)
 dashEl.addEventListener('focusin', showDashTip)
 dashEl.addEventListener('pointerout', () => { dashTip.style.display = 'none' })
 dashEl.addEventListener('focusout', () => { dashTip.style.display = 'none' })
-document.getElementById('dashBtn').onclick = showDashboard
 
 // ─── Agents ───────────────────────────────────────────────────────
 // Autonomous triage, investigator and reporter, plus approval-gated containment (app/agents.py).
@@ -2104,31 +2913,17 @@ const AGENT_ACTIONS = {
 }
 let agentsData = null
 let agentsSig = null
-let agentsTick = 0
+let agentsLoading = false
 
 const agentsEl = document.createElement('div')
 agentsEl.className = 'dash'
 agentsEl.innerHTML = `
   <div class="dash-bar">
     <span class="dash-live" id="agentsLive">Loading…</span>
-    <label class="agents-owner" id="agentsOwnerWrap"></label>
+    <div class="agents-owner" id="agentsOwnerWrap"></div>
   </div>
   <div class="dash-grid" id="agentsGrid"></div>`
 const agentsGrid = agentsEl.querySelector('#agentsGrid')
-
-async function agentsCall(method, url, body) {
-  const r = await fetch(url, {
-    method, credentials: 'same-origin',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  if (!r.ok) {
-    let msg = await r.text()
-    try { msg = JSON.parse(msg).detail || msg } catch {}
-    throw new Error(msg)
-  }
-  return r.json()
-}
 
 function agentCardHtml(name, d) {
   const [title, desc, key, keyLabel] = AGENT_INFO[name]
@@ -2136,15 +2931,15 @@ function agentCardHtml(name, d) {
   const running = d.running.includes(name)
   return `
     <section class="dash-card" aria-label="${title} agent">
-      <header><h3>${title}</h3>${running ? '<span class="case-status st-investigating">running</span>' : ''}</header>
+      <header><h2>${title}</h2>${running ? '<span class="case-status st-investigating">running</span>' : ''}</header>
       <p class="agent-desc">${desc}</p>
       ${name === 'triage' ? '<p class="agent-warn">Full autonomy: dismissals happen without a human. Undo them in Activity.</p>' : ''}
       <div class="agent-ctl">
-        <label><input type="checkbox" data-agent="${name}" data-key="enabled" ${cfg.enabled ? 'checked' : ''} ${off}> On</label>
-        ${key ? `<label>${keyLabel} <input type="number" min="${key === 'hour_utc' ? 0 : 1}" max="${key === 'hour_utc' ? 23 : 50}"
+        <label><input type="checkbox" data-agent="${name}" data-key="enabled" ${cfg.enabled ? 'checked' : ''} ${off}> On<span class="sr-only"> (${title} agent)</span></label>
+        ${key ? `<label>${keyLabel} <input type="number" class="fld" min="${key === 'hour_utc' ? 0 : 1}" max="${key === 'hour_utc' ? 23 : 50}"
           value="${esc(cfg[key])}" data-agent="${name}" data-key="${key}" ${off}></label>` : ''}
-        ${name !== 'responder' && d.is_admin ? `<button class="btn-mini" data-run="${name}" ${running ? 'disabled' : ''}>Run now</button>` : ''}
-        ${d.is_admin && (cfg.enabled || running) ? `<button class="btn-mini danger" data-stop="${name}">Stop</button>` : ''}
+        ${name !== 'responder' && d.is_admin ? `<button type="button" class="btn-mini" data-run="${name}" aria-label="Run ${title} now" ${running ? 'disabled' : ''}>Run now</button>` : ''}
+        ${d.is_admin && (cfg.enabled || running) ? `<button type="button" class="btn-mini danger" data-stop="${name}" aria-label="Stop ${title}">Stop</button>` : ''}
       </div>
       <div class="agent-last">${st.last_run ? `Last run ${esc(fmtAlertTime(st.last_run))}: ${esc(st.result)}` : name === 'responder' ? (cfg.enabled ? 'Approvals execute' : 'Off: approvals are refused') : 'Not run since the server started'}</div>
     </section>`
@@ -2152,14 +2947,14 @@ function agentCardHtml(name, d) {
 
 function proposalRowHtml(p, d) {
   const btns = p.status === 'proposed' && d.can_decide
-    ? `<button class="btn-mini danger" data-prop="${esc(p.id)}" data-decision="approve">Approve isolation</button>
-       <button class="btn-mini" data-prop="${esc(p.id)}" data-decision="reject">Reject</button>`
+    ? `<button type="button" class="btn-mini danger" data-prop="${esc(p.id)}" data-decision="approve">Approve isolation</button>
+       <button type="button" class="btn-mini" data-prop="${esc(p.id)}" data-decision="reject">Reject</button>`
     : p.status === 'executed' && d.can_decide
-      ? `<button class="btn-mini" data-prop="${esc(p.id)}" data-decision="release">Release host</button>` : ''
+      ? `<button type="button" class="btn-mini" data-prop="${esc(p.id)}" data-decision="release">Release host</button>` : ''
   return `
     <div class="act-row">
       <span class="act-when">${esc(fmtAlertTime(p.decided_at || p.created_at))}</span>
-      <span class="act-agent">${esc(p.hostname || p.sid.slice(0, 8))}</span>
+      <span class="act-agent">${esc(p.hostname || String(p.sid || '').slice(0, 8))}</span>
       <span class="act-what ${p.status === 'failed' ? 'bad' : ''}">${esc(p.status)}</span>
       <span class="act-detail" title="${esc(p.result || p.reason || '')}">${esc(p.reason || '')}${p.result ? ` · ${esc(p.result)}` : ''}</span>
       <span class="act-btns">${btns}</span>
@@ -2169,11 +2964,12 @@ function proposalRowHtml(p, d) {
 function activityRowHtml(e, d) {
   const data = (() => { try { return JSON.parse(e.data_json || '{}') } catch { return {} } })()
   const conv = data.conversation_id || (e.action === 'report' ? e.target_id : null)
-  const mine = d.me === d.config.owner  // agent chats and cases belong to the owner
+  // Agent chats and cases belong to whoever owned them when the agent acted.
+  const mine = d.me_id != null && data.owner_id != null ? data.owner_id === d.me_id : d.me === d.config.owner
   const btns = [
-    conv && mine ? `<button class="btn-mini" data-open-conv="${esc(conv)}">Open chat</button>` : '',
-    ['case_opened', 'needs_review', 'case_closed'].includes(e.action) && mine ? `<button class="btn-mini" data-open-case="${esc(e.target_id)}">Open case</button>` : '',
-    ['dismissed', 'case_closed'].includes(e.action) && !e.undone_at ? `<button class="btn-mini danger" data-undo="${esc(e.id)}">Undo</button>` : '',
+    conv && mine ? `<button type="button" class="btn-mini" data-open-conv="${esc(conv)}">Open chat</button>` : '',
+    ['case_opened', 'needs_review', 'case_closed'].includes(e.action) && mine ? `<button type="button" class="btn-mini" data-open-case="${esc(e.target_id)}">Open case</button>` : '',
+    ['dismissed', 'case_closed'].includes(e.action) && !e.undone_at ? `<button type="button" class="btn-mini danger" data-undo="${esc(e.id)}">Undo</button>` : '',
   ].join('')
   return `
     <div class="act-row ${e.undone_at ? 'undone' : ''}">
@@ -2187,49 +2983,48 @@ function activityRowHtml(e, d) {
 
 function renderAgents() {
   const d = agentsData
-  const wrap = agentsEl.querySelector('#agentsOwnerWrap')
-  wrap.innerHTML = d.is_admin
-    ? `Agents act as <select id="agentsOwner">${d.users.map(u => `<option ${u === d.config.owner ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select>`
-    : `Agents act as <b>${esc(d.config.owner)}</b>`
-  const anyOn = Object.keys(AGENT_INFO).some(n => d.config[n].enabled) || d.running.length
-  if (d.is_admin && anyOn) wrap.innerHTML += ' <button class="btn-mini danger" data-stop="all">Stop all agents</button>'
-  const pending = d.proposals.filter(p => p.status === 'proposed').length
-  agentsGrid.innerHTML = Object.keys(AGENT_INFO).map(n => agentCardHtml(n, d)).join('') + `
-    <section class="dash-card wide" aria-label="Containment proposals">
-      <header><h3>Containment proposals${pending ? ` (${pending} awaiting approval)` : ''}</h3></header>
-      ${d.proposals.length ? d.proposals.map(p => proposalRowHtml(p, d)).join('') : '<div class="dash-empty">No isolation proposals yet</div>'}
-    </section>
-    <section class="dash-card wide" aria-label="Agent activity">
-      <header><h3>Activity</h3></header>
-      ${d.log.length ? d.log.map(e => activityRowHtml(e, d)).join('') : '<div class="dash-empty">No agent activity yet. Switch an agent on to start.</div>'}
-    </section>`
+  withFocus(agentsEl, () => {
+    const wrap = agentsEl.querySelector('#agentsOwnerWrap')
+    const anyOn = Object.keys(AGENT_INFO).some(n => d.config[n].enabled) || d.running.length
+    wrap.innerHTML = (d.is_admin
+      ? `<label for="agentsOwner">Agents act as</label> <select class="fld" id="agentsOwner">${d.users.map(u => `<option ${u === d.config.owner ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select>`
+      : `Agents act as <b>${esc(d.config.owner)}</b>`)
+      + (d.is_admin && anyOn ? ' <button type="button" class="btn-mini danger" data-stop="all">Stop all agents</button>' : '')
+    const pending = d.proposals.filter(p => p.status === 'proposed').length
+    agentsGrid.innerHTML = Object.keys(AGENT_INFO).map(n => agentCardHtml(n, d)).join('') + `
+      <section class="dash-card wide" aria-label="Containment proposals">
+        <header><h2>Containment proposals${pending ? ` (${pending} awaiting approval)` : ''}</h2></header>
+        ${d.proposals.length ? d.proposals.map(p => proposalRowHtml(p, d)).join('') : '<div class="dash-empty">No isolation proposals yet</div>'}
+      </section>
+      <section class="dash-card wide" aria-label="Agent activity">
+        <header><h2>Activity</h2></header>
+        ${d.log.length ? d.log.map(e => activityRowHtml(e, d)).join('') : '<div class="dash-empty">No agent activity yet. Switch an agent on to start.</div>'}
+      </section>`
+  })
 }
 
-async function loadAgents() {
+async function loadAgents(force = false) {
+  if (agentsLoading && !force) return
+  agentsLoading = true
   const live = agentsEl.querySelector('#agentsLive')
   try {
-    const d = await agentsCall('GET', '/api/agents')
+    const d = await api.agents()
     live.textContent = `Live · ${new Date().toLocaleTimeString()}`
     live.classList.remove('off')
     const sig = JSON.stringify(d)
-    // Skip re-rendering while a setting is being edited, so typing isn't interrupted.
+    // Don't re-render under someone typing in a setting.
     const editing = agentsEl.contains(document.activeElement) && document.activeElement.matches('input, select')
-    if (sig !== agentsSig && !editing) { agentsSig = sig; agentsData = d; renderAgents() }
+    if (sig !== agentsSig && (force || !editing)) { agentsSig = sig; agentsData = d; renderAgents() }
   } catch {
     live.textContent = 'Offline, retrying…'
     live.classList.add('off')
+  } finally {
+    agentsLoading = false
   }
 }
 
-function showAgents() {
-  currentIncident = null
-  currentConv = null
-  updateCaseControls()
-  convTitleEl.textContent = 'Agents'
-  chatEl.innerHTML = ''
-  chatEl.appendChild(welcomeEl)
-  welcomeEl.style.display = 'none'
-  chatEl.appendChild(agentsEl)
+function enterAgents() {
+  setViewTitle('Agents')
   agentsSig = null
   loadAgents()
 }
@@ -2237,511 +3032,281 @@ function showAgents() {
 agentsEl.addEventListener('change', async e => {
   const t = e.target
   try {
-    if (t.id === 'agentsOwner') await agentsCall('PUT', '/api/agents/config', { owner: t.value })
+    if (t.id === 'agentsOwner') await apiJSON('/api/agents/config', { method: 'PUT', body: { owner: t.value } })
     else if (t.dataset.agent) {
       const value = t.type === 'checkbox' ? t.checked : Number(t.value)
-      await agentsCall('PUT', '/api/agents/config', { [t.dataset.agent]: { [t.dataset.key]: value } })
+      await apiJSON('/api/agents/config', { method: 'PUT', body: { [t.dataset.agent]: { [t.dataset.key]: value } } })
     } else return
-  } catch (err) { alert('Could not save: ' + err.message) }
-  t.blur()
+  } catch (err) { if (err.status !== 401) notify(`Could not save: ${err.message}`) }
   agentsSig = null
-  loadAgents()
+  await loadAgents(true)  // the setting just changed: re-render even with focus on it
 })
 
 agentsEl.addEventListener('click', async e => {
   const b = e.target.closest('button')
   if (!b) return
   const { run, stop, prop, decision, undo, openConv, openCase } = b.dataset
+  if (openConv) { navigate(`#/chat/${enc(openConv)}`); return }
+  if (openCase) { navigate(`#/cases/${enc(openCase)}`); return }
   try {
-    if (openConv) { setSideTab('chats'); loadConversation(openConv); return }
-    if (openCase) { setSideTab('cases'); openIncident(openCase); return }
     if (stop) {
       if (!confirm(stop === 'all' ? 'Stop and switch off every agent?' : `Stop and switch off the ${AGENT_INFO[stop][0]} agent?`)) return
       b.disabled = true
-      await agentsCall('POST', `/api/agents/${stop}/stop`)
-    } else if (run) await agentsCall('POST', `/api/agents/${run}/run`)
+      await apiJSON(`/api/agents/${enc(stop)}/stop`, { method: 'POST' })
+    } else if (run) await apiJSON(`/api/agents/${enc(run)}/run`, { method: 'POST' })
     else if (prop) {
       if (decision !== 'reject' && !confirm(decision === 'approve'
         ? 'Isolate this host in LimaCharlie now? It loses network access (except to LimaCharlie) until released.'
         : 'Release this host from network isolation?')) return
       b.disabled = true
-      await agentsCall('POST', `/api/agents/proposals/${prop}/${decision}`)
+      await apiJSON(`/api/agents/proposals/${enc(prop)}/${enc(decision)}`, { method: 'POST' })
     } else if (undo) {
       if (!confirm('Undo this decision? The alerts go back to the queue for a human.')) return
-      await agentsCall('POST', `/api/agents/log/${undo}/undo`)
+      await apiJSON(`/api/agents/log/${enc(undo)}/undo`, { method: 'POST' })
     } else return
-  } catch (err) { alert(err.message) }
+  } catch (err) {
+    b.disabled = false
+    if (err.status !== 401) notify(err.message)
+  }
   agentsSig = null
-  loadAgents()
+  await loadAgents(true)
+  if (document.activeElement === document.body) viewTitleEl.focus({ preventScroll: true })
 })
 
-document.getElementById('agentsBtn').onclick = showAgents
+// ─── Topbar: case controls for the open chat ─────────────────────
+const addToCaseBtn = $('addToCaseBtn')
+const caseBadgeEl  = $('caseBadge')
+const caseModalEl  = $('caseModal')
+let caseCtlSeq = 0
 
-function showWelcome() {
-  currentIncident = null
-  currentConv = null
-  chatEl.innerHTML = ''
-  chatEl.appendChild(welcomeEl)
-  welcomeEl.style.display = 'flex'
-  convTitleEl.textContent = 'Select a conversation'
-  updateCaseControls()
-}
-
-async function openIncident(id) {
-  let inc
-  try { inc = await api.getIncident(id) } catch { return }
-  currentIncident = id
-  currentConv = null
-  updateCaseControls()
-  convTitleEl.textContent = `${inc.case_number} — ${inc.title}`
-  renderIncidentList(_allIncs)
-
-  chatEl.innerHTML = ''
-  chatEl.appendChild(welcomeEl)
-  welcomeEl.style.display = 'none'
-
-  const panel = document.createElement('div')
-  panel.className = 'case-panel'
-  const sevOpts = ['low','medium','high','critical']
-    .map(s => `<option value="${s}" ${inc.severity === s ? 'selected' : ''}>${s}</option>`).join('')
-  const stOpts = ['open','investigating','closed']
-    .map(s => `<option value="${s}" ${inc.status === s ? 'selected' : ''}>${s}</option>`).join('')
-  const convRows = (inc.conversations || []).map(c => `
-    <div class="case-conv-item" data-cid="${esc(c.conversation_id)}">
-      <span>${esc(c.title || 'Untitled investigation')}</span>
-      <button class="unlink" title="Unlink from case" data-cid="${esc(c.conversation_id)}">unlink</button>
-    </div>`).join('')
-  panel.innerHTML = `
-    <div class="case-card">
-      <div class="case-num">${esc(inc.case_number)}</div>
-      <h2>${esc(inc.title)}</h2>
-      <div class="case-row">
-        <label>Severity</label><select id="caseSev">${sevOpts}</select>
-        <label>Status</label><select id="caseStatus">${stOpts}</select>
-        <label>Verdict</label>
-        <input type="text" id="caseVerdict" placeholder="e.g. True positive — contained" value="${esc(inc.verdict || '')}" style="flex:1;min-width:160px"/>
-      </div>
-      <div style="margin-top:14px">
-        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Analyst notes</label>
-        <textarea id="caseNotes" placeholder="Containment steps, escalation details, ticket refs…">${esc(inc.notes || '')}</textarea>
-      </div>
-      <div class="case-actions">
-        <button class="btn-case" id="caseSaveBtn">Save changes</button>
-        <button class="btn-case" id="caseHtmlBtn">Export report (HTML)</button>
-        <button class="btn-case" id="caseMdBtn">Export report (MD)</button>
-        <button class="btn-case danger" id="caseDelBtn">Delete case</button>
-      </div>
-      <div class="case-convs">
-        <h3>Linked investigations (${(inc.conversations || []).length})</h3>
-        ${convRows || '<div style="font-size:12px;color:var(--muted)">None yet — open a chat and press “+ Case”.</div>'}
-      </div>
-      <div class="ctime" style="margin-top:14px;font-size:11px;color:var(--muted)">
-        Opened ${fmtTime(inc.created_at)}${inc.closed_at ? ' · Closed ' + fmtTime(inc.closed_at) : ''}
-      </div>
-    </div>`
-  chatEl.appendChild(panel)
-
-  panel.querySelector('#caseSaveBtn').onclick = async () => {
-    try {
-      await api.updateIncident(id, {
-        severity: panel.querySelector('#caseSev').value,
-        status: panel.querySelector('#caseStatus').value,
-        verdict: panel.querySelector('#caseVerdict').value,
-        notes: panel.querySelector('#caseNotes').value,
-      })
-      openIncident(id)
-      refreshList()
-    } catch (e) { alert('Save failed: ' + e.message) }
-  }
-  panel.querySelector('#caseHtmlBtn').onclick = () => window.open(`/api/incidents/${id}/report`, '_blank')
-  panel.querySelector('#caseMdBtn').onclick = () => { window.location = `/api/incidents/${id}/report?format=md` }
-  panel.querySelector('#caseDelBtn').onclick = () => deleteIncident(id)
-  panel.querySelectorAll('.case-conv-item').forEach(el => {
-    el.onclick = e => {
-      if (e.target.classList.contains('unlink')) return
-      setSideTab('chats')
-      loadConversation(el.dataset.cid)
-    }
-  })
-  panel.querySelectorAll('.unlink').forEach(btn => {
-    btn.onclick = async e => {
-      e.stopPropagation()
-      try { await api.unlinkConvFromIncident(id, btn.dataset.cid); openIncident(id) } catch {}
-    }
-  })
-}
-
-// ─── Add-to-case (topbar) ─────────────────────────────────────────
-const addToCaseBtn = document.getElementById('addToCaseBtn')
-const caseBadgeEl  = document.getElementById('caseBadge')
-const caseModalEl  = document.getElementById('caseModal')
-
-async function updateCaseControls() {
-  if (!currentConv) {
-    addToCaseBtn.style.display = 'none'
-    caseBadgeEl.style.display = 'none'
-    return
-  }
-  addToCaseBtn.style.display = ''
+async function updateCaseControls(convId) {
+  const seq = ++caseCtlSeq
+  addToCaseBtn.hidden = !convId
+  caseBadgeEl.hidden = true
+  if (!convId) return
   try {
-    const data = await api.incidentsForConv(currentConv)
-    const incs = data.incidents || []
+    const incs = (await api.incidentsForConv(convId)).incidents || []
+    if (seq !== caseCtlSeq) return  // the analyst moved on
     if (incs.length) {
       caseBadgeEl.textContent = incs.map(i => i.case_number).join(' ')
-      caseBadgeEl.style.display = ''
-      caseBadgeEl.onclick = () => { setSideTab('cases'); openIncident(incs[0].id) }
-    } else {
-      caseBadgeEl.style.display = 'none'
+      caseBadgeEl.href = `#/cases/${enc(incs[0].id)}`
+      caseBadgeEl.hidden = false
     }
-  } catch { caseBadgeEl.style.display = 'none' }
+  } catch {}
 }
 
 addToCaseBtn.onclick = async () => {
-  if (!currentConv) return
-  const choicesEl = document.getElementById('caseChoices')
-  choicesEl.innerHTML = '<div style="font-size:12px;color:var(--muted)">Loading…</div>'
-  caseModalEl.classList.add('show')
+  const convId = route.view === 'chat' ? route.id : null
+  if (!convId) return
+  caseModalEl.dataset.conv = convId
+  const choices = $('caseChoices')
+  choices.innerHTML = '<div style="font-size:12px;color:var(--muted)">Loading…</div>'
+  $('newCaseTitle').value = ''
+  $('newCaseTitle').placeholder = sessions.get(convId)?.title || 'New case title…'
+  caseModalEl.showModal()
   try {
-    const data = await api.listIncidents()
-    const open = (data.incidents || []).filter(i => i.status !== 'closed')
-    choicesEl.innerHTML = open.length ? '' :
-      '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">No open cases — create one below.</div>'
-    open.forEach(inc => {
-      const d = document.createElement('div')
-      d.className = 'case-choice'
-      d.innerHTML = `<span class="sev-dot sev-${esc(inc.severity)}"></span>
-        <span style="flex:1">${esc(inc.title)}</span>
-        <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">${esc(inc.case_number)}</span>`
-      d.onclick = async () => {
-        try {
-          await api.linkConvToIncident(inc.id, currentConv)
-          caseModalEl.classList.remove('show')
-          updateCaseControls()
-          if (sideTab === 'cases') refreshList()
-        } catch (e) { alert('Link failed: ' + e.message) }
-      }
-      choicesEl.appendChild(d)
-    })
-  } catch {
-    choicesEl.innerHTML = '<div style="font-size:12px;color:var(--red)">Failed to load cases</div>'
+    const open = ((await api.listIncidents()).incidents || []).filter(i => i.status !== 'closed')
+    choices.innerHTML = open.length
+      ? open.map(inc => `<button type="button" class="case-choice" data-inc="${esc(inc.id)}">${sevTag(inc.severity)}
+          <span style="flex:1;min-width:0;overflow-wrap:anywhere">${esc(inc.title)}</span>
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">${esc(inc.case_number)}</span></button>`).join('')
+      : '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">No open cases — create one below.</div>'
+    if (document.activeElement === $('newCaseTitle') && !$('newCaseTitle').value) choices.querySelector('button')?.focus()
+  } catch (e) {
+    choices.innerHTML = `<div style="font-size:12px;color:var(--red)">Could not load cases: ${esc(e.message)}</div>`
   }
 }
 
-document.getElementById('createCaseBtn').onclick = async () => {
-  const titleInput = document.getElementById('newCaseTitle')
-  const title = titleInput.value.trim() || convTitleEl.textContent || 'Untitled case'
+$('caseChoices').addEventListener('click', async e => {
+  const b = e.target.closest('[data-inc]')
+  if (!b) return
+  const convId = caseModalEl.dataset.conv
   try {
-    await api.newIncident({ title, conversation_id: currentConv })
-    titleInput.value = ''
-    caseModalEl.classList.remove('show')
-    updateCaseControls()
-    if (sideTab === 'cases') refreshList()
-  } catch (e) { alert('Create failed: ' + e.message) }
-}
+    await api.linkConvToIncident(b.dataset.inc, convId)
+    caseModalEl.close()
+    updateCaseControls(convId)
+    refreshList('cases')
+    announce('Added to the case')
+  } catch (err) { if (err.status !== 401) notify(`Link failed: ${err.message}`) }
+})
 
+$('createCaseBtn').onclick = async () => {
+  const convId = caseModalEl.dataset.conv
+  const title = $('newCaseTitle').value.trim() || sessions.get(convId)?.title || 'Untitled case'
+  try {
+    await api.newIncident({ title, conversation_id: convId })
+    caseModalEl.close()
+    updateCaseControls(convId)
+    refreshList('cases')
+    announce('Case created')
+  } catch (err) { if (err.status !== 401) notify(`Create failed: ${err.message}`) }
+}
+$('newCaseTitle').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('createCaseBtn').click() } })
+$('caseCancelBtn').onclick = () => caseModalEl.close()
 caseModalEl.addEventListener('click', e => {
-  if (e.target === caseModalEl) caseModalEl.classList.remove('show')
+  if (e.target !== caseModalEl) return
+  const r = caseModalEl.getBoundingClientRect()  // the dialog's own padding is a click on it, not on the backdrop
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) caseModalEl.close()
 })
+caseModalEl.addEventListener('close', () => { if (!addToCaseBtn.hidden) addToCaseBtn.focus() })
 
-async function deleteConversation(id) {
-  if (!confirm('Delete this conversation? This cannot be undone.')) return
-  try {
-    await api.deleteConv(id)
-    if (currentConv === id) {
-      currentConv = null
-      chatEl.innerHTML = ''
-      welcomeEl.style.display = 'flex'
-      chatEl.appendChild(welcomeEl)
-      convTitleEl.textContent = 'Investigation'
-      updateCaseControls()
-    }
-    refreshList()
-  } catch { /* silent */ }
+// ─── Router ──────────────────────────────────────────────────────
+// #/new · #/chat/<id> · #/alerts[/<id>] · #/cases[/<id>] · #/dashboard · #/agents
+const VIEWS = ['chat', 'alerts', 'cases', 'dashboard', 'agents']
+const VIEW_ENTER = { chat: enterChat, alerts: enterAlerts, cases: enterCases, dashboard: enterDashboard, agents: enterAgents }
+let route = { view: 'chat', id: null }
+let navSeq = 0
+let renderedHash = null
+
+function parseHash() {
+  const [v = '', rawId = ''] = location.hash.replace(/^#\/?/, '').split('/')
+  let id = null
+  try { id = rawId ? decodeURIComponent(rawId) : null } catch {}
+  if (v === 'chat') return { view: 'chat', id: id || lastChatId || null }
+  if (VIEWS.includes(v)) return { view: v, id }
+  return { view: 'chat', id: null }
 }
 
-// ─── Load conversation ───────────────────────────────────────────
-async function loadConversation(id) {
-  currentConv = id
-  currentIncident = null
-  updateCaseControls()
-  chatEl.innerHTML = ''
-  welcomeEl.style.display = 'none'
-  chatEl.appendChild(welcomeEl)
+function navigate(hash, { replace = false } = {}) {
+  if (location.hash === hash) { render(); return }
+  if (replace) { history.replaceState(null, '', hash); render() }
+  else location.hash = hash
+}
 
-  try {
-    const [msgs, list] = await Promise.all([api.getMessages(id), api.listConvs()])
-    const convs = list.conversations || []
-    const conv = convs.find(c => c.id === id)
-    convTitleEl.textContent = conv?.title || 'Investigation'
-    renderConvList(convs)
-    chatEl.innerHTML = ''
-    chatEl.appendChild(welcomeEl)
-    welcomeEl.style.display = 'none';
-    (msgs.messages || []).forEach(m => addMessage(m.role, m.content, null, m.created_at))
-  } catch (e) {
-    convTitleEl.textContent = 'Investigation'
+function render() {
+  const next = parseHash()
+  if (caseDirty && route.view === 'cases' && !(next.view === 'cases' && next.id === route.id)) {
+    if (!confirm('Discard your unsaved changes to this case?')) { history.replaceState(null, '', renderedHash); return }
+    caseDirty = false
   }
-}
+  if (next.view === 'chat' && next.id && location.hash !== `#/chat/${enc(next.id)}`) history.replaceState(null, '', `#/chat/${enc(next.id)}`)
+  const seq = ++navSeq
+  if (route.view === 'chat' && route.id) { const s = sessions.get(route.id); if (s) { s.scrollTop = chatArea.scrollTop; s.seenCount = s.count } }
+  const hadFocusInView = document.querySelector('.view:not([hidden])')?.contains(document.activeElement)
+  route = next
+  renderedHash = location.hash
+  try { sessionStorage.setItem('ns.lastRoute', renderedHash) } catch {}
 
-// ─── Send ────────────────────────────────────────────────────────
-let pendingImages = []
-let pendingFiles = []  // CSV uploads: { name, content, size }
-const MAX_CSV_FILES = 3, MAX_CSV_MB = 5  // mirrors the server-side limits
-
-function fmtBytes(n) {
-  return n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`
-}
-
-function renderPreviewStrip() {
-  const strip = document.getElementById('imgPreviewStrip')
-  strip.innerHTML = ''
-  strip.style.display = pendingImages.length || pendingFiles.length ? 'flex' : 'none'
-  pendingFiles.forEach((f, i) => {
-    const chip = document.createElement('div')
-    chip.className = 'file-chip'
-    const kind = Object.assign(document.createElement('span'), { className: 'kind', textContent: 'CSV' })
-    const size = Object.assign(document.createElement('span'), { className: 'size', textContent: fmtBytes(f.size) })
-    const rm = Object.assign(document.createElement('button'), { className: 'rm', textContent: '✕' })
-    rm.setAttribute('aria-label', `Remove ${f.name}`)
-    rm.onclick = () => { pendingFiles.splice(i, 1); renderPreviewStrip() }
-    chip.append(kind, f.name, size, rm)
-    strip.appendChild(chip)
+  VIEWS.forEach(v => { $(`view-${v}`).hidden = v !== route.view })
+  if (route.view !== 'dashboard') dashTip.style.display = 'none'
+  document.body.classList.toggle('no-list', !LISTS[route.view])
+  document.querySelectorAll('[data-nav]').forEach(a => {
+    if (a.dataset.nav === route.view) a.setAttribute('aria-current', 'page')
+    else a.removeAttribute('aria-current')
   })
-  pendingImages.forEach((src, i) => {
-    const thumb = document.createElement('div')
-    thumb.className = 'img-thumb'
-    const img = document.createElement('img')
-    img.src = src
-    const rm = document.createElement('button')
-    rm.className = 'rm'
-    rm.textContent = '✕'
-    rm.onclick = () => { pendingImages.splice(i, 1); renderPreviewStrip() }
-    thumb.appendChild(img)
-    thumb.appendChild(rm)
-    strip.appendChild(thumb)
-  })
+  if (route.view === 'chat' && !route.id) $('newChatBtn').setAttribute('aria-current', 'page')
+  else $('newChatBtn').removeAttribute('aria-current')
+  if (LISTS[route.view]) setListSection(route.view)
+  closeDrawer()
+  updateCaseControls(route.view === 'chat' ? route.id : null)
+  VIEW_ENTER[route.view](route.id, seq)
+  if (hadFocusInView) viewTitleEl.focus({ preventScroll: true })
+  if (isNarrow() && LISTS[route.view] && route.view !== 'chat' && !route.id) openDrawer()
 }
 
-let visionCfg = { supported: null, provider_note: '', max_images: 4, max_size_mb: 5 }
-
-function applyVisionHint(cfg) {
-  visionCfg = cfg
-  const btn = document.getElementById('attachBtn')
-  btn.title = `${cfg.provider_note || 'Attach screenshot'} · CSV files (max ${MAX_CSV_FILES}, ${MAX_CSV_MB} MB each) are analyzed as data`
-  if (cfg.supported === false) {
-    btn.style.borderColor = 'var(--orange)'
-    btn.style.color = 'var(--orange)'
-  } else if (cfg.supported === null) {
-    btn.style.borderColor = 'var(--yellow)'
-    btn.style.color = 'var(--yellow)'
-  } else {
-    btn.style.borderColor = ''
-    btn.style.color = ''
-  }
-}
-
-document.getElementById('attachBtn').onclick = () => document.getElementById('imageInput').click()
-document.getElementById('imageInput').onchange = e => {
-  let csvCount = pendingFiles.length  // counted up front: the reads below finish asynchronously
-  Array.from(e.target.files || []).forEach(file => {
-    if (/\.csv$/i.test(file.name) || file.type === 'text/csv') {
-      if (csvCount >= MAX_CSV_FILES) { alert(`Max ${MAX_CSV_FILES} CSV files per message`); return }
-      if (file.size > MAX_CSV_MB * 1024 * 1024) { alert(`${file.name} is too large (max ${MAX_CSV_MB} MB)`); return }
-      csvCount++
-      const reader = new FileReader()
-      reader.onload = ev => { pendingFiles.push({ name: file.name, content: ev.target.result, size: file.size }); renderPreviewStrip() }
-      reader.readAsText(file)
-      return
-    }
-    if (pendingImages.length >= visionCfg.max_images) {
-      alert(`Max ${visionCfg.max_images} images per message (set by admin)`); return
-    }
-    if (file.size > visionCfg.max_size_mb * 1024 * 1024) {
-      alert(`Image too large (admin limit: ${visionCfg.max_size_mb} MB per image)`); return
-    }
-    const reader = new FileReader()
-    reader.onload = ev => { pendingImages.push(ev.target.result); renderPreviewStrip() }
-    reader.readAsDataURL(file)
-  })
-  e.target.value = ''
-}
-
-async function send() {
-  const msg = inputEl.value.trim()
-  const imgs = [...pendingImages]
-  const files = pendingFiles.map(({ name, content }) => ({ name, content }))
-  if ((!msg && !imgs.length && !files.length) || sending) return
-  sending = true
-  sendBtn.disabled = true
-
-  if (!currentConv) {
-    const nc = await api.newConv()
-    currentConv = nc.id
-    if (currentIncident || dashEl.isConnected || agentsEl.isConnected) {
-      // Typing while viewing a case, the dashboard or the agents starts a fresh chat — clear the panel.
-      currentIncident = null
-      chatEl.innerHTML = ''
-      chatEl.appendChild(welcomeEl)
-      welcomeEl.style.display = 'none'
-    }
-    updateCaseControls()
-  }
-
-  addMessage('user', [msg, ...files.map(f => `[Attached CSV: ${f.name}]`)].filter(Boolean).join('\n'), null, null, imgs)
-  inputEl.value = ''
-  inputEl.style.height = 'auto'
-  pendingImages = []
-  pendingFiles = []
-  renderPreviewStrip()
-  setStatus('thinking', 'Analysing…')
-  showTyping()
-
-  try {
-    // Use streaming endpoint for status updates
-    const body = { message: msg, debug: !!debugToggle.checked }
-    if (imgs.length) body.images = imgs
-    if (files.length) body.files = files
-    const resp = await fetch(`/api/conversations/${currentConv}/messages/stream`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify(body),
-    })
-    if (!resp.ok) throw new Error(await resp.text())
-
-    const reader = resp.body.getReader()
-    const decoder = new TextDecoder()
-    let buf = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buf += decoder.decode(value, { stream: true })
-      const lines = buf.split('\n')
-      buf = lines.pop()
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        try {
-          const ev = JSON.parse(line.slice(6))
-          if (ev.type === 'status') {
-            const el = document.getElementById('statusStageLabel')
-            if (el) el.textContent = ev.text
-          } else if (ev.type === 'done') {
-            removeTyping()
-            if (ev.reply) addMessage('assistant', ev.reply, ev.debug_trace)
-            await refreshList()
-            setStatus('online', currentUser)
-          } else if (ev.type === 'error') {
-            removeTyping()
-            addMessage('assistant', '⚠ ' + ev.text)
-            setStatus('offline', 'Error')
-          }
-        } catch (_) {}
-      }
-    }
-  } catch (e) {
-    removeTyping()
-    addMessage('assistant', '⚠ Error: ' + (e?.message || 'request failed'))
-    setStatus('offline', 'Error')
-  } finally {
-    sending = false
-    sendBtn.disabled = false
-  }
-}
-
-// ─── Ping / auth ─────────────────────────────────────────────────
-let currentUser = ''
-async function ping() {
-  try {
-    const r = await fetch('/api/ping', { credentials: 'same-origin' })
-    if (r.status === 401) { window.location = '/login'; return }
-    const j = await r.json()
-    currentUser = j.user?.username || ''
-    const ready = j.model_ready ? '' : ' · no LLM key'
-    setStatus('online', currentUser + ready)
-    if (j.user?.role === 'admin') adminLink.style.display = ''
-    if (j.vision) applyVisionHint(j.vision)
-  } catch {
-    setStatus('offline', 'Offline')
-  }
-}
-
-// ─── Events ──────────────────────────────────────────────────────
-sendBtn.onclick = send
-
-inputEl.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
-})
-
-// Auto-grow textarea
-inputEl.addEventListener('input', () => {
-  inputEl.style.height = 'auto'
-  inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px'
-})
-
-newChatBtn.onclick = async () => {
-  const nc = await api.newConv()
-  currentConv = nc.id
-  currentIncident = null
-  convTitleEl.textContent = 'New Investigation'
-  chatEl.innerHTML = ''
-  chatEl.appendChild(welcomeEl)
-  welcomeEl.style.display = ''
-  setSideTab('chats')
-  updateCaseControls()
-}
+window.addEventListener('hashchange', render)
+// '#main' is not a route: the skip link moves focus instead of navigating.
+document.querySelector('.skip-link').addEventListener('click', e => { e.preventDefault(); viewTitleEl.focus() })
 
 // ─── Keyboard shortcuts ──────────────────────────────────────────
 document.addEventListener('keydown', e => {
-  // Ctrl+K or Cmd+K → new investigation
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+  if (e.defaultPrevented || e.isComposing) return
+  const mod = e.ctrlKey || e.metaKey
+  const k = e.key.toLowerCase()
+  if (mod && k === 'k') {           // new investigation
     e.preventDefault()
-    newChatBtn.click()
-    return
-  }
-  // Ctrl+/ or Cmd+/ → focus input
-  if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+    navigate('#/new')
+    setTimeout(() => inputEl.focus(), 0)
+  } else if (mod && e.key === '/') { // jump to the chat input
     e.preventDefault()
-    inputEl.focus()
-    return
-  }
-  // Arrow keys to navigate sidebar (only when input not focused)
-  if (document.activeElement === inputEl) return
-  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-    const items = [...convListEl.querySelectorAll('.conv-item')]
-    if (!items.length) return
-    const active = convListEl.querySelector('.conv-item.active')
-    const idx = active ? items.indexOf(active) : -1
-    let next = e.key === 'ArrowDown' ? idx + 1 : idx - 1
-    next = Math.max(0, Math.min(next, items.length - 1))
-    if (items[next]) {
-      e.preventDefault()
-      items[next].click()
-      items[next].scrollIntoView({ block: 'nearest' })
-    }
+    if (route.view !== 'chat') navigate('#/chat')
+    setTimeout(() => inputEl.focus(), 0)
+  } else if (e.key === 'Escape' && document.body.classList.contains('drawer-open')) {
+    closeDrawer()
+    $('menuBtn').focus()
   }
 })
 
-// ─── Init ────────────────────────────────────────────────────────
-ping()
-refreshList()
-pollAlertBadge()
-setInterval(ping, 60_000)
+// ─── Ping / auth ─────────────────────────────────────────────────
+async function ping() {
+  try {
+    const r = await apiRaw('/api/ping')
+    const j = await r.json()
+    conn.ok = true
+    conn.user = j.user?.username || ''
+    if (draftsUser && draftsUser !== conn.user) {
+      drafts.clear()
+      inputEl.value = ''; pendingImages = []; pendingFiles = []
+      autoGrow(); renderPreviewStrip()
+      navigate('#/new', { replace: true })
+    }
+    draftsUser = ''
+    conn.role = j.user?.role || ''
+    conn.ready = !!j.model_ready
+    $('adminLink').hidden = conn.role !== 'admin'
+    if (j.vision) applyVisionHint(j.vision)
+  } catch (e) {
+    if (e.status !== 401) conn.ok = false
+  }
+  renderStatus()
+}
 
-// Live refresh every 1s: alert badge, the Alerts inbox list and the dashboard.
-// Skipped while the tab is hidden or the previous tick is still in flight.
-let _tickBusy = false
-setInterval(async () => {
+// ─── Timers ──────────────────────────────────────────────────────
+const timers = []
+function every(ms, fn) { timers.push(setInterval(fn, ms)) }
+function stopTimers() { timers.forEach(clearInterval); sessions.forEach(stopPoll); closeInflight() }
+
+// ─── Init ────────────────────────────────────────────────────────
+$('view-dashboard').appendChild(dashEl)
+$('view-agents').appendChild(agentsEl)
+loadDrafts()
+if (!location.hash || location.hash === '#') {
+  let back = null
+  try { back = sessionStorage.getItem('ns.returnTo') || sessionStorage.getItem('ns.lastRoute') } catch {}
+  history.replaceState(null, '', /^#\/[\w\-/%.~]*$/.test(back || '') ? back : '#/new')
+}
+try { sessionStorage.removeItem('ns.returnTo') } catch {}
+render()
+ping()
+if (listSection !== 'chat') refreshList('chat')  // pending chats and titles are known from the start
+pollAlertBadge()
+renderStatus()
+let loggingOut = false
+$('logoutLink').addEventListener('click', () => {
+  loggingOut = true
+  try { ['ns.drafts', 'ns.lastRoute', 'ns.returnTo'].forEach(k => sessionStorage.removeItem(k)) } catch {}
+})
+window.addEventListener('beforeunload', () => { if (!loggingOut) saveDrafts() })
+// A hidden tab gives its in-flight stream back and polls its remote chats; a visible one streams again.
+document.addEventListener('visibilitychange', () => {
+  if (_redirecting) return
+  if (document.hidden) { closeInflight(); pollRemote() } else watchInflight()
+})
+
+every(60_000, ping)
+// Live refresh every 1s: alert badge, the Alerts list, the dashboard and the running-investigation
+// clock. Skipped while the tab is hidden or the previous tick is still in flight.
+let _tickBusy = false, _tick = 0
+every(1000, async () => {
+  // No snapshot or ping for a while: the connection is dead (sleep, network change). Drop it and fall back.
+  if (live.ctl && Date.now() - live.lastData > LIVE_SILENT_MS) live.ctl.abort()
+  const cur = route.view === 'chat' && route.id ? sessions.get(route.id) : null
+  if (cur?.inflight) updateIndicator(cur)
   if (document.hidden || _tickBusy) return
   _tickBusy = true
+  _tick++
   try {
-    if (dashEl.isConnected) await loadDashboard()  // also updates the badge
-    else if (sideTab !== 'alerts') await pollAlertBadge()
-    if (sideTab === 'alerts') await refreshList()
-    if (agentsEl.isConnected && ++agentsTick % 3 === 0) await loadAgents()  // agent state changes slowly
+    const listShown = !!LISTS[route.view]
+    if (route.view === 'dashboard') await loadDashboard()  // also updates the badge
+    else if (!(listShown && listSection === 'alerts')) await pollAlertBadge()
+    if (listShown && listSection === 'alerts') await refreshList('alerts')
+    if (route.view === 'agents' && _tick % 3 === 0) await loadAgents()
+    if (_tick % 10 === 0) await refreshList('chat')  // new chats from agents, running investigations
+    if (listShown && listSection === 'cases' && _tick % 15 === 0) await refreshList('cases')
   } finally {
     _tickBusy = false
   }
-}, 1000)
+})
 </script>
 </body>
 </html>

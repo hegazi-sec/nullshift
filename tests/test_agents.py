@@ -2,6 +2,7 @@ import json
 import uuid
 
 import pytest
+from fastapi import HTTPException
 
 import app.agents as agents
 from app.db import user_store
@@ -81,6 +82,39 @@ def test_investigator_closes_confirmed_fp_and_proposes_isolation(env, monkeypatc
     assert after["rule-b on db-01"]["status"] == "investigating" and after["rule-b on db-01"]["severity"] == "critical"
     [p] = s["agent_store"].proposals()
     assert (p["sid"], p["hostname"], p["status"]) == (SID, "db-01", "proposed")
+    assert agents.run_investigator(cfg) == "0 case(s) investigated"
+
+
+def test_investigator_skips_a_deleted_triage_chat_and_retries_a_busy_one(env, monkeypatch):
+    s, cfg = env
+    ingest(s, "rule-a", "web-01")
+    ingest(s, "rule-b", "db-01")
+    ingest(s, "rule-c", "app-01")
+    llm(monkeypatch, {"rule-": ("", "Suspicious", "Medium")})
+    agents.run_triage(cfg)
+    cases = {c["title"]: c for c in s["incident_store"].list_for_user(1)}
+    gone, busy, fine = (cases[t] for t in ("rule-a on web-01", "rule-b on db-01", "rule-c on app-01"))
+    [conv] = [json.loads(e["data_json"])["conversation_id"]
+              for e in s["agent_store"].entries("triage", "case_opened") if e["target_id"] == gone["id"]]
+    s["store"].delete_conversation_for_user(1, conv)  # the owner deleted the triage chat
+    cfg["investigator"]["max_per_run"] = 10
+    asked, owner_busy = [], {busy["case_number"]}
+
+    def l2(actor, conv, message, mode):
+        asked.append(message)
+        if any(n in message for n in owner_busy):  # the owner is sending in that chat right now
+            raise HTTPException(status_code=409, detail="An investigation is already running in this conversation")
+        return "", "Suspicious", "Medium"
+    monkeypatch.setattr(agents, "_investigate", l2)
+
+    assert agents.run_investigator(cfg) == "1 case(s) investigated"
+    assert s["incident_store"].get_for_user(1, fine["id"])["verdict"] == "Suspicious"  # the run went on past both
+    assert not any(gone["case_number"] in q for q in asked)
+    skipped = {e["target_id"]: e["detail"] for e in s["agent_store"].entries("investigator", "skipped")}
+    assert skipped == {gone["id"]: f"{gone['case_number']}: its triage chat was deleted"}
+    assert busy["id"] not in s["agent_store"].targets("investigator")  # nothing decided, so not marked seen
+    owner_busy.clear()
+    assert agents.run_investigator(cfg) == "1 case(s) investigated"  # the busy case, on the next run
     assert agents.run_investigator(cfg) == "0 case(s) investigated"
 
 

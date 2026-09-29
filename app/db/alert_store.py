@@ -195,8 +195,9 @@ class AlertStore:
             self.conn.commit()
         return {"id": alert_id, **fields, "status": "new", "created_at": now}
 
-    def list(self, status: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
-        """Inbox listing — payload omitted to keep the response small."""
+    def list(self, status: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Inbox listing, newest first, one page at a time — payload omitted to
+        keep the response small."""
         with self.lock:
             cur = self.conn.cursor()
             if status:
@@ -205,9 +206,9 @@ class AlertStore:
                     SELECT id, source, title, severity, status, claimed_by,
                            conversation_id, created_at
                     FROM ingested_alerts WHERE status=?
-                    ORDER BY created_at DESC LIMIT ?
+                    ORDER BY created_at DESC LIMIT ? OFFSET ?
                     """,
-                    (status, limit),
+                    (status, limit, offset),
                 )
             else:
                 cur.execute(
@@ -215,11 +216,21 @@ class AlertStore:
                     SELECT id, source, title, severity, status, claimed_by,
                            conversation_id, created_at
                     FROM ingested_alerts
-                    ORDER BY created_at DESC LIMIT ?
+                    ORDER BY created_at DESC LIMIT ? OFFSET ?
                     """,
-                    (limit,),
+                    (limit, offset),
                 )
             return [dict(r) for r in cur.fetchall()]
+
+    def count(self, status: Optional[str] = None) -> int:
+        """Alerts in the inbox (of one status if given): the total a paged list is out of."""
+        with self.lock:
+            cur = self.conn.cursor()
+            if status:
+                cur.execute("SELECT COUNT(*) FROM ingested_alerts WHERE status=?", (status,))
+            else:
+                cur.execute("SELECT COUNT(*) FROM ingested_alerts")
+            return int(cur.fetchone()[0])
 
     def count_new(self) -> int:
         with self.lock:
@@ -315,20 +326,51 @@ class AlertStore:
             row = cur.fetchone()
             return dict(row) if row else None
 
-    def mark_investigating(self, alert_id: str, user_id: int, conversation_id: str) -> bool:
-        """Claim an alert. Only transitions from 'new' — first analyst wins."""
+    def mark_investigating(self, alert_id: str, user_id: int, conversation_id: str,
+                           stale_conversation_id: Optional[str] = None, reclaim: bool = False) -> bool:
+        """Claim an alert. Only transitions from 'new' — first analyst wins.
+
+        With reclaim (implied by stale_conversation_id), re-claims instead an
+        'investigating' alert whose linked conversation (that id, or none when
+        it is None) is gone; matching the old link keeps two analysts from
+        both winning the re-claim."""
+        if reclaim or stale_conversation_id:
+            # IS, not =: an alert an agent's undo left 'investigating' may have no link at all
+            cond, args = "status='investigating' AND conversation_id IS ?", (stale_conversation_id,)
+        else:
+            cond, args = "status='new'", ()
+        with self.lock:
+            cur = self.conn.cursor()
+            cur.execute(
+                f"""
+                UPDATE ingested_alerts
+                SET status='investigating', claimed_by=?, conversation_id=?, updated_at=?
+                WHERE id=? AND {cond}
+                """,
+                (user_id, conversation_id, self._now(), alert_id, *args),
+            )
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def detach_conversation(self, conversation_id: str) -> int:
+        """A conversation was deleted: alerts it was investigating go back to the
+        inbox as 'new' and unclaimed, and no alert keeps pointing at it
+        (dismissed alerts stay dismissed)."""
         with self.lock:
             cur = self.conn.cursor()
             cur.execute(
                 """
                 UPDATE ingested_alerts
-                SET status='investigating', claimed_by=?, conversation_id=?, updated_at=?
-                WHERE id=? AND status='new'
+                SET status = CASE WHEN status='investigating' THEN 'new' ELSE status END,
+                    claimed_by = CASE WHEN status='investigating' THEN NULL ELSE claimed_by END,
+                    updated_at = CASE WHEN status='investigating' THEN ? ELSE updated_at END,
+                    conversation_id = NULL
+                WHERE conversation_id=?
                 """,
-                (user_id, conversation_id, self._now(), alert_id),
+                (self._now(), conversation_id),
             )
             self.conn.commit()
-            return cur.rowcount > 0
+            return cur.rowcount
 
     def dismiss(self, alert_id: str, user_id: int) -> bool:
         with self.lock:

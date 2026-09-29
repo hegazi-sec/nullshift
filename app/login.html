@@ -22,6 +22,8 @@
       --font-ui: 'Work Sans', system-ui, sans-serif;
       --font-hd: 'Chakra Petch', monospace;
       --font-mono:'JetBrains Mono', monospace;
+      --field-w: 560px;
+      --field-h: 36px;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -136,26 +138,37 @@
       margin-bottom: 20px;
     }
 
-    .field { margin-bottom: 16px; }
-    .field label {
-      display: block;
+    /* Same field system as Settings. The card is narrower than 640px, so
+       labels always sit above their fields. */
+    .field {
+      display: grid;
+      grid-template-columns: minmax(0, var(--field-w));
+      row-gap: 6px;
+      margin-bottom: 16px;
+    }
+    .field > label {
       font-family: var(--font-hd);
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 600;
       letter-spacing: .1em;
+      line-height: 1.4;
       text-transform: uppercase;
       color: var(--muted);
-      margin-bottom: 6px;
+      overflow-wrap: anywhere;
     }
     .field input {
+      display: block;
       width: 100%;
+      max-width: var(--field-w);
+      height: var(--field-h);
       background: var(--bg3);
       border: 1px solid var(--border2);
       border-radius: 6px;
       color: var(--text2);
-      font-family: var(--font-ui);
-      font-size: 14px;
-      padding: 10px 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 18px;
+      padding: 8px 10px;
       outline: none;
       transition: border-color .15s, box-shadow .15s;
     }
@@ -186,6 +199,17 @@
     .btn-submit:hover { background: #00c8f0; }
     .btn-submit:active { opacity: .85; }
 
+    .login-error {
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.35);
+      color: #fca5a5;
+      border-radius: 6px;
+      font-size: 13px;
+      padding: 9px 12px;
+      margin-bottom: 16px;
+    }
+    .login-error[hidden] { display: none; }
+
     /* Footer */
     .login-footer {
       text-align: center;
@@ -212,6 +236,7 @@
 
   <div class="card">
     <div class="card-title">Authenticate</div>
+    <div class="login-error" id="loginError" role="alert" hidden>Invalid username or password.</div>
     <form method="post" action="/login">
       <div class="field">
         <label for="username">Username</label>
@@ -227,5 +252,14 @@
 
   <div class="login-footer">All access is logged · Unauthorised access is prohibited</div>
 </div>
+<script>
+  // POST /login redirects back here with ?error=1 on a failed sign-in.
+  // Drop the flag from the URL so a refresh shows a clean form.
+  if (new URLSearchParams(location.search).has('error')) {
+    document.getElementById('loginError').hidden = false;
+    document.getElementById('username').focus();
+    history.replaceState(null, '', location.pathname);
+  }
+</script>
 </body>
 </html>

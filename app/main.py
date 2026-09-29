@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException, Depends, Header
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse, Response
-from fastapi.exceptions import RequestValidationError
 from app.schemas import (
     ChatRequest, ConversationCreate, MessageCreate, ToolExecuteRequest, PrefsUpdate,
     IncidentCreate, IncidentUpdate, IncidentLink,
@@ -20,7 +19,7 @@ from app.execution.investigation_service import run_investigation
 from app.playbooks.runner import PlaybookRunner, SPARSE_THRESHOLD
 from app.prompts import SYSTEM_PROMPT
 from app import rag as _rag_mod
-from app.auth import router as auth_router, get_current_user, require_admin, init_auth_startup, _validate_csrf
+from app.auth import router as auth_router, get_current_user, require_admin, init_auth_startup, _validate_csrf, html_page
 from app.db.chat_store import store
 from app.db.investigation_state import inv_state
 from app.db.verdict_store import verdicts as verdict_store, parse_decision
@@ -35,13 +34,17 @@ from app.db.summary_store import summaries as summary_store
 from app.deployment_memory import write_memory_file, get_cached_memory
 import re
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List, Tuple
+from urllib.parse import urlsplit
 from app.utils import csv_context as csv_ctx
 
 class _AccessLogFilter(logging.Filter):
     # UI polling (ping every 60s, alert inbox + dashboard every 1s, agents every 3s) would flood the access log,
     # and SIEM webhooks that can't send headers put the shared secret in ?token=.
-    _POLLS = re.compile(r'"GET /api/(?:ping|alerts|dashboard|agents)(?:\?\S*)? HTTP')
+    _POLLS = re.compile(r'"GET /api/(?:ping|alerts|dashboard|agents|inflight)(?:\?\S*)? HTTP')
     _TOKEN = re.compile(r'(token=)[^&\s]+')
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -575,7 +578,9 @@ def orchestrated_llm_reply(aug_user_msg: Dict[str, str], conv_id: str, response_
         history = store.last_messages_for_user(current_user["id"], conv_id, limit=20)
     except PermissionError:
         history = []
-    hist_trimmed = [m for m in history if not (m.get('role')=='user' and m.get('content')==aug_user_msg['content'])]
+    # Empty rows (image-only messages from older versions) are dropped: Anthropic rejects an empty user turn
+    hist_trimmed = [m for m in history if (m.get('content') or '').strip()
+                    and not (m.get('role')=='user' and m.get('content')==aug_user_msg['content'])]
     hist_for_llm = hist_trimmed + [aug_user_msg]
     user_prefs = prefs_store.get_all(current_user["id"]) if current_user else {}
     temperature = _temperature_for_mode(response_mode, user_prefs)
@@ -612,8 +617,61 @@ def orchestrated_llm_reply(aug_user_msg: Dict[str, str], conv_id: str, response_
 
     return reply_md
 
-app = FastAPI()
+
+def _norm_host(host: str) -> str:
+    host = host.strip().lower()
+    for default_port in (":80", ":443"):
+        if host.endswith(default_port):
+            return host[: -len(default_port)]
+    return host
+
+
+def _origin_is_this_host(origin: str, headers: Dict[str, str]) -> bool:
+    """Origin names the host the request was sent to: the Host header, or
+    X-Forwarded-Host behind a proxy that rewrites Host (a cross-site form or
+    fetch cannot set that header)."""
+    try:
+        target = _norm_host(urlsplit(origin).netloc)
+    except ValueError:
+        return False
+    hosts = [headers.get("host", "")] + headers.get("x-forwarded-host", "").split(",")
+    return bool(target) and target in {_norm_host(h) for h in hosts}
+
+
+class _SameOriginWrites:
+    """CSRF guard for every cookie-authenticated write (/login, /logout, /chat,
+    /admin/users and the API alike). Browsers send Origin on every
+    POST/PUT/PATCH/DELETE, so a state-changing call whose Origin names another
+    host came from another site; SameSite=Lax alone still lets a sibling
+    subdomain's form through. Sec-Fetch-Site: same-origin (set by the browser,
+    not the page) also passes, for proxies that rewrite Host without
+    X-Forwarded-Host. Calls without Origin (curl, scripts) pass, and the SIEM
+    webhook is exempt: it authenticates with its own token."""
+
+    _UNSAFE = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+    _EXEMPT = frozenset({("POST", "/api/alerts/ingest")})
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if (scope["type"] == "http" and scope["method"] in self._UNSAFE
+                and (scope["method"], scope["path"]) not in self._EXEMPT):
+            headers = {k.decode("latin-1"): v.decode("latin-1") for k, v in scope["headers"]}
+            origin = headers.get("origin")
+            if (origin is not None and headers.get("sec-fetch-site") != "same-origin"
+                    and not _origin_is_this_host(origin, headers)):
+                log.warning("Rejected cross-origin %s %s (Origin %s)", scope["method"], scope["path"], origin[:100])
+                resp = JSONResponse(status_code=403, content={"detail": "Cross-origin request rejected"})
+                await resp(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
+# No /docs, /redoc or /openapi.json: they need no login and would hand out the route map.
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(auth_router)
+app.add_middleware(_SameOriginWrites)
 
 # Serve static assets (logo, favicon) at /static/
 from fastapi.staticfiles import StaticFiles
@@ -649,36 +707,16 @@ async def _startup_write_deployment_memory():
         log.exception("Failed to write deployment memory")
 
 
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """Better error messages for validation errors."""
-    return JSONResponse(
-        status_code=422,
-        content={
-            "error": "Invalid JSON in request body",
-            "detail": str(exc.errors()),
-            "example": {"message": "text", "alert_id": None, "agent_id": None, "time_range": "last_24h"}
-        }
-    )
-
-
 def _is_setup_complete() -> bool:
     """Return True if setup has been marked complete OR if users already exist.
 
-    Belt-and-suspenders: if setup.py wrote admin account to chat.db but the
-    browser opened before setup_complete was written in step 8, we don't want
-    the web wizard to run and wipe config.db. Checking for existing users
-    prevents that timing-window race.
+    Belt-and-suspenders: if setup.py wrote the admin account but the browser
+    opened before setup_complete was written in step 8, we don't want the web
+    wizard to run and wipe config.db. The predicate lives in app.auth so that
+    /login uses exactly the same check (see is_setup_complete there).
     """
-    try:
-        if settings_store.get("setup_complete") == "true":
-            return True
-        # Also treat as complete if any user accounts exist
-        from app.db.chat_store import store as _store
-        users = _store.conn.execute("SELECT 1 FROM users LIMIT 1").fetchone()
-        return users is not None
-    except Exception:
-        return False
+    from app.auth import is_setup_complete
+    return is_setup_complete()
 
 
 # ---------------------------------------------------------------------------
@@ -693,7 +731,7 @@ def setup_page():
     import os as _os
     html_path = _os.path.join(_os.path.dirname(__file__), "setup.html")
     with open(html_path, "r", encoding="utf-8") as f:
-        return HTMLResponse(f.read())
+        return html_page(f.read())
 
 
 @app.post('/api/setup/complete')
@@ -706,19 +744,27 @@ async def api_setup_complete(payload: Dict[str, Any]):
         raise HTTPException(status_code=403, detail="Setup already complete")
 
     import secrets as _secrets
-    from app.auth import get_password_hash as _hash_pw
+    from app.auth import get_password_hash as _hash_pw, USERNAME_RE, MIN_PASSWORD_LEN
     from app.db import user_store as _user_store
 
-    admin_username = (payload.get("admin_username") or "").strip()
-    admin_password = payload.get("admin_password") or ""
+    admin_username = str(payload.get("admin_username") or "").strip()
+    admin_password = str(payload.get("admin_password") or "")
     sdk_enabled    = bool(payload.get("sdk_enabled", False))
     siem_provider  = payload.get("siem_provider")
 
     # Validate
     if not admin_username:
         raise HTTPException(status_code=400, detail="admin_username is required")
-    if len(admin_password) < 16:
-        raise HTTPException(status_code=400, detail="admin_password must be at least 16 characters")
+    if not USERNAME_RE.fullmatch(admin_username):
+        raise HTTPException(status_code=400, detail="admin_username may only use letters, digits and . _ @ - (max 64)")
+    if len(admin_password) < MIN_PASSWORD_LEN:
+        raise HTTPException(status_code=400, detail=f"admin_password must be at least {MIN_PASSWORD_LEN} characters")
+    # _is_setup_complete() already refuses once any account exists; this is the
+    # defense in depth for a race. Never report success while keeping an
+    # existing account's old password.
+    _user_store.init_db()
+    if _user_store.get_user_by_username(admin_username):
+        raise HTTPException(status_code=409, detail=f"User '{admin_username}' already exists — log in with its existing password")
 
     # Generate JWT secret only if one isn't already stored (setup.py may have set it)
     existing_jwt = settings_store.get("jwt_secret")
@@ -764,13 +810,8 @@ async def api_setup_complete(payload: Dict[str, Any]):
     settings_store.set_many(updates)
 
     # Create admin user
-    _user_store.init_db()
-    existing = _user_store.get_user_by_username(admin_username)
-    if not existing:
-        _user_store.create_user(admin_username, _hash_pw(admin_password), role="admin")
-        log.info("[setup] Created admin user: %s", admin_username)
-    else:
-        log.info("[setup] Admin user already exists: %s", admin_username)
+    _user_store.create_user(admin_username, _hash_pw(admin_password), role="admin")
+    log.info("[setup] Created admin user: %s", admin_username)
 
     # Mark setup complete LAST (so a crash before this point leaves setup re-runnable)
     settings_store.set_many({"setup_complete": "true"})
@@ -1140,12 +1181,20 @@ _PROVIDER_CATALOG = [
 ]
 
 
+def _providers_with_credentials() -> set:
+    """Providers that have what they need to run (key, base URL or SDK
+    switch), whether or not the saved chain or a pin routes to them.
+    configured_provider_names() is narrower: it is the effective chain."""
+    from app.llm import _PROVIDERS
+    return {n for n, p in _PROVIDERS.items() if p is not None and getattr(p, "client", None) is not None}
+
+
 @app.get('/api/admin/providers')
 def api_admin_providers(_: Dict[str, Any] = Depends(require_admin)):
     """Static catalog of providers + which are currently usable. The UI uses
     this to render the provider list and the active-provider dropdown."""
     from app.llm import _DEFAULT_CHAIN_ORDER
-    configured = set(configured_provider_names())
+    configured = _providers_with_credentials()
     catalog = []
     for entry in _PROVIDER_CATALOG:
         catalog.append({**entry, "configured": entry["name"] in configured})
@@ -1188,6 +1237,7 @@ def api_admin_get_settings(_: Dict[str, Any] = Depends(require_admin)):
             "openrouter_api_key_set":  bool(settings.OPENROUTER_API_KEY),
             "qwen_api_key_set":        bool(settings.QWEN_API_KEY),
             "kimi_api_key_set":        bool(settings.KIMI_API_KEY),
+            "vt_api_key_set":          bool(settings.VT_API_KEY),
             "claude_agent_sdk_enabled": bool(settings.USE_CLAUDE_AGENT_SDK),
             "anthropic_model":         settings.ANTHROPIC_MODEL,
             "openai_model":            settings.OPENAI_MODEL,
@@ -1216,6 +1266,7 @@ def api_admin_put_settings(
     cleaned = {k: v for k, v in payload.items() if k in ALLOWED_KEYS}
     if not cleaned:
         raise HTTPException(status_code=400, detail="No recognized settings in payload")
+    _check_routing_payload(cleaned)
     # Audit log — keys only, never values. Lets us prove from the server side
     # whether a save round-trip actually carried the field the user expected
     # (without leaking secrets into logs).
@@ -1225,8 +1276,27 @@ def api_admin_put_settings(
         sorted(cleaned.keys()),
         sorted(k for k in cleaned if k in SECRET_KEYS),
     )
+    before = configured_provider_names()
+    previous = {k: settings_store.get(k) for k in cleaned}
     touched = settings_store.set_many(cleaned, updated_by=current_user.get("id"))
     state = reload_providers()
+
+    # A chain or pin that routes nowhere makes every chat fail with "No LLM
+    # provider available", so undo a routing change that breaks a working
+    # chain instead of reporting success. When nothing routed before this
+    # request (e.g. the pinned provider's key was cleared), save it with a
+    # warning: rolling back would leave no single change that gets out.
+    effective = configured_provider_names()
+    warning = None
+    if not effective:
+        routing = bool(cleaned.keys() & _ROUTING_KEYS)
+        if routing and before:
+            detail = _routing_error(cleaned)
+            settings_store.set_many(previous, updated_by=current_user.get("id"))
+            reload_providers()
+            raise HTTPException(status_code=400, detail=detail)
+        warning = (_routing_error(cleaned) if routing else
+                   "No LLM provider is usable now — chat will fail until one is configured.")
 
     # Reload RAG live if any RAG-related key was touched — no restart needed
     rag_keys = {"rag_enabled", "rag_embedding_provider", "rag_embedding_model", "gemini_api_key",
@@ -1240,7 +1310,53 @@ def api_admin_put_settings(
         "touched": touched,
         "configured_after_reload": state,
         "active_provider": get_active_provider(),
+        "effective_chain": effective,
+        "warning": warning,
     }
+
+
+_ROUTING_KEYS = {"provider_chain", "active_provider"}
+
+
+def _check_routing_payload(cleaned: Dict[str, Any]) -> None:
+    """Reject a provider_chain / active_provider value that is malformed or
+    names an unknown provider, before anything is written."""
+    from app.llm import _PROVIDERS
+    import json as _json
+    chain = cleaned.get("provider_chain")
+    if chain:  # empty/None deletes the row, which reverts to the default chain
+        try:
+            names = _json.loads(chain) if isinstance(chain, str) else None
+        except ValueError:
+            names = None
+        if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+            raise HTTPException(status_code=400, detail="provider_chain must be a JSON array of provider names")
+        if not names:
+            raise HTTPException(status_code=400, detail="Keep at least one provider in the fallback chain")
+        unknown = [n for n in names if n not in _PROVIDERS]
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"Unknown provider(s) in chain: {', '.join(unknown)}")
+    active = cleaned.get("active_provider")
+    if active and (not isinstance(active, str) or (active != "auto" and active not in _PROVIDERS)):
+        raise HTTPException(status_code=400, detail=f"Unknown provider: {active}")
+
+
+def _routing_error(cleaned: Dict[str, Any]) -> str:
+    """Explain why the saved chain/pin leaves no usable provider (called
+    before any rollback, so it sees the values this request wrote). A pin
+    overrides the chain, so name it: otherwise a chain edit is blamed on a
+    provider the admin did not touch."""
+    labels = {e["name"]: e["label"] for e in _PROVIDER_CATALOG}
+    active = get_active_provider()
+    if active != "auto":
+        label = labels.get(active, active)
+        if active not in _providers_with_credentials():
+            return (f"Active provider {label} is not configured — "
+                    "add its API key, or set the active provider to Auto.")
+        return (f"Active provider {label} is not in the fallback chain — "
+                "add it to the chain, or set the active provider to Auto.")
+    return ("None of the providers in the fallback chain is configured — "
+            "add an API key first, or add a configured provider to the chain.")
 
 
 @app.get('/api/admin/usage')
@@ -1267,16 +1383,49 @@ def api_admin_rag_status(_: Dict[str, Any] = Depends(require_admin)):
     return _rag_mod.rag.status()
 
 
-@app.get('/api/admin/connectors/vt/test')
-def api_admin_vt_test(_: Dict[str, Any] = Depends(require_admin)):
-    """Quick test: query VT for a known benign IP to verify the saved API key works."""
-    from app.connectors.virustotal import vt_enrich_ioc, _get_vt_key
-    if not _get_vt_key():
+@app.get('/api/admin/vision')
+def api_admin_vision(_: Dict[str, Any] = Depends(require_admin)):
+    """Vision support per provider for the Settings page, in catalog order.
+    Served from llm._VISION_CAPS (the table /api/ping reports to the chat UI)
+    so the page no longer keeps its own copy that drifts from the catalog."""
+    from app.llm import _VISION_CAPS
+    unknown = {"supported": None, "note": "Vision support unknown for this provider"}
+    return {"providers": [
+        {"name": e["name"], "label": e["label"], **_VISION_CAPS.get(e["name"], unknown)}
+        for e in _PROVIDER_CATALOG
+    ]}
+
+
+def _require_admin_csrf(request: Request, current_user: Dict[str, Any] = Depends(require_admin)) -> Dict[str, Any]:
+    """Admin + CSRF check for connector tests: they spend API quota and send
+    stored secrets to the target they are pointed at."""
+    _validate_csrf(request, request.headers.get("X-CSRF-Token"))
+    return current_user
+
+
+@app.post('/api/admin/connectors/vt/test')
+def api_admin_vt_test(payload: Optional[Dict[str, Any]] = None, _: Dict[str, Any] = Depends(_require_admin_csrf)):
+    """Test the typed VT key, or the saved one when the field is blank. Calls
+    VT directly: the enrichment cache would keep reporting success for 8.8.8.8
+    after the saved key had been replaced with a bad one."""
+    import requests as _r
+    from app.connectors.virustotal import _get_vt_key
+    key = str((payload or {}).get("api_key") or "").strip() or _get_vt_key()
+    if not key:
         return {"ok": False, "error": "No VT API key configured"}
-    result = vt_enrich_ioc("8.8.8.8")  # Google DNS — always benign
-    if "error" in result:
-        return {"ok": False, "error": result["error"]}
-    return {"ok": True}
+    try:
+        # Google DNS — always benign
+        r = _r.get("https://www.virustotal.com/api/v3/ip_addresses/8.8.8.8",
+                   headers={"x-apikey": key}, timeout=10)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    if r.status_code == 200:
+        return {"ok": True}
+    if r.status_code in (401, 403):
+        return {"ok": False, "error": "VirusTotal rejected the key"}
+    if r.status_code == 429:
+        return {"ok": False, "error": "Key accepted but over its VirusTotal quota (HTTP 429)"}
+    return {"ok": False, "error": f"VirusTotal returned HTTP {r.status_code}"}
 
 
 # ---------------------------------------------------------------------------
@@ -1286,14 +1435,30 @@ def api_admin_vt_test(_: Dict[str, Any] = Depends(require_admin)):
 # config without re-typing secrets (the UI shows them as placeholders).
 # ---------------------------------------------------------------------------
 def _field(payload: Dict[str, Any], key: str) -> str:
-    v = (payload.get(key) or "").strip()
+    v = str(payload.get(key) or "").strip()
     if v:
         return v
     return (settings_store.get(key) or "").strip()
 
 
+def _secret_field(payload: Dict[str, Any], url_key: str, key: str) -> str:
+    """Like _field, but the stored secret is only filled in when the request
+    targets the stored URL (or leaves it blank). Otherwise a test pointed at
+    another host would send the saved password or token to that host."""
+    v = str(payload.get(key) or "").strip()
+    if v:
+        return v
+    url = str(payload.get(url_key) or "").strip().rstrip("/")
+    if url and url != (settings_store.get(url_key) or "").strip().rstrip("/"):
+        return ""
+    return (settings_store.get(key) or "").strip()
+
+
+_NEW_URL_HINT = " (re-enter the secret when testing a URL other than the saved one)"
+
+
 @app.post('/api/admin/connectors/siem/limacharlie/test')
-def api_test_limacharlie(payload: Dict[str, Any], _: Dict[str, Any] = Depends(require_admin)):
+def api_test_limacharlie(payload: Dict[str, Any], _: Dict[str, Any] = Depends(_require_admin_csrf)):
     import requests as _r
     oid = _field(payload, "limacharlie_oid")
     key = _field(payload, "limacharlie_api_key")
@@ -1310,13 +1475,13 @@ def api_test_limacharlie(payload: Dict[str, Any], _: Dict[str, Any] = Depends(re
 
 
 @app.post('/api/admin/connectors/siem/wazuh/test')
-def api_test_wazuh(payload: Dict[str, Any], _: Dict[str, Any] = Depends(require_admin)):
+def api_test_wazuh(payload: Dict[str, Any], _: Dict[str, Any] = Depends(_require_admin_csrf)):
     import requests as _r
     url = _field(payload, "wazuh_indexer_url").rstrip("/")
     user = _field(payload, "wazuh_indexer_user")
-    pw = _field(payload, "wazuh_indexer_pass")
+    pw = _secret_field(payload, "wazuh_indexer_url", "wazuh_indexer_pass")
     if not url or not user or not pw:
-        return {"ok": False, "error": "Indexer URL, user, and password are required"}
+        return {"ok": False, "error": "Indexer URL, user, and password are required" + _NEW_URL_HINT}
     try:
         r = _r.get(f"{url}/_cluster/health", auth=(user, pw), timeout=10, verify=False)
         if r.status_code == 200:
@@ -1327,12 +1492,12 @@ def api_test_wazuh(payload: Dict[str, Any], _: Dict[str, Any] = Depends(require_
 
 
 @app.post('/api/admin/connectors/siem/splunk/test')
-def api_test_splunk(payload: Dict[str, Any], _: Dict[str, Any] = Depends(require_admin)):
+def api_test_splunk(payload: Dict[str, Any], _: Dict[str, Any] = Depends(_require_admin_csrf)):
     import requests as _r
     url = _field(payload, "splunk_url").rstrip("/")
-    token = _field(payload, "splunk_token")
+    token = _secret_field(payload, "splunk_url", "splunk_token")
     if not url or not token:
-        return {"ok": False, "error": "Splunk URL and token are required"}
+        return {"ok": False, "error": "Splunk URL and token are required" + _NEW_URL_HINT}
     try:
         r = _r.get(
             f"{url}/services/server/info?output_mode=json",
@@ -1347,12 +1512,12 @@ def api_test_splunk(payload: Dict[str, Any], _: Dict[str, Any] = Depends(require
 
 
 @app.post('/api/admin/connectors/siem/elastic/test')
-def api_test_elastic(payload: Dict[str, Any], _: Dict[str, Any] = Depends(require_admin)):
+def api_test_elastic(payload: Dict[str, Any], _: Dict[str, Any] = Depends(_require_admin_csrf)):
     import requests as _r
     url = _field(payload, "elastic_url").rstrip("/")
-    api_key = _field(payload, "elastic_api_key")
+    api_key = _secret_field(payload, "elastic_url", "elastic_api_key")
     if not url or not api_key:
-        return {"ok": False, "error": "Elastic URL and API key are required"}
+        return {"ok": False, "error": "Elastic URL and API key are required" + _NEW_URL_HINT}
     try:
         r = _r.get(url, headers={"Authorization": f"ApiKey {api_key}"}, timeout=10, verify=False)
         if r.status_code == 200:
@@ -1363,7 +1528,7 @@ def api_test_elastic(payload: Dict[str, Any], _: Dict[str, Any] = Depends(requir
 
 
 @app.post('/api/admin/connectors/siem/sentinel/test')
-def api_test_sentinel(payload: Dict[str, Any], _: Dict[str, Any] = Depends(require_admin)):
+def api_test_sentinel(payload: Dict[str, Any], _: Dict[str, Any] = Depends(_require_admin_csrf)):
     import requests as _r
     tenant = _field(payload, "sentinel_tenant_id")
     client = _field(payload, "sentinel_client_id")
@@ -1400,7 +1565,7 @@ def ui(request: Request):
     except HTTPException:
         return RedirectResponse(url="/login", status_code=303)
     with open('app/ui.html', 'r', encoding='utf-8') as f:
-        return HTMLResponse(f.read())
+        return html_page(f.read())
 
 
 def extract_iocs(text: str):
@@ -1601,7 +1766,10 @@ def api_put_prefs(payload: PrefsUpdate, current_user: Dict[str, Any] = Depends(g
 
 @app.get('/api/conversations')
 def api_list_conversations(current_user: Dict[str, Any] = Depends(get_current_user)):
-    return {"conversations": store.list_conversations_for_user(current_user["id"])}
+    convs = store.list_conversations_for_user(current_user["id"])
+    for c in convs:
+        c["pending"] = _pending(c["id"], current_user["id"])
+    return {"conversations": convs}
 
 
 @app.post('/api/conversations')
@@ -1616,15 +1784,22 @@ def api_delete_conversation(conversation_id: str, current_user: Dict[str, Any] =
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversation not found")
     inv_state.delete(conversation_id)
+    # Nothing may keep pointing at a deleted chat: alerts it was investigating
+    # go back to the inbox, and it leaves every case it was linked to.
+    alerts_inbox.detach_conversation(conversation_id)
+    incident_store.detach_conversation(conversation_id)
     return {"ok": True}
 
 
 @app.get('/api/conversations/{conversation_id}/messages')
 def api_get_messages(conversation_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    # Pending is read before the messages: a run saves its reply before it
+    # leaves the registry, so pending=null always comes with the reply.
+    pending = _pending(conversation_id, current_user["id"])
     conv = store.get_conversation_for_user(current_user["id"], conversation_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    return {"messages": conv["messages"]}
+    return {"messages": conv["messages"], "title": conv["title"], "pending": pending}
 
 
 # ─── Webhook alert ingestion ─────────────────────────────────────────────────
@@ -1666,10 +1841,15 @@ async def api_ingest_alert(request: Request, source: Optional[str] = None, token
 
 
 @app.get('/api/alerts')
-def api_list_alerts(status: Optional[str] = None, current_user: Dict[str, Any] = Depends(get_current_user)):
+def api_list_alerts(status: Optional[str] = None, limit: int = 100, offset: int = 0,
+                    current_user: Dict[str, Any] = Depends(get_current_user)):
+    """One page of the inbox, newest first. `total` counts every alert of this
+    status so the UI can page through the backlog; limit=0 fetches counts only."""
+    limit, offset = max(0, min(limit, 500)), max(0, offset)
     return {
-        "alerts": alerts_inbox.list(status=status),
+        "alerts": alerts_inbox.list(status=status, limit=limit, offset=offset),
         "new_count": alerts_inbox.count_new(),
+        "total": alerts_inbox.count(status),
     }
 
 
@@ -1717,6 +1897,7 @@ def api_agents(current_user: Dict[str, Any] = Depends(get_current_user)):
         "is_admin": is_admin,
         "can_decide": current_user.get("role") in ("admin", "l2"),
         "me": current_user["username"],
+        "me_id": current_user["id"],  # agent log rows carry owner_id; the UI links only its own chats
     }
 
 
@@ -1795,45 +1976,92 @@ def api_sync_alerts(current_user: Dict[str, Any] = Depends(get_current_user)):
     return {"added": added, "pulled": len(rows)}
 
 
+def _alert_claim(alert: Dict[str, Any], current_user: Dict[str, Any]) -> Dict[str, Any]:
+    """Who holds an alert, and whether its chat is this analyst's to open: the
+    inbox is shared but conversations are per-user. Agent-triaged alerts record
+    no claimant, so the owner of the linked chat stands in."""
+    cid = alert.get("conversation_id")
+    owner = store.owner_of(cid) if cid else None
+    holder = alert.get("claimed_by") or owner
+    user = user_store.get_user_by_id(holder) if holder else None
+    return {
+        "claimed_by_username": user["username"] if user else None,
+        "conversation_is_mine": owner is not None and owner == current_user["id"],
+    }
+
+
+def _alert_seed(alert: Dict[str, Any]) -> str:
+    payload = alert.get("payload_json") or "{}"
+    if len(payload) > 4000:
+        payload = payload[:4000] + "\n… (truncated)"
+    return (
+        f"Investigate this alert pushed from {alert['source']}:\n"
+        f"{alert['title']} (severity: {alert['severity']}, received {alert['created_at']})\n\n"
+        f"Raw alert payload:\n```json\n{payload}\n```"
+    )
+
+
 @app.get('/api/alerts/{alert_id}')
 def api_get_alert(alert_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     alert = alerts_inbox.get(alert_id)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    return alert
+    return {**alert, **_alert_claim(alert, current_user)}
 
 
 @app.post('/api/alerts/{alert_id}/investigate')
-def api_investigate_alert(alert_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+def api_investigate_alert(alert_id: str, fork: bool = False,
+                          current_user: Dict[str, Any] = Depends(get_current_user)):
     """Claim an alert: create a conversation for this analyst and return a
-    seed message the UI auto-sends through the normal chat pipeline."""
+    seed message the UI auto-sends through the normal chat pipeline.
+
+    With fork=1, an alert whose chat belongs to someone else (or a dismissed
+    one) gets a separate chat for this analyst instead, and the alert itself
+    (status, claim, linked chat) is left as it is. A 'new' alert is claimed as
+    usual even if an undone agent decision left another user's chat on it."""
     alert = alerts_inbox.get(alert_id)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
+    if fork and alert["status"] != "new":
+        cid = alert.get("conversation_id")
+        owner = store.owner_of(cid) if cid else None
+        theirs = owner is not None and owner != current_user["id"]
+        if theirs or (alert["status"] == "dismissed" and owner != current_user["id"]):
+            conv = store.create_conversation_for_user(
+                current_user["id"], title=f"[Alert] {alert['title']}"[:60]
+            )
+            return {"conversation_id": conv["id"], "seed_message": _alert_seed(alert), "already_claimed": False,
+                    "forked": True, **_alert_claim(alert, current_user), "conversation_is_mine": True}
     if alert["status"] == "dismissed":
         raise HTTPException(status_code=409, detail="Alert was dismissed")
-    if alert["status"] == "investigating" and alert.get("conversation_id"):
-        return {"conversation_id": alert["conversation_id"], "already_claimed": True, "seed_message": None}
+    reclaim = alert["status"] == "investigating"
+    cid = alert.get("conversation_id") if reclaim else None
+    if cid:
+        mine = store.get_conversation_for_user(current_user["id"], cid)
+        if mine is not None or store.owner_of(cid) is not None:
+            # Already claimed. If the chat is this analyst's and still empty the
+            # seed never went out (the UI was busy or the tab closed), so hand it
+            # out again rather than leave the alert stuck with a blank chat.
+            resend = mine is not None and not mine["messages"] and not _pending(cid, current_user["id"])
+            return {"conversation_id": cid, "already_claimed": True,
+                    "seed_message": _alert_seed(alert) if resend else None, **_alert_claim(alert, current_user)}
+    # An 'investigating' alert whose chat was deleted, or that has none (an agent
+    # decision undone after its chat was deleted), is claimed afresh.
 
     conv = store.create_conversation_for_user(
         current_user["id"], title=f"[Alert] {alert['title']}"[:60]
     )
-    if not alerts_inbox.mark_investigating(alert_id, current_user["id"], conv["id"]):
+    if not alerts_inbox.mark_investigating(alert_id, current_user["id"], conv["id"],
+                                           stale_conversation_id=cid, reclaim=reclaim):
         # Raced with another analyst — drop the orphan conversation and hand
         # back whatever conversation won the claim.
         store.delete_conversation_for_user(current_user["id"], conv["id"])
         latest = alerts_inbox.get(alert_id) or {}
-        return {"conversation_id": latest.get("conversation_id"), "already_claimed": True, "seed_message": None}
+        return {"conversation_id": latest.get("conversation_id"), "already_claimed": True, "seed_message": None,
+                **_alert_claim(latest, current_user)}
 
-    payload = alert.get("payload_json") or "{}"
-    if len(payload) > 4000:
-        payload = payload[:4000] + "\n… (truncated)"
-    seed = (
-        f"Investigate this alert pushed from {alert['source']}:\n"
-        f"{alert['title']} (severity: {alert['severity']}, received {alert['created_at']})\n\n"
-        f"Raw alert payload:\n```json\n{payload}\n```"
-    )
-    return {"conversation_id": conv["id"], "seed_message": seed, "already_claimed": False}
+    return {"conversation_id": conv["id"], "seed_message": _alert_seed(alert), "already_claimed": False,
+            "claimed_by_username": current_user["username"], "conversation_is_mine": True}
 
 
 @app.post('/api/alerts/{alert_id}/dismiss')
@@ -1942,7 +2170,7 @@ def api_incident_report(incident_id: str, format: str = "html", current_user: Di
             headers={"Content-Disposition": f'attachment; filename="{inc["case_number"]}-report.md"'},
         )
     html_doc = build_incident_report_html(inc, conversations, ioc_verdicts)
-    return HTMLResponse(content=html_doc)
+    return html_page(html_doc)
 
 
 def _validate_images(payload: MessageCreate) -> None:
@@ -1984,6 +2212,140 @@ def _csv_attachments(payload: MessageCreate) -> Tuple[str, str]:
     return "".join("\n" + m for m in markers), "".join("\n\n" + b for b in blocks)
 
 
+# ─── In-flight investigations ────────────────────────────────────────────────
+# Conversations whose message work is running, so a client that navigated away
+# or reloaded can tell a reply is still coming (GET /messages and the
+# conversation list report `pending`), and a second send is refused with 409.
+# In memory only: a restart ends every run anyway. The entry is set and cleared
+# around the work itself, so agent runs show up as pending too.
+
+_INFLIGHT: Dict[str, Dict[str, Any]] = {}
+_INFLIGHT_LOCK = threading.Lock()
+_BUSY = "An investigation is already running in this conversation"
+_STREAM_TIMEOUT_S = 180
+# Streamed sends run here as detached jobs: the SSE response only watches them,
+# so a client disconnect or the stream timeout never cancels queued or running work.
+_message_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="chat-work")
+
+
+def _inflight_claim(conversation_id: str, user_id: int) -> bool:
+    """Register a run in the conversation; False if one is already going."""
+    with _INFLIGHT_LOCK:
+        if conversation_id in _INFLIGHT:
+            return False
+        _INFLIGHT[conversation_id] = {
+            "user_id": user_id,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "stage": "Analyzing query",
+            "error": None,
+        }
+        return True
+
+
+def _inflight_update(conversation_id: str, **fields: Any) -> None:
+    with _INFLIGHT_LOCK:
+        if conversation_id in _INFLIGHT:
+            _INFLIGHT[conversation_id].update(fields)
+
+
+def _inflight_release(conversation_id: str) -> None:
+    with _INFLIGHT_LOCK:
+        _INFLIGHT.pop(conversation_id, None)
+
+
+def _pending(conversation_id: str, user_id: int) -> Optional[Dict[str, str]]:
+    """{stage, since} while a run is going in this user's conversation, else None."""
+    with _INFLIGHT_LOCK:
+        entry = _INFLIGHT.get(conversation_id)
+        if not entry or entry["user_id"] != user_id:
+            return None
+        return {"stage": entry["stage"], "since": entry["started_at"]}
+
+
+def _pending_for_user(user_id: int) -> Dict[str, Dict[str, str]]:
+    """{conversation_id: {stage, since}} for every run going in this user's conversations."""
+    with _INFLIGHT_LOCK:
+        return {cid: {"stage": e["stage"], "since": e["started_at"]}
+                for cid, e in _INFLIGHT.items() if e["user_id"] == user_id}
+
+
+_INFLIGHT_STREAM_S = 300
+_INFLIGHT_POLL_S = 1.0
+
+
+@app.get('/api/inflight')
+async def api_inflight(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """SSE feed of this user's running conversations, so one connection per tab
+    replaces polling every chat. Sends the full set on connect and whenever a
+    run starts, finishes or changes stage; the client reconnects after the
+    stream ends (about every five minutes)."""
+    import asyncio, json as _json
+    user_id = current_user["id"]
+
+    async def generate():
+        loop = asyncio.get_running_loop()
+        start = last_sent = loop.time()
+        sent = None
+        while loop.time() - start < _INFLIGHT_STREAM_S:
+            current = _pending_for_user(user_id)
+            if current != sent:
+                sent = current
+                last_sent = loop.time()
+                yield f"data: {_json.dumps({'type': 'pending', 'pending': current})}\n\n"
+            elif loop.time() - last_sent >= 15:
+                last_sent = loop.time()
+                yield ": ping\n\n"
+            await asyncio.sleep(_INFLIGHT_POLL_S)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
+
+
+def _stored_user_text(payload: MessageCreate, csv_markers: str = "") -> str:
+    """The user message as saved to history. Screenshots themselves are not
+    stored, so a marker stands in for them and an image-only message does not
+    come back as an empty bubble."""
+    n = len(payload.images or [])
+    shots = f"\n[{n} screenshot{'s' if n != 1 else ''} attached]" if n else ""
+    return ((payload.message or '') + csv_markers + shots).strip()
+
+
+def _begin_turn(conversation_id: str, payload: MessageCreate, current_user: Dict[str, Any],
+                csv_markers: str = "") -> None:
+    """Claim the conversation's in-flight slot, save the user message, and title
+    the conversation after its first line if it has no title yet. 409 if a run
+    is already going there, 404 if the conversation is not this user's."""
+    if not _inflight_claim(conversation_id, current_user["id"]):
+        raise HTTPException(status_code=409, detail=_BUSY)
+    try:
+        text = _stored_user_text(payload, csv_markers)
+        store.add_message_for_user(current_user["id"], conversation_id, 'user', text)
+        store.set_title_if_empty_for_user(current_user["id"], conversation_id, text.split('\n', 1)[0][:60] or 'New chat')
+    except PermissionError:
+        _inflight_release(conversation_id)
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    except BaseException:
+        _inflight_release(conversation_id)
+        raise
+
+
+def _record_failure(conversation_id: str, current_user: Dict[str, Any], exc: BaseException) -> None:
+    """Answer a turn whose work raised, so the history never ends on an
+    unanswered question."""
+    reason = str(exc.detail if isinstance(exc, HTTPException) else exc) or type(exc).__name__
+    _inflight_update(conversation_id, error=reason)
+    try:
+        store.add_message_for_user(current_user["id"], conversation_id, 'assistant',
+                                   f"⚠ Investigation failed: {reason[:500]}")
+    except PermissionError:
+        pass  # the conversation was deleted meanwhile
+    except Exception:
+        log.exception("Could not save the failure note for conversation %s", conversation_id)
+
+
 @app.post('/api/conversations/{conversation_id}/messages')
 def api_post_message(conversation_id: str, payload: MessageCreate, current_user: Dict[str, Any] = Depends(get_current_user)):
     if not any_provider_configured():
@@ -1994,22 +2356,30 @@ def api_post_message(conversation_id: str, payload: MessageCreate, current_user:
         raise HTTPException(status_code=404, detail="Conversation not found")
     _validate_images(payload)
     csv_markers, csv_blocks = _csv_attachments(payload)
-
-    # Store user message (scoped write)
+    _begin_turn(conversation_id, payload, current_user, csv_markers)  # 409 while a run is going here
     try:
-        store.add_message_for_user(current_user["id"], conversation_id, 'user', ((payload.message or '') + csv_markers).strip())
-    except PermissionError:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        return _post_message_work(conversation_id, payload, current_user, conv, csv_blocks)
+    except Exception as exc:
+        _record_failure(conversation_id, current_user, exc)
+        raise
+    finally:
+        _inflight_release(conversation_id)
 
-    # Build history for LLM
+
+def _post_message_work(conversation_id: str, payload: MessageCreate, current_user: Dict[str, Any],
+                       conv: Dict[str, Any], csv_blocks: str) -> Dict[str, Any]:
+    """The non-streaming endpoint's pipeline, run inside its in-flight slot."""
+    # Build history for LLM. Older versions saved image-only messages as empty
+    # rows, and Anthropic rejects an empty user turn, so those are skipped.
+    prior = [m for m in conv["messages"] if (m.get("content") or "").strip()]
     user_text = (payload.message or ("Analyze the attached CSV file(s)." if csv_blocks else "")) + csv_blocks
     if payload.images:
         user_content: Any = [{"type": "text", "text": user_text}]
         for img in payload.images:
             user_content.append({"type": "image_url", "image_url": {"url": img}})
-        history = conv["messages"] + [{"role": "user", "content": user_content}]
+        history = prior + [{"role": "user", "content": user_content}]
     else:
-        history = conv["messages"] + [{"role": "user", "content": user_text}]
+        history = prior + [{"role": "user", "content": user_text}]
 
     # Response-mode routing (unified with /chat — workflow-stage based, not
     # legacy intent). route_intent() still drives run_investigation below for
@@ -2022,6 +2392,7 @@ def api_post_message(conversation_id: str, payload: MessageCreate, current_user:
     # Optional per-request debug trace
     debug = DebugTrace() if getattr(payload, 'debug', False) else None
     # Progressive Evidence Gathering (auto-run, tiered)
+    _inflight_update(conversation_id, stage="Querying SIEM")
     evidence = run_investigation(intent, payload.message, time_range, current_user, tool_runner, debug=debug)
     evidence["asked_time_range"] = tw["asked"]
     evidence["policy_note"] = tw.get("note")
@@ -2050,11 +2421,13 @@ def api_post_message(conversation_id: str, payload: MessageCreate, current_user:
     # Retrieve playbook snippets via RAG (no-op if disabled).
     # When the user sends images without text, fall back to a generic SOC query
     # so playbook snippets are still injected into the LLM context.
+    _inflight_update(conversation_id, stage="Retrieving playbooks")
     rag_text = payload.message or ("security screenshot evidence analysis" if payload.images
                                    else "security log CSV analysis" if csv_blocks else "")
     retrieved = _rag_mod.rag.retrieve(_rag_query(rag_text))
 
     # Call LLM with full history and strict prompt
+    _inflight_update(conversation_id, stage="Waiting for the model")
     user_prefs = prefs_store.get_all(current_user["id"])
     reply_md = chat_with_history(
         SYSTEM_PROMPT,
@@ -2098,15 +2471,7 @@ def api_post_message(conversation_id: str, payload: MessageCreate, current_user:
         except Exception:
             log.exception("verdict_store.record failed")
 
-    # Title heuristic on first turn
-    if conv.get('title') in (None, '', 'New chat'):
-        snippet = payload.message.strip().split('\n',1)[0][:60]
-        try:
-            store.set_title_if_empty_for_user(current_user["id"], conversation_id, snippet or 'New chat')
-        except PermissionError:
-            pass
-
-    # Include debug trace if requested
+    # Include debug trace if requested (the title was set with the user message)
     content = {"reply": reply_md}
     try:
         if getattr(payload, 'debug', False):
@@ -2125,12 +2490,21 @@ def api_post_message(conversation_id: str, payload: MessageCreate, current_user:
 @app.post('/api/conversations/{conversation_id}/messages/stream')
 async def api_stream_message(conversation_id: str, payload: MessageCreate, current_user: Dict[str, Any] = Depends(get_current_user)):
     """SSE streaming version of the message endpoint.
-    Yields status events during processing, then a final 'done' event with the reply."""
+
+    The user message is saved and the conversation titled before the stream
+    opens. The work then runs as a detached job: a client that disconnects, or
+    the stream timing out, never cancels it, and GET /messages reports it as
+    pending until its reply (or a failure note) is saved. Yields a status event
+    per stage while it runs, then a final 'done' event with the reply."""
     import asyncio, json as _json
+    from fastapi.concurrency import run_in_threadpool
+
+    def sse(**event: Any) -> str:
+        return f"data: {_json.dumps(event)}\n\n"
 
     if not any_provider_configured():
         async def _err():
-            yield f"data: {_json.dumps({'type':'error','text':'No LLM provider configured.'})}\n\n"
+            yield sse(type='error', text='No LLM provider configured.')
         return StreamingResponse(_err(), media_type="text/event-stream")
 
     conv = store.get_conversation_for_user(current_user["id"], conversation_id)
@@ -2139,30 +2513,49 @@ async def api_stream_message(conversation_id: str, payload: MessageCreate, curre
     _validate_images(payload)  # reject bad uploads before the stream opens
     csv_markers, csv_blocks = _csv_attachments(payload)
 
-    async def generate():
-        loop = asyncio.get_event_loop()
+    def start_turn():
+        # Off the event loop: saving the question commits to SQLite. Claim and
+        # submit happen together, so a cancelled request never strands the slot.
+        _begin_turn(conversation_id, payload, current_user, csv_markers)  # 409 while a run is going here
         try:
-            yield f"data: {_json.dumps({'type':'status','text':'Analyzing query…'})}\n\n"
-            await asyncio.sleep(0)
+            return _message_pool.submit(_do_message_work, conversation_id, payload, current_user,
+                                        csv_markers, csv_blocks, turn_started=True)
+        except BaseException:
+            _inflight_release(conversation_id)
+            raise
 
-            yield f"data: {_json.dumps({'type':'status','text':'Querying SIEM…'})}\n\n"
-            await asyncio.sleep(0)
+    work = await run_in_threadpool(start_turn)
+    job = asyncio.shield(asyncio.wrap_future(work))  # cancelling this response never reaches the job
+    job.add_done_callback(lambda f: f.cancelled() or f.exception())  # consumed even if nobody listens any more
 
-            yield f"data: {_json.dumps({'type':'status','text':'Retrieving playbooks…'})}\n\n"
-            await asyncio.sleep(0)
-
-            result = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: _do_message_work(conversation_id, payload, current_user, csv_markers, csv_blocks)),
-                timeout=180.0,
-            )
-
-            yield f"data: {_json.dumps({'type':'done', **result})}\n\n"
-        except asyncio.TimeoutError:
-            log.error("Streaming message handler timed out after 180s")
-            yield f"data: {_json.dumps({'type':'error','text':'Request timed out — the LLM took too long to respond. Try again.'})}\n\n"
+    async def generate():
+        loop = asyncio.get_running_loop()
+        start = last_sent = loop.time()
+        stage = None
+        try:
+            while not job.done():
+                current = _pending(conversation_id, current_user["id"])
+                if current and current["stage"] != stage:
+                    stage = current["stage"]
+                    last_sent = loop.time()
+                    yield sse(type='status', text=stage)
+                elif loop.time() - last_sent >= 15:
+                    last_sent = loop.time()
+                    yield ": ping\n\n"  # keeps idle-timeout proxies and tunnels from cutting the stream
+                if loop.time() - start >= _STREAM_TIMEOUT_S:
+                    log.warning("Stream for conversation %s closed after %ss; its investigation keeps running",
+                                conversation_id, _STREAM_TIMEOUT_S)
+                    yield sse(type='error', text=(
+                        f"Still working after {_STREAM_TIMEOUT_S // 60} minutes. The investigation keeps "
+                        "running, and its reply will appear in this conversation when it finishes."))
+                    return
+                await asyncio.wait({job}, timeout=1.0)  # unlike wait_for, never cancels what it waits on
+            yield sse(type='done', **job.result())
+        except HTTPException as exc:
+            yield sse(type='error', text=str(exc.detail))
         except Exception as exc:
             log.exception("Streaming message handler failed: %s", exc)
-            yield f"data: {_json.dumps({'type':'error','text':str(exc)})}\n\n"
+            yield sse(type='error', text=str(exc) or type(exc).__name__)
 
     return StreamingResponse(
         generate(),
@@ -2172,99 +2565,103 @@ async def api_stream_message(conversation_id: str, payload: MessageCreate, curre
 
 
 def _do_message_work(conversation_id: str, payload: MessageCreate, current_user: Dict[str, Any],
-                     csv_markers: str = "", csv_blocks: str = "", mode: Optional[str] = None) -> Dict[str, Any]:
+                     csv_markers: str = "", csv_blocks: str = "", mode: Optional[str] = None,
+                     turn_started: bool = False) -> Dict[str, Any]:
     """Shared logic for both streaming and non-streaming message endpoints.
 
     `mode` pins the response mode (the agents do this, since alert payload text
-    such as "privilege-escalation" would otherwise steer the keyword router)."""
-    import json as _json
-    conv = store.get_conversation_for_user(current_user["id"], conversation_id)
-
+    such as "privilege-escalation" would otherwise steer the keyword router).
+    The conversation is in _INFLIGHT while this runs, agent runs included, and
+    leaves it once the reply (or a failure note) is saved. `turn_started` means
+    the caller already ran _begin_turn (the stream endpoint does, so the
+    question and title show before the job starts)."""
+    if not turn_started:
+        _begin_turn(conversation_id, payload, current_user, csv_markers)
+    answered = False
     try:
-        store.add_message_for_user(current_user["id"], conversation_id, 'user', ((payload.message or '') + csv_markers).strip())
-    except PermissionError:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        mode = _supported_mode(mode or select_response_mode(payload.message or '', None))
+        intent = classify_task_type(payload.message or '')
+        time_range = "last_24h"
 
-    mode = _supported_mode(mode or select_response_mode(payload.message or '', None))
-    intent = classify_task_type(payload.message or '')
-    time_range = "last_24h"
+        tool_runner_local = ToolRunner()
+        debug = DebugTrace() if getattr(payload, 'debug', False) else None
 
-    tool_runner_local = ToolRunner()
-    debug = DebugTrace() if getattr(payload, 'debug', False) else None
+        _inflight_update(conversation_id, stage="Querying SIEM")
+        evidence = run_investigation(intent, payload.message or '', time_range, current_user, tool_runner_local, debug=debug)
 
-    evidence = run_investigation(intent, payload.message or '', time_range, current_user, tool_runner_local, debug=debug)
+        msg_iocs = extract_iocs(payload.message or '')
+        if msg_iocs:
+            prior = verdict_store.lookup_for_iocs(current_user["id"], msg_iocs, limit_per_ioc=3, exclude_conversation_id=conversation_id)
+            if prior:
+                evidence["prior_verdicts"] = prior
 
-    msg_iocs = extract_iocs(payload.message or '')
-    if msg_iocs:
-        prior = verdict_store.lookup_for_iocs(current_user["id"], msg_iocs, limit_per_ioc=3, exclude_conversation_id=conversation_id)
-        if prior:
-            evidence["prior_verdicts"] = prior
+        vt_hits = auto_enrich_iocs(payload.message or '')
+        if vt_hits:
+            evidence["vt_enrichment"] = vt_hits
 
-    vt_hits = auto_enrich_iocs(payload.message or '')
-    if vt_hits:
-        evidence["vt_enrichment"] = vt_hits
+        prior_sessions = _prime_prior_session_summaries(current_user["id"], conversation_id)
+        if prior_sessions:
+            evidence["prior_session_summaries"] = prior_sessions
 
-    prior_sessions = _prime_prior_session_summaries(current_user["id"], conversation_id)
-    if prior_sessions:
-        evidence["prior_session_summaries"] = prior_sessions
+        user_prefs_early = prefs_store.get_all(current_user["id"]) if current_user else {}
+        temperature = _temperature_for_mode(mode, user_prefs_early)
 
-    user_prefs_early = prefs_store.get_all(current_user["id"]) if current_user else {}
-    temperature = _temperature_for_mode(mode, user_prefs_early)
+        _inflight_update(conversation_id, stage="Retrieving playbooks")
+        rag_text = payload.message or ("security screenshot evidence analysis" if getattr(payload, 'images', None)
+                                       else "security log CSV analysis" if csv_blocks else "")
+        retrieved = _rag_mod.rag.retrieve(_rag_query(rag_text))
+        if debug:
+            debug.add({"type": "rag", "chunks_retrieved": len(retrieved), "sources": [r.split("\n")[0] for r in retrieved]})
 
-    rag_text = payload.message or ("security screenshot evidence analysis" if getattr(payload, 'images', None)
-                                   else "security log CSV analysis" if csv_blocks else "")
-    retrieved = _rag_mod.rag.retrieve(_rag_query(rag_text))
-    if debug:
-        debug.add({"type": "rag", "chunks_retrieved": len(retrieved), "sources": [r.split("\n")[0] for r in retrieved]})
+        user_msg = payload.message or ("Analyze the attached CSV file(s)." if csv_blocks else "")
+        user_text = f"User message: {user_msg}{csv_blocks}\n\nUse evidence bundle to decide minimum necessary sources."
+        user_content: Any = user_text
+        if payload.images:  # same OpenAI-style blocks as the non-streaming endpoint; each provider adapts them
+            user_content = [{"type": "text", "text": user_text}] + [
+                {"type": "image_url", "image_url": {"url": img}} for img in payload.images]
+        aug_user = {"role": "user", "content": user_content}
+        _inflight_update(conversation_id, stage="Waiting for the model")
+        reply_md = orchestrated_llm_reply(aug_user, conversation_id, mode, evidence, current_user, retrieved=retrieved, debug=debug)
+        reply_md = _strip_html_from_llm(reply_md)
+        # Safety net: chat-style modes must not show SECTION 1/2/3 or verdict
+        # banners. Strip them if the LLM drifted.
+        if mode in _CONVERSATIONAL_MODES:
+            reply_md = _strip_investigation_format(reply_md)
 
-    user_msg = payload.message or ("Analyze the attached CSV file(s)." if csv_blocks else "")
-    user_text = f"User message: {user_msg}{csv_blocks}\n\nUse evidence bundle to decide minimum necessary sources."
-    user_content: Any = user_text
-    if payload.images:  # same OpenAI-style blocks as the non-streaming endpoint; each provider adapts them
-        user_content = [{"type": "text", "text": user_text}] + [
-            {"type": "image_url", "image_url": {"url": img}} for img in payload.images]
-    aug_user = {"role": "user", "content": user_content}
-    reply_md = orchestrated_llm_reply(aug_user, conversation_id, mode, evidence, current_user, retrieved=retrieved, debug=debug)
-    reply_md = _strip_html_from_llm(reply_md)
-    # Safety net: chat-style modes must not show SECTION 1/2/3 or verdict
-    # banners. Strip them if the LLM drifted.
-    if mode in _CONVERSATIONAL_MODES:
-        reply_md = _strip_investigation_format(reply_md)
+        if debug:
+            evidence["_debug_trace"] = debug.to_list()
 
-    if debug:
-        evidence["_debug_trace"] = debug.to_list()
-
-    try:
-        store.add_message_for_user(current_user["id"], conversation_id, 'assistant', reply_md)
-    except PermissionError:
-        pass
-
-    if msg_iocs:
-        v, c = parse_decision(reply_md)
         try:
-            verdict_store.record(
-                user_id=current_user["id"],
-                conversation_id=conversation_id,
-                iocs=msg_iocs,
-                verdict=v,
-                confidence=c,
-                message_excerpt=payload.message or '',
-                evidence_summary={"totals": evidence.get("totals"), "sources_queried": evidence.get("sources_queried")},
-            )
-        except Exception:
-            pass
-
-    if conv.get('title') in (None, '', 'New chat'):
-        snippet = (payload.message or csv_markers).strip().split('\n', 1)[0][:60]
-        try:
-            store.set_title_if_empty_for_user(current_user["id"], conversation_id, snippet or 'New chat')
+            store.add_message_for_user(current_user["id"], conversation_id, 'assistant', reply_md)
         except PermissionError:
             pass
+        answered = True
 
-    result: Dict[str, Any] = {"reply": reply_md}
-    if debug and evidence.get("_debug_trace"):
-        result["debug_trace"] = evidence["_debug_trace"]
-    return result
+        if msg_iocs:
+            v, c = parse_decision(reply_md)
+            try:
+                verdict_store.record(
+                    user_id=current_user["id"],
+                    conversation_id=conversation_id,
+                    iocs=msg_iocs,
+                    verdict=v,
+                    confidence=c,
+                    message_excerpt=payload.message or '',
+                    evidence_summary={"totals": evidence.get("totals"), "sources_queried": evidence.get("sources_queried")},
+                )
+            except Exception:
+                pass
+
+        result: Dict[str, Any] = {"reply": reply_md}
+        if debug and evidence.get("_debug_trace"):
+            result["debug_trace"] = evidence["_debug_trace"]
+        return result
+    except Exception as exc:
+        if not answered:
+            _record_failure(conversation_id, current_user, exc)
+        raise
+    finally:
+        _inflight_release(conversation_id)
 
 
 # Admin/debug endpoint to execute approved tools via API

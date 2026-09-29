@@ -231,6 +231,14 @@ class ChatStore:
             )
             return [dict(r) for r in cur.fetchall()]
 
+    def owner_of(self, conversation_id: str) -> Optional[int]:
+        """user_id owning the conversation, or None if it does not exist."""
+        with self.lock:
+            cur = self.conn.cursor()
+            cur.execute("SELECT user_id FROM conversations WHERE id=?", (conversation_id,))
+            row = cur.fetchone()
+            return row["user_id"] if row else None
+
     def delete_conversation_for_user(self, user_id: int, conversation_id: str) -> bool:
         with self.lock:
             cur = self.conn.cursor()

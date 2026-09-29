@@ -26,6 +26,8 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from fastapi import HTTPException
+
 from app.db import user_store
 from app.db.agent_store import agent_store
 from app.db.alert_store import alerts_inbox
@@ -194,12 +196,20 @@ def run_investigator(cfg: Dict[str, Any]) -> str:
         if not case or case["status"] == "closed":
             agent_store.log("investigator", "skipped", entry["target_id"], f"{data.get('case_number')}: closed or deleted by an analyst")
             continue
+        if store.owner_of(data["conversation_id"]) is None:  # the L2 prompt builds on the triage findings in it
+            agent_store.log("investigator", "skipped", entry["target_id"], f"{data.get('case_number')}: its triage chat was deleted")
+            continue
         # L2 mode runs the IOC-following tool protocol and ends with Confidence + Recommended Response.
-        reply, verdict, conf = _investigate(actor, data["conversation_id"], (
-            f"[Investigator agent] L2 investigation of case {case['case_number']}: follow every IOC from the "
-            f"triage findings above and decide whether this is a true positive or a false positive. "
-            f"Also include a **Verdict:** line (Likely Benign | Suspicious | Malicious | Inconclusive)."
-        ), "l2_investigation")
+        try:
+            reply, verdict, conf = _investigate(actor, data["conversation_id"], (
+                f"[Investigator agent] L2 investigation of case {case['case_number']}: follow every IOC from the "
+                f"triage findings above and decide whether this is a true positive or a false positive. "
+                f"Also include a **Verdict:** line (Likely Benign | Suspicious | Malicious | Inconclusive)."
+            ), "l2_investigation")
+        except HTTPException as e:
+            if e.status_code == 409:
+                continue  # the owner is chatting in that chat right now: nothing sent, retried on the next run
+            raise
         m = _RECOMMEND_RE.search(reply)
         recommend = m.group(1).lower() if m else None
         outcome = f"{verdict or 'no verdict'} ({conf or 'unknown'} confidence), recommends {recommend or 'nothing'}"

@@ -20,6 +20,9 @@
       --text:      #e6edf3;
       --muted:     #8b949e;
       --radius:    8px;
+      --field-w:   560px;
+      --field-h:   36px;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
 
     body {
@@ -132,39 +135,55 @@
       line-height: 1.5;
     }
 
-    /* ── Form elements ── */
-    label {
-      display: block;
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-bottom: 6px;
-      margin-top: 16px;
-      font-weight: 500;
+    /* ── Form fields (same system as Settings) ── */
+    /* The card is narrower than 640px, so labels always sit above their fields */
+    .field {
+      display: grid;
+      grid-template-columns: minmax(0, var(--field-w));
+      row-gap: 6px;
+      margin-top: 14px;
     }
-    label:first-child { margin-top: 0; }
+    .sub + .field, .alert + .field { margin-top: 0; }
+    .field > label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      line-height: 1.4;
+      text-transform: uppercase;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
     input[type="text"],
     input[type="password"],
     input[type="url"],
-    select {
+    input[type="number"],
+    select,
+    textarea {
+      display: block;
       width: 100%;
+      max-width: var(--field-w);
+      height: var(--field-h);
+      padding: 8px 10px;
       background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 6px;
       color: var(--text);
-      padding: 9px 12px;
-      font-size: 0.9rem;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 18px;
       outline: none;
       transition: border-color 0.2s;
     }
-    input:focus, select:focus {
+    textarea { height: auto; min-height: 72px; resize: vertical; }
+    input:focus, select:focus, textarea:focus {
       border-color: var(--cyan);
     }
     select option { background: var(--surface); }
 
     .hint {
       font-size: 0.75rem;
+      line-height: 1.5;
       color: var(--muted);
-      margin-top: 4px;
     }
     .hint a { color: var(--cyan); text-decoration: none; }
     .hint a:hover { text-decoration: underline; }
@@ -205,7 +224,7 @@
     }
 
     /* ── Collapsible SIEM fields ── */
-    .siem-fields { display: none; margin-top: 16px; }
+    .siem-fields { display: none; }
     .siem-fields.show { display: block; }
 
     /* ── Buttons ── */
@@ -237,6 +256,14 @@
       color: var(--muted);
     }
     .btn-ghost:hover { border-color: var(--text); color: var(--text); }
+    a.btn-primary {
+      display: inline-block;
+      padding: 9px 22px;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
 
     /* ── Alerts ── */
     .alert {
@@ -272,6 +299,10 @@
     /* ── Steps visibility ── */
     .step { display: none; }
     .step.active { display: block; }
+
+    @media (max-width: 639px) {
+      .card { padding: 22px 18px; }
+    }
   </style>
 </head>
 <body>
@@ -306,7 +337,7 @@
       All settings are written to <code>data/config.db</code> — no <code>.env</code> editing required.
     </p>
     <div class="btn-row">
-      <button class="btn-primary" onclick="goTo(2)">Get started &rarr;</button>
+      <button class="btn-primary" data-goto="2">Get started &rarr;</button>
     </div>
   </div>
 
@@ -316,18 +347,23 @@
     <p class="sub">Create the initial administrator login for the NullShift web UI.</p>
     <div id="alert-2" class="alert alert-err"></div>
 
-    <label for="admin_username">Username</label>
-    <input type="text" id="admin_username" value="admin" autocomplete="username" />
-
-    <label for="admin_password">Password <span style="color:var(--muted);font-weight:400">(min 16 characters)</span></label>
-    <input type="password" id="admin_password" autocomplete="new-password" />
-
-    <label for="admin_password2">Confirm Password</label>
-    <input type="password" id="admin_password2" autocomplete="new-password" />
+    <div class="field">
+      <label for="admin_username">Username</label>
+      <input type="text" id="admin_username" value="admin" autocomplete="username" />
+    </div>
+    <div class="field">
+      <label for="admin_password">Password</label>
+      <input type="password" id="admin_password" autocomplete="new-password" />
+      <div class="hint">At least 16 characters.</div>
+    </div>
+    <div class="field">
+      <label for="admin_password2">Confirm password</label>
+      <input type="password" id="admin_password2" autocomplete="new-password" />
+    </div>
 
     <div class="btn-row">
-      <button class="btn-ghost" onclick="goTo(1)">&larr; Back</button>
-      <button class="btn-primary" onclick="validateAdmin()">Next &rarr;</button>
+      <button class="btn-ghost" data-goto="1">&larr; Back</button>
+      <button class="btn-primary" id="btn-admin-next">Next &rarr;</button>
     </div>
   </div>
 
@@ -337,14 +373,14 @@
     <p class="sub">Choose how NullShift connects to an AI model. You can add or change providers at any time from Admin &rarr; Settings.</p>
 
     <div class="radio-grid">
-      <label class="radio-card selected" onclick="selectLlm('sdk')">
+      <label class="radio-card selected">
         <input type="radio" name="llm_choice" value="sdk" checked />
         <div class="rc-body">
           <div class="rc-title">Claude Agent SDK</div>
           <div class="rc-desc">Uses the local <code>claude</code> CLI with your Claude.ai Pro/Max subscription. No API key required — bills your subscription. Best for single-analyst / home SOC use.</div>
         </div>
       </label>
-      <label class="radio-card" onclick="selectLlm('later')">
+      <label class="radio-card">
         <input type="radio" name="llm_choice" value="later" />
         <div class="rc-body">
           <div class="rc-title">Configure via API keys after setup</div>
@@ -356,8 +392,8 @@
     <div id="alert-3" class="alert alert-err" style="margin-top:16px"></div>
 
     <div class="btn-row">
-      <button class="btn-ghost" onclick="goTo(2)">&larr; Back</button>
-      <button class="btn-primary" onclick="validateLlm()">Next &rarr;</button>
+      <button class="btn-ghost" data-goto="2">&larr; Back</button>
+      <button class="btn-primary" id="btn-llm-next">Next &rarr;</button>
     </div>
   </div>
 
@@ -366,75 +402,115 @@
     <h2>SIEM Connector</h2>
     <p class="sub">Connect to your Security Information and Event Management system. You can skip this and configure connectors later in <code>.env</code> or Admin Settings.</p>
 
-    <label for="siem_provider">SIEM / Data Source</label>
-    <select id="siem_provider" onchange="showSiemFields()">
-      <option value="skip">Skip — configure later</option>
-      <option value="limacharlie">LimaCharlie</option>
-      <option value="wazuh">Wazuh</option>
-      <option value="splunk">Splunk</option>
-      <option value="elastic">Elasticsearch / Elastic SIEM</option>
-      <option value="sentinel">Microsoft Sentinel</option>
-    </select>
+    <div class="field">
+      <label for="siem_provider">SIEM / Data source</label>
+      <select id="siem_provider">
+        <option value="skip">Skip — configure later</option>
+        <option value="limacharlie">LimaCharlie</option>
+        <option value="wazuh">Wazuh</option>
+        <option value="splunk">Splunk</option>
+        <option value="elastic">Elasticsearch / Elastic SIEM</option>
+        <option value="sentinel">Microsoft Sentinel</option>
+      </select>
+    </div>
 
     <!-- LimaCharlie -->
     <div class="siem-fields" id="fields-limacharlie">
-      <label>Organisation ID (OID)</label>
-      <input type="text" id="lc_oid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
-      <label>Secret API Key</label>
-      <input type="password" id="lc_api_key" placeholder="Your LimaCharlie secret key" />
+      <div class="field">
+        <label for="lc_oid">Organisation ID (OID)</label>
+        <input type="text" id="lc_oid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+      </div>
+      <div class="field">
+        <label for="lc_api_key">Secret API Key</label>
+        <input type="password" id="lc_api_key" placeholder="Your LimaCharlie secret key" />
+      </div>
     </div>
 
     <!-- Wazuh -->
     <div class="siem-fields" id="fields-wazuh">
-      <label>Wazuh Manager URL</label>
-      <input type="url" id="wazuh_api_url" placeholder="https://wazuh-manager.local:55000" />
-      <label>Wazuh Indexer (OpenSearch) URL</label>
-      <input type="url" id="wazuh_indexer_url" placeholder="https://wazuh-indexer.local:9200" />
-      <label>Indexer Username</label>
-      <input type="text" id="wazuh_indexer_user" placeholder="admin" value="admin" />
-      <label>Indexer Password</label>
-      <input type="password" id="wazuh_indexer_pass" />
-      <label>Wazuh API Token <span style="color:var(--muted);font-weight:400">(optional if using user/pass)</span></label>
-      <input type="password" id="wazuh_api_token" />
+      <div class="field">
+        <label for="wazuh_api_url">Wazuh Manager URL</label>
+        <input type="url" id="wazuh_api_url" placeholder="https://wazuh-manager.local:55000" />
+      </div>
+      <div class="field">
+        <label for="wazuh_indexer_url">Wazuh Indexer (OpenSearch) URL</label>
+        <input type="url" id="wazuh_indexer_url" placeholder="https://wazuh-indexer.local:9200" />
+      </div>
+      <div class="field">
+        <label for="wazuh_indexer_user">Indexer Username</label>
+        <input type="text" id="wazuh_indexer_user" placeholder="admin" value="admin" />
+      </div>
+      <div class="field">
+        <label for="wazuh_indexer_pass">Indexer Password</label>
+        <input type="password" id="wazuh_indexer_pass" />
+      </div>
+      <div class="field">
+        <label for="wazuh_api_token">Wazuh API Token</label>
+        <input type="password" id="wazuh_api_token" />
+        <div class="hint">Optional if you use the indexer username and password.</div>
+      </div>
     </div>
 
     <!-- Splunk -->
     <div class="siem-fields" id="fields-splunk">
-      <label>Splunk URL</label>
-      <input type="url" id="splunk_url" placeholder="https://splunk.corp.local:8089" />
-      <label>Bearer Token (preferred)</label>
-      <input type="password" id="splunk_token" />
-      <label>Index (pattern)</label>
-      <input type="text" id="splunk_index" value="*" />
+      <div class="field">
+        <label for="splunk_url">Splunk URL</label>
+        <input type="url" id="splunk_url" placeholder="https://splunk.corp.local:8089" />
+      </div>
+      <div class="field">
+        <label for="splunk_token">Bearer Token</label>
+        <input type="password" id="splunk_token" />
+        <div class="hint">Preferred over basic auth (SPLUNK_USER / SPLUNK_PASS in .env).</div>
+      </div>
+      <div class="field">
+        <label for="splunk_index">Index</label>
+        <input type="text" id="splunk_index" value="*" />
+        <div class="hint">An index name or pattern, e.g. main or *.</div>
+      </div>
     </div>
 
     <!-- Elastic -->
     <div class="siem-fields" id="fields-elastic">
-      <label>Elasticsearch URL</label>
-      <input type="url" id="elastic_url" placeholder="https://elastic.corp.local:9200" />
-      <label>API Key <span style="color:var(--muted);font-weight:400">(base64 id:key)</span></label>
-      <input type="password" id="elastic_api_key" />
-      <label>Index Pattern</label>
-      <input type="text" id="elastic_index" value="logs-*,.alerts-security.alerts-*" />
+      <div class="field">
+        <label for="elastic_url">Elasticsearch URL</label>
+        <input type="url" id="elastic_url" placeholder="https://elastic.corp.local:9200" />
+      </div>
+      <div class="field">
+        <label for="elastic_api_key">API Key</label>
+        <input type="password" id="elastic_api_key" />
+        <div class="hint">Base64 of id:key.</div>
+      </div>
+      <div class="field">
+        <label for="elastic_index">Index Pattern</label>
+        <input type="text" id="elastic_index" value="logs-*,.alerts-security.alerts-*" />
+      </div>
     </div>
 
     <!-- Sentinel -->
     <div class="siem-fields" id="fields-sentinel">
-      <label>Log Analytics Workspace ID</label>
-      <input type="text" id="sentinel_workspace_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
-      <label>Azure Tenant ID</label>
-      <input type="text" id="sentinel_tenant_id" />
-      <label>App Registration Client ID</label>
-      <input type="text" id="sentinel_client_id" />
-      <label>App Registration Client Secret</label>
-      <input type="password" id="sentinel_client_secret" />
+      <div class="field">
+        <label for="sentinel_workspace_id">Log Analytics Workspace ID</label>
+        <input type="text" id="sentinel_workspace_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+      </div>
+      <div class="field">
+        <label for="sentinel_tenant_id">Azure Tenant ID</label>
+        <input type="text" id="sentinel_tenant_id" />
+      </div>
+      <div class="field">
+        <label for="sentinel_client_id">App Registration Client ID</label>
+        <input type="text" id="sentinel_client_id" />
+      </div>
+      <div class="field">
+        <label for="sentinel_client_secret">App Registration Client Secret</label>
+        <input type="password" id="sentinel_client_secret" />
+      </div>
     </div>
 
     <div id="alert-4" class="alert alert-err" style="margin-top:16px"></div>
 
     <div class="btn-row">
-      <button class="btn-ghost" onclick="goTo(3)">&larr; Back</button>
-      <button class="btn-primary" id="btn-complete" onclick="completeSetup()">Complete Setup &rarr;</button>
+      <button class="btn-ghost" data-goto="3">&larr; Back</button>
+      <button class="btn-primary" id="btn-complete">Complete Setup &rarr;</button>
     </div>
   </div>
 
@@ -453,9 +529,7 @@
     </p>
 
     <div class="btn-row" style="justify-content:center;margin-top:28px">
-      <a href="/login" style="text-decoration:none">
-        <button class="btn-primary">Go to Login &rarr;</button>
-      </a>
+      <a class="btn-primary" href="/login">Go to Login &rarr;</a>
     </div>
   </div>
 
@@ -526,6 +600,7 @@ function validateAdmin() {
   const pw   = document.getElementById('admin_password').value;
   const pw2  = document.getElementById('admin_password2').value;
   if (!user) return showAlert(2, 'Username is required.');
+  if (!/^[A-Za-z0-9._@-]{1,64}$/.test(user)) return showAlert(2, 'Username may only use letters, digits and . _ @ - (max 64).');
   if (pw.length < 16) return showAlert(2, 'Password must be at least 16 characters.');
   if (pw !== pw2) return showAlert(2, 'Passwords do not match.');
   goTo(3);
@@ -596,6 +671,14 @@ async function completeSetup() {
     btn.textContent = 'Complete Setup →';
   }
 }
+
+// Handlers are attached here, not with on*="" attributes: the page CSP blocks those
+document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => goTo(Number(b.dataset.goto))));
+document.getElementById('btn-admin-next').addEventListener('click', validateAdmin);
+document.getElementById('btn-llm-next').addEventListener('click', validateLlm);
+document.getElementById('btn-complete').addEventListener('click', completeSetup);
+document.getElementById('siem_provider').addEventListener('change', showSiemFields);
+document.querySelectorAll('input[name="llm_choice"]').forEach(r => r.addEventListener('change', () => selectLlm(r.value)));
 </script>
 </body>
 </html>

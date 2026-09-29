@@ -1,4 +1,6 @@
+import logging
 import os
+import re
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
@@ -18,6 +20,11 @@ ALGORITHM = "HS256"
 COOKIE_NAME = "access_token"
 CSRF_COOKIE = "csrftoken"
 MIN_JWT_SECRET_LEN = 32
+MIN_PASSWORD_LEN = 16  # same rule as the setup wizard and `nullshift passwd`
+# Usernames are shown in the Settings page and chat UI, so keep them to plain
+# characters rather than trusting every renderer to escape them. Check with
+# .fullmatch(): `$` alone also matches before a trailing newline ("admin\n").
+USERNAME_RE = re.compile(r"^[A-Za-z0-9._@-]{1,64}$")
 _KNOWN_PLACEHOLDER_SECRETS = {
     "please-change-this-secret",
     "replace_me",
@@ -26,6 +33,27 @@ _KNOWN_PLACEHOLDER_SECRETS = {
     "secret",
     "your-secret-here",
 }
+
+
+_SCRIPT_TAG = re.compile(r"<script\b", re.IGNORECASE)
+_CSP = ("default-src 'self'; script-src {script}; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; "
+        "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+
+
+def html_page(content: str, status_code: int = 200) -> HTMLResponse:
+    """Serve an HTML page under a Content-Security-Policy: only the page's own
+    <script> tags run, each stamped with a nonce that is new per response, so
+    injected markup cannot run script. A page without scripts gets none."""
+    nonce = secrets.token_urlsafe(16)
+    content, n = _SCRIPT_TAG.subn(f'<script nonce="{nonce}"', content)
+    resp = HTMLResponse(content, status_code=status_code)
+    resp.headers["Content-Security-Policy"] = _CSP.format(
+        script=f"'self' 'nonce-{nonce}'" if n else "'none'")
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Referrer-Policy"] = "same-origin"
+    return resp
 
 
 def _resolve_jwt_secret() -> str:
@@ -149,15 +177,56 @@ def _validate_csrf(request: Request, token: Optional[str]) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
 
 
+def is_setup_complete() -> bool:
+    """True once the setup wizard has finished OR any account exists.
+
+    Accounts live in users.db (user_store), so an admin created by setup.py or
+    the ADMIN_USERNAME bootstrap counts even if config.db lost the
+    setup_complete flag. /, /login, /setup and /api/setup/complete must all use
+    this one predicate: when they disagreed, a logged-out visitor bounced
+    / -> /login -> /setup -> / forever.
+
+    A database error counts as complete: the wizard is unauthenticated and
+    creates an admin account, so a locked or unreadable DB must show the login
+    form, never the wizard.
+    """
+    try:
+        from app.db.settings_store import settings_store as _ss
+        if _ss.get("setup_complete") == "true":
+            return True
+        return user_store.any_users_exist()
+    except Exception:
+        logging.getLogger("nullshift.auth").exception("setup check failed; treating setup as complete")
+        return True
+
+
+def _set_user_active(user_id: int, active: bool) -> bool:
+    """Set a user's is_active flag. A disable that would leave no active admin
+    is refused (returns False). The admin count and the write happen in one
+    UPDATE, so two admins disabling each other at the same moment cannot both
+    succeed."""
+    with user_store.get_conn() as conn:
+        if active:
+            cur = conn.execute("UPDATE users SET is_active = 1 WHERE id = ?", (user_id,))
+        else:
+            cur = conn.execute(
+                """
+                UPDATE users SET is_active = 0
+                WHERE id = ? AND NOT (
+                    role = 'admin' AND is_active = 1 AND
+                    (SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = 1) <= 1
+                )
+                """,
+                (user_id,),
+            )
+        return cur.rowcount > 0
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
     # Redirect to setup if not yet configured
-    try:
-        from app.db.settings_store import settings_store as _ss
-        if _ss.get("setup_complete") != "true":
-            return RedirectResponse(url="/setup", status_code=303)
-    except Exception:
-        pass
+    if not is_setup_complete():
+        return RedirectResponse(url="/setup", status_code=303)
 
     # If already logged in, redirect to home
     try:
@@ -170,11 +239,13 @@ async def login_form(request: Request):
     login_path = os.path.join(os.path.dirname(__file__), "login.html")
     if os.path.exists(login_path):
         with open(login_path, "r", encoding="utf-8") as f:
-            return HTMLResponse(f.read())
-    html = """
+            return html_page(f.read())
+    error = "<p>Invalid username or password.</p>" if "error" in request.query_params else ""
+    html = f"""
     <html><head><title>Login</title></head>
     <body>
       <h2>Login</h2>
+      {error}
       <form method="post" action="/login">
         <label>Username: <input type="text" name="username" required /></label><br/>
         <label>Password: <input type="password" name="password" required /></label><br/>
@@ -182,16 +253,21 @@ async def login_form(request: Request):
       </form>
     </body></html>
     """
-    return HTMLResponse(html)
+    return html_page(html)
 
 
 @router.post("/login")
 async def login(username: str = Form(...), password: str = Form(...)):
+    # A browser form posts here, so a failure goes back to the form with a flag
+    # it can show instead of a bare JSON body. Unknown, disabled and wrong
+    # password all get the same flag so the page does not reveal which
+    # usernames exist.
+    failed = RedirectResponse(url="/login?error=1", status_code=303)
     user = user_store.get_user_by_username(username)
     if not user or not user.get("is_active"):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        return failed
     if not verify_password(password, user["password_hash"]):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        return failed
 
     token = create_access_token({"sub": user["username"], "role": user["role"]})
     user_store.update_last_login(user["username"])
@@ -223,75 +299,49 @@ async def logout_get():
 
 
 @router.get("/admin", response_class=HTMLResponse)
-async def admin_page(request: Request, _: Dict[str, Any] = Depends(require_admin)):
-        # Set CSRF cookie for admin actions
-        token = _issue_csrf_token()
-        html_path = os.path.join(os.path.dirname(__file__), "admin.html")
-        if os.path.exists(html_path):
-                with open(html_path, "r", encoding="utf-8") as f:
-                        content = f.read()
-        else:
-                content = """
-                <html><head><title>Admin</title></head>
-                <body>
-                <h2>Admin – Users</h2>
-                <div id=users></div>
-                <h3>Create user</h3>
-                <form id="createForm">
-                    <input name="username" placeholder="username" required />
-                    <input type="password" name="password" placeholder="password" required />
-                    <select name="role"><option>l1</option><option>l2</option><option>admin</option></select>
-                    <button type="submit">Create</button>
-                </form>
-                <script>
-                function getCookie(n){return document.cookie.split('; ').find(r=>r.startsWith(n+'='))?.split('=')[1]}
-                const csrf=getCookie('csrftoken');
-                async function refresh(){
-                    const r=await fetch('/admin/users'); const j=await r.json();
-                    const el=document.getElementById('users');
-                    el.innerHTML='<table border=1><tr><th>ID</th><th>User</th><th>Role</th><th>Active</th><th>Actions</th></tr>' +
-                        j.users.map(u=>`<tr><td>${u.id}</td><td>${u.username}</td><td>${u.role}</td><td>${u.is_active}</td>`+
-                        `<td>${u.is_active?`<button data-id="${u.id}" class="disable">Disable</button>`:''}</td></tr>`).join('') + '</table>';
-                    el.querySelectorAll('button.disable').forEach(b=>b.onclick=async()=>{
-                        await fetch(`/admin/users/${b.dataset.id}/disable`,{method:'PATCH',headers:{'X-CSRF-Token':csrf}});refresh();
-                    });
-                }
-                document.getElementById('createForm').onsubmit=async(e)=>{
-                    e.preventDefault(); const fd=new FormData(e.target);
-                    const body={username:fd.get('username'),password:fd.get('password'),role:fd.get('role')};
-                    await fetch('/admin/users',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(body)});
-                    e.target.reset(); refresh();
-                };
-                refresh();
-                </script>
-                </body></html>
-                """
-        resp = HTMLResponse(content)
-        resp.set_cookie(CSRF_COOKIE, token, httponly=False, samesite="lax", secure=False)
-        # No-cache so admin UI fixes always reach the browser without the
-        # user needing to know about Cmd+Shift+R. The page is tiny so the
-        # extra fetch cost is irrelevant.
-        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-        resp.headers["Pragma"] = "no-cache"
-        return resp
+async def admin_page(request: Request):
+    # A browser opens this page directly, so send an expired session to the
+    # login form and a non-admin back to the chat instead of raw JSON.
+    try:
+        user = get_current_user(request)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=303)
+    if user.get("role") != "admin":
+        return RedirectResponse(url="/", status_code=303)
+    html_path = os.path.join(os.path.dirname(__file__), "admin.html")
+    if not os.path.exists(html_path):
+        return html_page("<p>Settings page not found (app/admin.html is missing).</p>", status_code=500)
+    with open(html_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    resp = html_page(content)
+    # Set CSRF cookie for admin actions
+    resp.set_cookie(CSRF_COOKIE, _issue_csrf_token(), httponly=False, samesite="lax", secure=False)
+    # No-cache so admin UI fixes always reach the browser without the
+    # user needing to know about Cmd+Shift+R. The page is tiny so the
+    # extra fetch cost is irrelevant.
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @router.get("/admin/users")
-async def admin_list_users(_: Dict[str, Any] = Depends(require_admin)):
-    return {"users": user_store.list_users()}
+async def admin_list_users(current: Dict[str, Any] = Depends(require_admin)):
+    # `me` lets the Settings page hide the Disable button on the caller's own row
+    return {"users": user_store.list_users(), "me": current["id"]}
 
 
 @router.post("/admin/users")
 async def admin_create_user(request: Request, payload: Dict[str, Any], _: Dict[str, Any] = Depends(require_admin)):
-    # If CSRF header is present (browser UI), validate it; CLI tools may omit it
-    csrf_hdr = request.headers.get('X-CSRF-Token')
-    if csrf_hdr:
-        _validate_csrf(request, csrf_hdr)
+    _validate_csrf(request, request.headers.get('X-CSRF-Token'))
     username = payload.get("username")
     password = payload.get("password")
     role = payload.get("role")
     if not username or not password or role not in ("admin","l1","l2"):
         raise HTTPException(status_code=400, detail="username, password, role (admin|l1|l2) required")
+    if not isinstance(username, str) or not USERNAME_RE.fullmatch(username):
+        raise HTTPException(status_code=400, detail="username may only use letters, digits and . _ @ - (max 64)")
+    if not isinstance(password, str) or len(password) < MIN_PASSWORD_LEN:
+        raise HTTPException(status_code=400, detail=f"password must be at least {MIN_PASSWORD_LEN} characters")
     if user_store.get_user_by_username(username):
         raise HTTPException(status_code=409, detail="username already exists")
     uid = user_store.create_user(username, get_password_hash(password), role)
@@ -299,14 +349,27 @@ async def admin_create_user(request: Request, payload: Dict[str, Any], _: Dict[s
 
 
 @router.patch("/admin/users/{user_id}/disable")
-async def admin_disable_user(user_id: int, request: Request, _: Dict[str, Any] = Depends(require_admin)):
-    csrf_hdr = request.headers.get('X-CSRF-Token')
-    if csrf_hdr:
-        _validate_csrf(request, csrf_hdr)
+async def admin_disable_user(user_id: int, request: Request, current: Dict[str, Any] = Depends(require_admin)):
+    _validate_csrf(request, request.headers.get('X-CSRF-Token'))
+    # Disabling yourself ends your session on the next request, and disabling
+    # the last admin leaves nobody able to open Settings again.
+    if user_id == current["id"]:
+        raise HTTPException(status_code=409, detail="You cannot disable your own account")
+    target = user_store.get_user_by_id(user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="user not found")
+    if target["is_active"] and not _set_user_active(user_id, False):
+        raise HTTPException(status_code=409, detail="Cannot disable the last active admin")
+    return {"status": "disabled", "id": user_id}
+
+
+@router.patch("/admin/users/{user_id}/enable")
+async def admin_enable_user(user_id: int, request: Request, _: Dict[str, Any] = Depends(require_admin)):
+    _validate_csrf(request, request.headers.get('X-CSRF-Token'))
     if not user_store.get_user_by_id(user_id):
         raise HTTPException(status_code=404, detail="user not found")
-    user_store.disable_user(user_id)
-    return {"status": "disabled", "id": user_id}
+    _set_user_active(user_id, True)
+    return {"status": "enabled", "id": user_id}
 
 
 def init_auth_startup() -> None:
