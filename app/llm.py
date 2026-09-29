@@ -370,10 +370,11 @@ class AnthropicProvider(LLMProvider):
         kwargs: Dict[str, Any] = {
             "model": model or settings.ANTHROPIC_MODEL,
             "max_tokens": max_tokens,
-            "temperature": temperature,
             "system": system_param,
             "messages": anthropic_messages,
         }
+        if not _NO_SAMPLING_PARAMS.search(kwargs["model"]):
+            kwargs["temperature"] = temperature
         if anthropic_tools:
             kwargs["tools"] = anthropic_tools
             if tool_choice == "auto":
@@ -382,6 +383,11 @@ class AnthropicProvider(LLMProvider):
         logger.debug("Calling Anthropic model %s", kwargs["model"])
         response = self.client.messages.create(**kwargs)
         return _anthropic_response_to_adapted(response)
+
+
+# Claude models that reject temperature/top_p/top_k with a 400:
+# Opus 4.7 and newer, Sonnet 5, Fable, Mythos.
+_NO_SAMPLING_PARAMS = re.compile(r"claude-(fable|mythos|opus-(4-[78]|5)|sonnet-5)")
 
 
 class ClaudeAgentSDKProvider(LLMProvider):
@@ -730,6 +736,16 @@ def get_active_vision_info() -> Dict[str, Any]:
         active = chain[0][0] if chain else "unknown"
     caps = _VISION_CAPS.get(active, {"supported": None, "note": "Vision support unknown for this provider"})
     return {"provider": active, **caps}
+
+
+def tools_available() -> bool:
+    """True if some provider in the active chain can run NullShift's tools.
+    The Claude Agent SDK path is single-turn with no tools, so the L2
+    investigation protocol (which is all tool calls) cannot run on it."""
+    try:
+        return any(name != "claude_agent_sdk" for name, _, _ in _provider_chain())
+    except Exception:
+        return True
 
 
 def get_active_provider() -> str:

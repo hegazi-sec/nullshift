@@ -117,6 +117,8 @@ ALLOWED_KEYS = frozenset({
     "vt_api_key",              # VirusTotal v3 API key
     # Webhook alert ingestion
     "webhook_token",           # shared secret for POST /api/alerts/ingest
+    # Autonomous agents (JSON: owner + per-agent switches and limits)
+    "agents_config",
     # Setup / Auth
     "setup_complete",
     "jwt_secret",

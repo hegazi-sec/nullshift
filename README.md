@@ -84,8 +84,8 @@ Best for individual analysts and homelab SOCs running on a personal Claude subsc
 
 Paste a key in **Admin → LLM Providers** for any of:
 
-- **Anthropic** (`claude-sonnet-4-6`, `claude-opus-4-7`, etc.)
-- **OpenAI** (`gpt-4.1`, `gpt-4o`, etc.)
+- **Anthropic** (`claude-opus-5`, `claude-sonnet-5`, `claude-fable-5-1`, etc.)
+- **OpenAI** (`gpt-6-sol`, `gpt-6-astra`, `gpt-6-luna`, etc.)
 - **Google Gemini, Groq, xAI, DeepSeek, Perplexity, OpenRouter, Qwen, Kimi**
 
 ### Local Ollama *(fully offline)*

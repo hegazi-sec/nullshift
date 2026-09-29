@@ -25,6 +25,11 @@ from typing import Any, Dict, List, Optional
 
 DB_PATH = Path(__file__).resolve().parent.parent / 'data' / 'chat.db'
 
+# Host name across the webhook shapes we ingest.
+HOST_EXPR = ("COALESCE(json_extract(payload_json, '$.routing.hostname'),"  # LimaCharlie
+             " json_extract(payload_json, '$.agent.name'),"                # Wazuh
+             " json_extract(payload_json, '$.host.name'))")                # Elastic ECS
+
 ALERT_STATUSES = ("new", "investigating", "dismissed")
 
 _SEVERITY_MAP = {
@@ -125,6 +130,10 @@ class AlertStore:
                 )
                 """
             )
+            cols = {r[1] for r in cur.execute("PRAGMA table_info(ingested_alerts)")}
+            for col in ("agent_note", "triaged_at"):  # written by the triage/investigator agents
+                if col not in cols:
+                    cur.execute(f"ALTER TABLE ingested_alerts ADD COLUMN {col} TEXT")
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_alerts_status ON ingested_alerts(status, created_at)"
             )
@@ -226,9 +235,6 @@ class AlertStore:
         since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
         bucket_s = hours * 3600 / buckets
         win = "FROM ingested_alerts WHERE created_at >= ?"
-        host = ("COALESCE(json_extract(payload_json, '$.routing.hostname'),"  # LimaCharlie
-                " json_extract(payload_json, '$.agent.name'),"                # Wazuh
-                " json_extract(payload_json, '$.host.name'))")                # Elastic ECS
 
         def q(sql: str, *args: Any) -> List[sqlite3.Row]:
             return self.conn.execute(sql, args).fetchall()
@@ -247,7 +253,7 @@ class AlertStore:
                 "top_rules": [dict(r) for r in q(
                     f"SELECT title AS name, COUNT(*) AS n {win} GROUP BY title ORDER BY n DESC LIMIT 6", since)],
                 "top_hosts": [dict(r) for r in q(
-                    f"SELECT {host} AS name, COUNT(*) AS n {win} GROUP BY name HAVING name IS NOT NULL "
+                    f"SELECT {HOST_EXPR} AS name, COUNT(*) AS n {win} GROUP BY name HAVING name IS NOT NULL "
                     f"ORDER BY n DESC LIMIT 6", since)],
                 "recent": [dict(r) for r in q(
                     f"SELECT id, source, title, severity, status, created_at {win} "
@@ -258,6 +264,49 @@ class AlertStore:
                 "backlog": {s: n for s, n in q(
                     "SELECT status, COUNT(*) FROM ingested_alerts WHERE status != 'dismissed' GROUP BY status")},
             }
+
+    def untriaged(self, since: str, limit: int = 500) -> List[Dict[str, Any]]:
+        """New alerts received since `since` that no agent has looked at, oldest first."""
+        with self.lock:
+            cur = self.conn.execute(
+                f"""
+                SELECT id, source, title, severity, created_at, payload_json, {HOST_EXPR} AS host
+                FROM ingested_alerts
+                WHERE status='new' AND triaged_at IS NULL AND created_at >= ?
+                ORDER BY created_at LIMIT ?
+                """,
+                (since, limit),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    def set_agent_outcome(self, ids: List[str], status: str, note: str,
+                          conversation_id: Optional[str] = None) -> None:
+        """Record an agent decision (or its undo) on a group of alerts."""
+        now = self._now()
+        with self.lock:
+            self.conn.executemany(
+                "UPDATE ingested_alerts SET status=?, agent_note=?, triaged_at=?, updated_at=?, "
+                "conversation_id=COALESCE(?, conversation_id) WHERE id=?",
+                [(status, note, now, now, conversation_id, i) for i in ids],
+            )
+            self.conn.commit()
+
+    def sensors(self, ids: List[str]) -> List[tuple]:
+        """Distinct LimaCharlie (sensor id, hostname) pairs behind these alerts."""
+        if not ids:
+            return []
+        with self.lock:
+            cur = self.conn.execute(
+                f"""
+                SELECT DISTINCT json_extract(payload_json, '$.routing.sid'),
+                                json_extract(payload_json, '$.routing.hostname')
+                FROM ingested_alerts
+                WHERE id IN ({','.join('?' * len(ids))})
+                  AND json_extract(payload_json, '$.routing.sid') IS NOT NULL
+                """,
+                ids,
+            )
+            return [(r[0], r[1]) for r in cur.fetchall()]
 
     def get(self, alert_id: str) -> Optional[Dict[str, Any]]:
         with self.lock:

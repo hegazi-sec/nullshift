@@ -12,7 +12,7 @@ from app.llm import (
     any_provider_configured, configured_provider_names,
     reload_providers, get_active_provider, get_active_vision_info,
     get_last_call_info, get_last_rate_limit_info,
-    _is_ollama_active, validate_and_retry_if_needed,
+    _is_ollama_active, validate_and_retry_if_needed, tools_available,
 )
 from app.db.settings_store import settings_store, mask_for_api, ALLOWED_KEYS, SECRET_KEYS
 from app.execution.tool_runner import ToolRunner
@@ -26,6 +26,9 @@ from app.db.investigation_state import inv_state
 from app.db.verdict_store import verdicts as verdict_store, parse_decision
 from app.db.incident_store import incidents as incident_store
 from app.db.alert_store import alerts_inbox
+from app.db.agent_store import agent_store
+from app.db import user_store
+from app import agents
 from app.reports import build_incident_report_md, build_incident_report_html
 from app.db.prefs_store import prefs as prefs_store
 from app.db.summary_store import summaries as summary_store
@@ -36,9 +39,9 @@ from typing import Optional, Dict, Any, List, Tuple
 from app.utils import csv_context as csv_ctx
 
 class _AccessLogFilter(logging.Filter):
-    # UI polling (ping every 60s, alert inbox + dashboard every 1s) would flood the access log,
+    # UI polling (ping every 60s, alert inbox + dashboard every 1s, agents every 3s) would flood the access log,
     # and SIEM webhooks that can't send headers put the shared secret in ?token=.
-    _POLLS = re.compile(r'"GET /api/(?:ping|alerts|dashboard)(?:\?\S*)? HTTP')
+    _POLLS = re.compile(r'"GET /api/(?:ping|alerts|dashboard|agents)(?:\?\S*)? HTTP')
     _TOKEN = re.compile(r'(token=)[^&\s]+')
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -124,6 +127,21 @@ def _has_indicator(text: str) -> bool:
     if re.search(r"\b([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}\b", text):
         return True
     return False
+
+
+# Chat-style modes whose prompt forbids report structure. The report modes
+# (investigation_report, l2_investigation, l2_handoff) end with Verdict/Confidence
+# lines by design, so the safety net below must leave them alone.
+_CONVERSATIONAL_MODES = ("targeted_answer", "clarifying_question")
+
+
+def _supported_mode(mode: str) -> str:
+    """L2 investigation is a tool-calling protocol; without a tool-capable
+    provider (e.g. only the Claude Agent SDK) it fails outright, so fall back
+    to the full report, which still ends with a Verdict and Confidence."""
+    if mode == "l2_investigation" and not tools_available():
+        return "investigation_report"
+    return mode
 
 
 def _strip_investigation_format(text: str) -> str:
@@ -502,6 +520,7 @@ def handle_chat_orchestrated(req: ChatRequest, conv_id: str, last_assistant: Opt
         if threat >= 60:
             response_mode = "l2_investigation"
 
+    response_mode = _supported_mode(response_mode)
     reply = orchestrated_llm_reply(augmented_user, conv_id, response_mode, evidence_bundle, current_user, retrieved=retrieved, debug=debug)
 
     # Record this turn's verdict for any IOCs the user mentioned, so future
@@ -535,7 +554,7 @@ def handle_chat_orchestrated(req: ChatRequest, conv_id: str, last_assistant: Opt
     # Safety net: strip SECTION 1/2/3 + verdict banners from non-investigation modes
     # (qwen and other local models often drift back into investigation format
     # when earlier turns in the conversation used it).
-    if response_mode != "investigation_report":
+    if response_mode in _CONVERSATIONAL_MODES:
         reply = _strip_investigation_format(reply)
     return reply
 
@@ -874,10 +893,13 @@ _PROVIDER_CATALOG = [
             {"value": "opus",                       "label": "opus (alias — latest Opus)"},
             {"value": "sonnet",                     "label": "sonnet (alias — latest Sonnet)"},
             {"value": "haiku",                      "label": "haiku (alias — latest Haiku)"},
-            {"value": "claude-opus-4-8",            "label": "claude-opus-4-8 (latest flagship)"},
-            {"value": "claude-opus-4-7",            "label": "claude-opus-4-7"},
+            {"value": "claude-fable-5-1",           "label": "claude-fable-5-1 (most capable)"},
+            {"value": "claude-opus-5-5",            "label": "claude-opus-5-5 (latest Opus)"},
+            {"value": "claude-opus-5",              "label": "claude-opus-5"},
+            {"value": "claude-sonnet-5",            "label": "claude-sonnet-5 (balanced)"},
+            {"value": "claude-haiku-4-5",           "label": "claude-haiku-4-5 (fastest)"},
+            {"value": "claude-opus-4-8",            "label": "claude-opus-4-8"},
             {"value": "claude-sonnet-4-6",          "label": "claude-sonnet-4-6"},
-            {"value": "claude-haiku-4-5-20251001",  "label": "claude-haiku-4-5-20251001"},
         ],
     },
     {
@@ -889,10 +911,13 @@ _PROVIDER_CATALOG = [
         "enable_field": None,
         "base_url_field": None,
         "model_options": [
-            {"value": "claude-opus-4-8",            "label": "claude-opus-4-8 (latest, best)"},
-            {"value": "claude-opus-4-7",            "label": "claude-opus-4-7"},
-            {"value": "claude-sonnet-4-6",          "label": "claude-sonnet-4-6 (balanced)"},
-            {"value": "claude-haiku-4-5-20251001",  "label": "claude-haiku-4-5-20251001 (fastest)"},
+            {"value": "claude-fable-5-1",           "label": "claude-fable-5-1 (most capable, $10/$50)"},
+            {"value": "claude-opus-5-5",            "label": "claude-opus-5-5 (latest Opus, $4/$20)"},
+            {"value": "claude-opus-5",              "label": "claude-opus-5 ($5/$25)"},
+            {"value": "claude-sonnet-5",            "label": "claude-sonnet-5 (balanced, $2/$10)"},
+            {"value": "claude-haiku-4-5",           "label": "claude-haiku-4-5 (fastest, $1/$5)"},
+            {"value": "claude-opus-4-8",            "label": "claude-opus-4-8 (previous gen)"},
+            {"value": "claude-sonnet-4-6",          "label": "claude-sonnet-4-6 (previous gen)"},
         ],
     },
     {
@@ -904,7 +929,10 @@ _PROVIDER_CATALOG = [
         "enable_field": None,
         "base_url_field": None,
         "model_options": [
-            {"value": "gpt-5.5",           "label": "gpt-5.5 (latest flagship, vision)"},
+            {"value": "gpt-6-astra",       "label": "gpt-6-astra (latest flagship)"},
+            {"value": "gpt-6-sol",         "label": "gpt-6-sol (balanced)"},
+            {"value": "gpt-6-luna",        "label": "gpt-6-luna (fast, cheap)"},
+            {"value": "gpt-5.5",           "label": "gpt-5.5 (vision)"},
             {"value": "gpt-5.4",           "label": "gpt-5.4 (vision)"},
             {"value": "gpt-5.4-mini",      "label": "gpt-5.4-mini (fast, vision)"},
             {"value": "gpt-5",             "label": "gpt-5 (vision)"},
@@ -929,7 +957,9 @@ _PROVIDER_CATALOG = [
         "enable_field": None,
         "base_url_field": None,
         "model_options": [
-            {"value": "gemini-3.5-flash",        "label": "gemini-3.5-flash (latest, vision)"},
+            {"value": "gemini-3.8-flash",        "label": "gemini-3.8-flash (latest, vision)"},
+            {"value": "gemini-3.5-flash-lite",   "label": "gemini-3.5-flash-lite (cheap, vision)"},
+            {"value": "gemini-3.5-flash",        "label": "gemini-3.5-flash (vision)"},
             {"value": "gemini-3.1-pro-preview",  "label": "gemini-3.1-pro-preview (vision)"},
             {"value": "gemini-3.1-flash-lite",   "label": "gemini-3.1-flash-lite (cheap, vision)"},
             {"value": "gemini-2.5-pro",          "label": "gemini-2.5-pro (vision)"},
@@ -968,7 +998,8 @@ _PROVIDER_CATALOG = [
         "enable_field": None,
         "base_url_field": None,
         "model_options": [
-            {"value": "grok-4.3",           "label": "grok-4.3 (latest, vision)"},
+            {"value": "grok-4.7",           "label": "grok-4.7 (latest, 500k ctx, vision)"},
+            {"value": "grok-4.3",           "label": "grok-4.3 (vision)"},
             {"value": "grok-4-0709",        "label": "grok-4-0709 (pinned, vision)"},
             {"value": "grok-3",             "label": "grok-3 (→ redirects to grok-4.3)"},
             {"value": "grok-3-mini",        "label": "grok-3-mini (reasoning)"},
@@ -1001,9 +1032,11 @@ _PROVIDER_CATALOG = [
         "base_url_field": None,
         "model_options": [
             {"value": "openrouter/auto",                                 "label": "auto (OpenRouter picks best)"},
-            {"value": "anthropic/claude-opus-4-8",                       "label": "anthropic/claude-opus-4-8"},
-            {"value": "anthropic/claude-sonnet-4-6",                     "label": "anthropic/claude-sonnet-4-6"},
-            {"value": "openai/gpt-5.5",                                  "label": "openai/gpt-5.5"},
+            {"value": "anthropic/claude-opus-5-5",                       "label": "anthropic/claude-opus-5-5"},
+            {"value": "anthropic/claude-sonnet-5",                       "label": "anthropic/claude-sonnet-5"},
+            {"value": "openai/gpt-6-sol",                                "label": "openai/gpt-6-sol"},
+            {"value": "google/gemini-3.8-flash",                         "label": "google/gemini-3.8-flash"},
+            {"value": "x-ai/grok-4.7",                                   "label": "x-ai/grok-4.7"},
             {"value": "openai/o4-mini",                                  "label": "openai/o4-mini"},
             {"value": "google/gemini-3.5-flash",                         "label": "google/gemini-3.5-flash"},
             {"value": "google/gemini-2.5-pro",                           "label": "google/gemini-2.5-pro"},
@@ -1024,7 +1057,8 @@ _PROVIDER_CATALOG = [
         "base_url_field": None,
         "model_options": [
             {"value": "deepseek-v4-pro",    "label": "deepseek-v4-pro (best, reasoning)"},
-            {"value": "deepseek-v4-flash",  "label": "deepseek-v4-flash (fast, cheap)"},
+            {"value": "deepseek-flash",     "label": "deepseek-flash (V4.1 Flash, fast, vision)"},
+            {"value": "deepseek-v4-flash",  "label": "deepseek-v4-flash (retired, routes to V4.1 Flash)"},
             {"value": "deepseek-chat",      "label": "deepseek-chat (legacy alias, deprecated Jul 2026)"},
             {"value": "deepseek-reasoner",  "label": "deepseek-reasoner (legacy alias, deprecated Jul 2026)"},
         ],
@@ -1658,6 +1692,79 @@ def api_dashboard(hours: int = 24, current_user: Dict[str, Any] = Depends(get_cu
     }
 
 
+# ─── Autonomous agents (see app/agents.py) ───────────────────────────────────
+
+@app.on_event("startup")
+async def _startup_agents():
+    agents.start()
+
+
+@app.on_event("shutdown")
+async def _shutdown_agents():
+    agents.stop()
+
+
+@app.get('/api/agents')
+def api_agents(current_user: Dict[str, Any] = Depends(get_current_user)):
+    is_admin = current_user.get("role") == "admin"
+    return {
+        "config": agents.load_config(),
+        "status": agents.status,
+        "running": [a for a in agents.AGENTS if agents._locks[a].locked()],
+        "log": agent_store.recent(60),
+        "proposals": agent_store.proposals(30),
+        "users": [u["username"] for u in user_store.list_users() if u["is_active"]] if is_admin else [],
+        "is_admin": is_admin,
+        "can_decide": current_user.get("role") in ("admin", "l2"),
+        "me": current_user["username"],
+    }
+
+
+@app.put('/api/agents/config')
+def api_agents_config(payload: Dict[str, Any], current_user: Dict[str, Any] = Depends(require_admin)):
+    owner = payload.get("owner")
+    if owner and not user_store.get_user_by_username(str(owner)):
+        raise HTTPException(status_code=400, detail=f"No user named {owner!r}")
+    try:
+        cfg = agents.save_config(payload)
+    except (TypeError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"Invalid agent setting: {e}")
+    log.info("Agents config updated by %s", current_user["username"])
+    return {"config": cfg}
+
+
+@app.post('/api/agents/{name}/run')
+def api_agents_run(name: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    try:
+        return {"started": agents.run_now(name)}
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Unknown agent")
+
+
+@app.post('/api/agents/log/{log_id}/undo')
+def api_agents_undo(log_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    try:
+        agents.undo(log_id, current_user)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return {"ok": True}
+
+
+@app.post('/api/agents/proposals/{pid}/{decision}')
+def api_agents_proposal(pid: str, decision: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """approve (isolates the host in LimaCharlie), reject, or release (rejoin)."""
+    if current_user.get("role") not in ("admin", "l2"):
+        raise HTTPException(status_code=403, detail="Only admins and L2 analysts can decide on containment")
+    try:
+        return agents.decide(pid, decision, current_user)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
 @app.post('/api/alerts/sync')
 def api_sync_alerts(current_user: Dict[str, Any] = Depends(get_current_user)):
     """Inbox Refresh button: pull recent LimaCharlie detections so anything the
@@ -1898,7 +2005,7 @@ def api_post_message(conversation_id: str, payload: MessageCreate, current_user:
     # Response-mode routing (unified with /chat — workflow-stage based, not
     # legacy intent). route_intent() still drives run_investigation below for
     # the deterministic-pipeline selection.
-    mode = select_response_mode(payload.message, last_assistant_message=None)
+    mode = _supported_mode(select_response_mode(payload.message, last_assistant_message=None))
     intent = route_intent(payload.message)
     tw = choose_time_window(None)
     time_range = tw["time_range"]
@@ -1953,7 +2060,7 @@ def api_post_message(conversation_id: str, payload: MessageCreate, current_user:
         deployment_memory=get_cached_memory(),
     )
     reply_md = _strip_html_from_llm(reply_md)
-    if mode != "investigation_report":
+    if mode in _CONVERSATIONAL_MODES:
         reply_md = _strip_investigation_format(reply_md)
 
     # Persist assistant reply (scoped write)
@@ -2056,8 +2163,11 @@ async def api_stream_message(conversation_id: str, payload: MessageCreate, curre
 
 
 def _do_message_work(conversation_id: str, payload: MessageCreate, current_user: Dict[str, Any],
-                     csv_markers: str = "", csv_blocks: str = "") -> Dict[str, Any]:
-    """Shared logic for both streaming and non-streaming message endpoints."""
+                     csv_markers: str = "", csv_blocks: str = "", mode: Optional[str] = None) -> Dict[str, Any]:
+    """Shared logic for both streaming and non-streaming message endpoints.
+
+    `mode` pins the response mode (the agents do this, since alert payload text
+    such as "privilege-escalation" would otherwise steer the keyword router)."""
     import json as _json
     conv = store.get_conversation_for_user(current_user["id"], conversation_id)
 
@@ -2066,7 +2176,7 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
     except PermissionError:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    mode = select_response_mode(payload.message or '', None)
+    mode = _supported_mode(mode or select_response_mode(payload.message or '', None))
     intent = classify_task_type(payload.message or '')
     time_range = "last_24h"
 
@@ -2107,9 +2217,9 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
     aug_user = {"role": "user", "content": user_content}
     reply_md = orchestrated_llm_reply(aug_user, conversation_id, mode, evidence, current_user, retrieved=retrieved, debug=debug)
     reply_md = _strip_html_from_llm(reply_md)
-    # Safety net: any mode other than investigation_report must not show
-    # SECTION 1/2/3 or verdict banners. Strip them if the LLM drifted.
-    if mode != "investigation_report":
+    # Safety net: chat-style modes must not show SECTION 1/2/3 or verdict
+    # banners. Strip them if the LLM drifted.
+    if mode in _CONVERSATIONAL_MODES:
         reply_md = _strip_investigation_format(reply_md)
 
     if debug:

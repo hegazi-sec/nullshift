@@ -4,7 +4,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
-    OPENAI_MODEL: str = "gpt-4.1"
+    OPENAI_MODEL: str = "gpt-6-sol"
 
     WAZUH_API_URL: Optional[str] = None
     # Wazuh Indexer (OpenSearch) base URL, e.g. https://indexer:9200
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
 
     # Anthropic (primary when configured; OpenAI is fallback)
     ANTHROPIC_API_KEY: Optional[str] = None
-    ANTHROPIC_MODEL: str = "claude-sonnet-4-6"
+    ANTHROPIC_MODEL: str = "claude-opus-5"
 
     # Claude Agent SDK — toggles routing chat through the local `claude` CLI
     # (using the operator's Claude.ai Pro/Max subscription) instead of the
