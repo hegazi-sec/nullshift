@@ -57,6 +57,7 @@ _llm_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="agent-llm")
 
 status: Dict[str, Dict[str, str]] = {a: {} for a in AGENTS}  # last run per agent, in memory
 _locks = {a: threading.Lock() for a in AGENTS}
+_stop_requested = {a: threading.Event() for a in AGENTS}  # checked between groups/cases
 _paused_until: Dict[str, float] = {}
 
 
@@ -140,6 +141,8 @@ def run_triage(cfg: Dict[str, Any]) -> str:
         groups.setdefault((a["source"], a["title"], a["host"] or "unknown host"), []).append(a)
     done = 0
     for (source, title, host), alerts in list(groups.items())[: cfg["triage"]["max_per_run"]]:
+        if _stop_requested["triage"].is_set():
+            break
         latest = alerts[-1]
         conv = store.create_conversation_for_user(owner["id"], title=f"[Triage] {title}"[:60])["id"]
         try:
@@ -183,6 +186,8 @@ def run_investigator(cfg: Dict[str, Any]) -> str:
     todo = [e for e in agent_store.entries("triage", "case_opened") if e["target_id"] not in seen]
     done = 0
     for entry in todo[: cfg["investigator"]["max_per_run"]]:
+        if _stop_requested["investigator"].is_set():
+            break
         data = json.loads(entry["data_json"] or "{}")
         actor = _actor(user_store.get_user_by_id(data["owner_id"]), data["owner_id"])  # the case and chat belong to them
         case = incident_store.get_for_user(actor["id"], entry["target_id"])
@@ -322,8 +327,12 @@ RUNNERS: Dict[str, Callable[[Dict[str, Any]], str]] = {
 def _run(name: str, cfg: Dict[str, Any]) -> None:
     if not _locks[name].acquire(blocking=False):
         return  # one run per agent at a time
+    _stop_requested[name].clear()
     try:
-        status[name] = {"last_run": _now(), "result": RUNNERS[name](cfg)}
+        result = RUNNERS[name](cfg)
+        if _stop_requested[name].is_set():
+            result = f"stopped: {result}"
+        status[name] = {"last_run": _now(), "result": result}
     except LLMUnavailable as e:
         _paused_until[name] = time.time() + BACKOFF_S
         status[name] = {"last_run": _now(), "result": "paused 15 min: model unavailable"}
@@ -334,6 +343,20 @@ def _run(name: str, cfg: Dict[str, Any]) -> None:
         agent_store.log(name, "error", None, str(e)[:300])
     finally:
         _locks[name].release()
+
+
+def halt(names: List[str], user: Dict[str, Any]) -> List[str]:
+    """Switch agents off and end any run in progress after its current group or case
+    (an LLM call already underway finishes first; it can't be killed)."""
+    names = [n for n in names if n in AGENTS]
+    if not names:
+        raise ValueError("unknown agent")
+    for n in names:
+        _stop_requested[n].set()
+    save_config({n: {"enabled": False} for n in names})
+    agent_store.log(names[0] if len(names) == 1 else "all", "stopped", None,
+                    f"{', '.join(names)} stopped by {user['username']}")
+    return names
 
 
 def run_now(name: str) -> bool:

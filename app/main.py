@@ -1741,6 +1741,15 @@ def api_agents_run(name: str, current_user: Dict[str, Any] = Depends(require_adm
         raise HTTPException(status_code=404, detail="Unknown agent")
 
 
+@app.post('/api/agents/{name}/stop')
+def api_agents_stop(name: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    """Switch an agent off (name 'all' = every agent) and end its run after the current step."""
+    try:
+        return {"stopped": agents.halt(list(agents.AGENTS) if name == "all" else [name], current_user)}
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Unknown agent")
+
+
 @app.post('/api/agents/log/{log_id}/undo')
 def api_agents_undo(log_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     try:

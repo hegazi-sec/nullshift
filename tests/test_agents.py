@@ -135,3 +135,23 @@ def test_model_outage_decides_nothing_and_pauses(env, monkeypatch):
     assert s["store"].list_conversations_for_user(1) == [] and s["incident_store"].list_for_user(1) == []
     assert agents._paused_until["triage"] > 0 and agents.status["triage"]["result"].startswith("paused")
     assert s["agent_store"].recent()[0]["action"] == "error"
+
+
+def test_stop_ends_run_after_current_group_and_switches_off(env, monkeypatch):
+    s, cfg = env
+    ingest(s, "rule-a", "web-01")
+    ingest(s, "rule-b", "db-01")
+    saved = {}
+    monkeypatch.setattr(agents, "save_config", lambda u: saved.update(u))
+
+    def first_then_stop(actor, conv, message, mode):
+        agents.halt(["triage"], ADMIN)  # analyst hits Stop while the first group is being investigated
+        return "", "Likely Benign", "High"
+    monkeypatch.setattr(agents, "_investigate", first_then_stop)
+
+    agents._run("triage", cfg)
+    assert agents.status["triage"]["result"] == "stopped: 1 group(s) triaged, 1 waiting for the next run"
+    assert saved == {"triage": {"enabled": False}}
+    assert sorted(a["status"] for a in s["alerts_inbox"].list()) == ["dismissed", "new"]
+    with pytest.raises(ValueError):
+        agents.halt(["bogus"], ADMIN)

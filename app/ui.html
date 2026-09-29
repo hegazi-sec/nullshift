@@ -2100,7 +2100,7 @@ const AGENT_INFO = {
 const AGENT_ACTIONS = {
   dismissed: 'Dismissed FP', case_opened: 'Opened case', case_closed: 'Closed as FP', needs_review: 'Needs review',
   proposed: 'Proposed isolation', isolated: 'Isolated host', released: 'Released host', rejected: 'Rejected isolation',
-  report: 'Shift report', undone: 'Undone', skipped: 'Skipped', error: 'Error',
+  report: 'Shift report', undone: 'Undone', skipped: 'Skipped', error: 'Error', stopped: 'Stopped',
 }
 let agentsData = null
 let agentsSig = null
@@ -2144,6 +2144,7 @@ function agentCardHtml(name, d) {
         ${key ? `<label>${keyLabel} <input type="number" min="${key === 'hour_utc' ? 0 : 1}" max="${key === 'hour_utc' ? 23 : 50}"
           value="${esc(cfg[key])}" data-agent="${name}" data-key="${key}" ${off}></label>` : ''}
         ${name !== 'responder' && d.is_admin ? `<button class="btn-mini" data-run="${name}" ${running ? 'disabled' : ''}>Run now</button>` : ''}
+        ${d.is_admin && (cfg.enabled || running) ? `<button class="btn-mini danger" data-stop="${name}">Stop</button>` : ''}
       </div>
       <div class="agent-last">${st.last_run ? `Last run ${esc(fmtAlertTime(st.last_run))}: ${esc(st.result)}` : name === 'responder' ? (cfg.enabled ? 'Approvals execute' : 'Off: approvals are refused') : 'Not run since the server started'}</div>
     </section>`
@@ -2190,6 +2191,8 @@ function renderAgents() {
   wrap.innerHTML = d.is_admin
     ? `Agents act as <select id="agentsOwner">${d.users.map(u => `<option ${u === d.config.owner ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select>`
     : `Agents act as <b>${esc(d.config.owner)}</b>`
+  const anyOn = Object.keys(AGENT_INFO).some(n => d.config[n].enabled) || d.running.length
+  if (d.is_admin && anyOn) wrap.innerHTML += ' <button class="btn-mini danger" data-stop="all">Stop all agents</button>'
   const pending = d.proposals.filter(p => p.status === 'proposed').length
   agentsGrid.innerHTML = Object.keys(AGENT_INFO).map(n => agentCardHtml(n, d)).join('') + `
     <section class="dash-card wide" aria-label="Containment proposals">
@@ -2248,11 +2251,15 @@ agentsEl.addEventListener('change', async e => {
 agentsEl.addEventListener('click', async e => {
   const b = e.target.closest('button')
   if (!b) return
-  const { run, prop, decision, undo, openConv, openCase } = b.dataset
+  const { run, stop, prop, decision, undo, openConv, openCase } = b.dataset
   try {
     if (openConv) { setSideTab('chats'); loadConversation(openConv); return }
     if (openCase) { setSideTab('cases'); openIncident(openCase); return }
-    if (run) await agentsCall('POST', `/api/agents/${run}/run`)
+    if (stop) {
+      if (!confirm(stop === 'all' ? 'Stop and switch off every agent?' : `Stop and switch off the ${AGENT_INFO[stop][0]} agent?`)) return
+      b.disabled = true
+      await agentsCall('POST', `/api/agents/${stop}/stop`)
+    } else if (run) await agentsCall('POST', `/api/agents/${run}/run`)
     else if (prop) {
       if (decision !== 'reject' && !confirm(decision === 'approve'
         ? 'Isolate this host in LimaCharlie now? It loses network access (except to LimaCharlie) until released.'
