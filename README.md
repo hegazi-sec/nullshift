@@ -111,10 +111,10 @@ Turn one-off chats into tracked cases and hand-off-ready reports.
 
 **Create & manage a case**
 
-1. Open an investigation, then click **+ Case** in the top bar.
+1. Open an investigation, then click **Add to case** in the top bar.
 2. Create a new case or attach the chat to an existing one. Each case gets a sequential number (`INC-0001`, `INC-0002`, …).
 3. Open the **Cases** tab in the sidebar to see every case with a severity dot and status badge.
-4. Click a case to set **severity** (low / medium / high / critical), **status** (open / investigating / closed), a final **verdict**, and free-form **analyst notes** — and to link or unlink multiple conversations. One case can span many chats.
+4. Click a case to set **severity** (low / medium / high / critical), **status** (open / investigating / closed), a final **verdict**, and free-form **analyst notes** — and to link or unlink multiple conversations. One case can span many chats. Changes save automatically.
 
 **Export a report**
 

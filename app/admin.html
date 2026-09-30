@@ -6,7 +6,7 @@
   <title>Settings · NullShift</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <style>
     :root {
       --bg:       #060b14;
@@ -14,15 +14,16 @@
       --bg3:      #0f1928;
       --border:   #1a2740;
       --border2:  #243352;
+      --field-border: #536b8f;  /* 3.25:1 on --bg3: text boxes need a visible edge */
       --text:     #a8bfd8;
       --text2:    #c8dff0;
-      --muted:    #4a6080;
+      --muted:    #6f84a3;  /* 4.9:1 on --bg2, as in the console */
       --accent:   #00b4d8;
       --green:    #22c55e;
       --red:      #ef4444;
       --orange:   #f97316;
       --yellow:   #eab308;
-      --font-ui:  'Chakra Petch', monospace;
+      --font-ui:  'Work Sans', system-ui, sans-serif;
       --font-hd:  'Chakra Petch', monospace;
       --font-mono:'JetBrains Mono', monospace;
       /* One field system: every text box, select and textarea shares these */
@@ -41,8 +42,61 @@
       background: var(--bg);
       color: var(--text2);
       min-height: 100vh;
+      display: flex;
       background-image: radial-gradient(circle, #1a2740 1px, transparent 1px);
       background-size: 28px 28px;
+    }
+
+    /* ── Rail: the console's main navigation, so Settings isn't a different app ── */
+    .rail {
+      position: sticky; top: 0; height: 100vh; width: 88px; min-width: 88px; background: var(--bg);
+      border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; padding: 10px 4px; z-index: 20;
+    }
+    .rail-brand { display: flex; justify-content: center; padding: 4px 0 10px; }
+    .rail-brand svg { width: 22px; height: 22px; }
+    .rail-link {
+      position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px;
+      border-radius: 8px; border: 1px solid transparent; background: none; color: var(--muted); text-decoration: none;
+      font-family: var(--font-hd); font-size: 11px; font-weight: 600; white-space: nowrap; cursor: pointer;
+    }
+    .rail-link svg { width: 20px; height: 20px; }
+    .rail-link > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    .rail-link:hover { color: var(--text2); background: var(--bg3); }
+    .rail-link.current { color: var(--accent); background: rgba(0,180,216,.09); border-color: rgba(0,180,216,.25); }  /* Settings sits behind the account button */
+    .rail-spacer { flex: 1; }
+    .rail-badge {
+      position: absolute; top: 3px; right: 14px; min-width: 16px; padding: 0 4px; border-radius: 8px;
+      background: #dc2626; color: #fff; font-size: 10px; line-height: 16px; text-align: center; font-weight: 700;
+    }
+    .avatar {
+      width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--bg3);
+      border: 1px solid var(--border2); color: var(--text2); font-size: 11px; font-weight: 700; text-transform: uppercase;
+    }
+    .narrow-only { display: none !important; }
+    .pop-menu {
+      margin: 0; padding: 4px; min-width: 200px; background: var(--bg3); color: var(--text2);
+      border: 1px solid var(--border2); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.45);
+    }
+    .pop-menu > a {
+      display: flex; width: 100%; padding: 8px 10px; border-radius: 4px; color: var(--text2); font-size: 13px; text-decoration: none;
+    }
+    .pop-menu > a:hover, .pop-menu > a:focus-visible { background: rgba(0,180,216,.08); outline: none; }
+    .pop-menu > a[aria-current="page"] { color: var(--accent); }
+    .acct-menu { position: fixed; inset: auto auto 12px 96px; }
+    .acct-who { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border2); }
+    .acct-who b { font-size: 13px; }
+    .acct-who span { font-size: 11px; color: var(--muted); }
+    .shell-main { flex: 1; min-width: 0; }
+    @media (max-width: 760px) {
+      body { padding-bottom: 58px; }
+      .rail {
+        position: fixed; top: auto; bottom: 0; left: 0; right: 0; height: 58px; width: 100%; min-width: 0;
+        flex-direction: row; justify-content: space-around; padding: 4px; border-right: none; border-top: 1px solid var(--border); gap: 0;
+      }
+      .rail-brand, .rail-spacer, .wide-only { display: none !important; }
+      .narrow-only { display: flex !important; }
+      .rail-link { flex: 1; min-width: 0; padding: 6px 0; font-size: 10px; overflow: hidden; }
+      .acct-menu { inset: auto 8px 66px auto; }
     }
 
     /* ── Header ─────────────────────────────────── */
@@ -56,36 +110,12 @@
       justify-content: space-between;
       gap: 16px;
     }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-family: var(--font-hd);
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      color: var(--accent);
-    }
-    .brand-dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 8px var(--accent);
-      animation: pulse 2.2s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%,100% { opacity: 1; box-shadow: 0 0 6px var(--accent); }
-      50%      { opacity: .4; box-shadow: 0 0 14px var(--accent); }
-    }
     .page-title {
       font-family: var(--font-hd);
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-left: 4px;
+      letter-spacing: .06em;
+      color: var(--text2);
     }
     .topbar-right { display: flex; gap: 8px; align-items: center; }
     .btn-nav {
@@ -240,12 +270,9 @@
       align-items: center;
       flex-wrap: wrap;
       gap: 4px 6px;
-      font-family: var(--font-hd);
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
-      letter-spacing: .1em;
       line-height: 1.4;
-      text-transform: uppercase;
       color: var(--muted);
       overflow-wrap: anywhere;
     }
@@ -273,17 +300,17 @@
       height: var(--field-h);
       padding: 8px 10px;
       background: var(--bg3);
-      border: 1px solid var(--border2);
+      border: 1px solid var(--field-border);
       border-radius: 6px;
       color: var(--text2);
       font-family: var(--font-mono);
       font-size: 12px;
       line-height: 18px;
-      outline: none;
       transition: border-color .12s;
     }
     textarea { height: auto; min-height: 72px; resize: vertical; }
     input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     input:disabled, select:disabled, textarea:disabled { opacity: .4; cursor: not-allowed; }
     .plain-fieldset:disabled :disabled { opacity: 1; }  /* the fieldset already dims */
     select option { background: var(--bg2); color: var(--text2); }
@@ -321,6 +348,14 @@
     .btn:hover { opacity: .85; }
     .btn:disabled { opacity: .45; cursor: not-allowed; }
     .btn-sm { padding: 4px 10px; font-size: 10px; }
+    dialog.ask {
+      margin: auto; width: min(420px, 92vw); padding: 20px; color: var(--text2);
+      background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px;
+    }
+    dialog.ask::backdrop { background: rgba(3,8,16,.72); }
+    dialog.ask h3 { margin: 0 0 12px; font-size: 14px; }
+    dialog.ask p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text); }
+    dialog.ask .ask-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-danger  { background: var(--red);    color: #fff; }
     .btn-ghost   {
@@ -608,16 +643,70 @@
 </head>
 <body>
 
+<!-- ── Rail: same navigation as the console ───────────────────── -->
+<nav class="rail" aria-label="Main">
+  <a class="rail-brand" href="/#/new" aria-label="NullShift: new investigation">
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <polygon id="bhex" points="19.05,-11 0,-22 -19.05,-11 -19.05,11 0,22 19.05,11"/>
+      </defs>
+      <g fill="#2a3a55">
+        <use href="#bhex" transform="translate(110,115)"/>
+        <use href="#bhex" transform="translate(148,115)"/>
+        <use href="#bhex" transform="translate(129,82)"/>
+        <use href="#bhex" transform="translate(72,115)"/>
+        <use href="#bhex" transform="translate(91,148)"/>
+        <use href="#bhex" transform="translate(129,148)"/>
+      </g>
+      <use href="#bhex" transform="translate(91,82)" fill="none" stroke="#00b4d8" stroke-width="1.5" opacity="0.45"/>
+      <g fill="#00b4d8">
+        <circle cx="86" cy="75" r="2" opacity="0.85"/>
+        <circle cx="81" cy="68" r="2" opacity="0.65"/>
+        <circle cx="76" cy="61" r="2" opacity="0.45"/>
+      </g>
+      <use href="#bhex" transform="translate(67,52)" fill="#00b4d8"/>
+    </svg>
+  </a>
+  <a class="rail-link" href="/#/chat">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 4h14v9H8l-4 3v-3H3z"/></svg>
+    <span>Investigations</span>
+  </a>
+  <a class="rail-link" href="/#/alerts">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 13V9a5 5 0 0 1 10 0v4l1.5 2h-13zM8 17h4"/></svg>
+    <span>Alerts</span>
+    <b class="rail-badge" id="alertCount" hidden></b>
+  </a>
+  <a class="rail-link" href="/#/cases">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 5.5h6l1.5 2h7.5v8.5h-15z"/></svg>
+    <span>Cases</span>
+  </a>
+  <a class="rail-link" href="/#/dashboard">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 3h6v8H3zM11 3h6v5h-6zM11 10h6v7h-6zM3 13h6v4H3z"/></svg>
+    <span>Dashboard</span>
+  </a>
+  <a class="rail-link wide-only" href="/#/agents">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="4" y="6" width="12" height="10" rx="2"/><path d="M10 3v3M7.5 11h.01M12.5 11h.01M8 14h4"/></svg>
+    <span>Agents</span>
+  </a>
+  <div class="rail-spacer"></div>
+  <button type="button" class="rail-link current" popovertarget="acctMenu" aria-label="Account, settings and log out">
+    <span class="avatar wide-only" id="acctInitial" aria-hidden="true"></span>
+    <svg class="narrow-only" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.6"/><circle cx="10" cy="10" r="1.6"/><circle cx="16" cy="10" r="1.6"/></svg>
+    <span class="wide-only" id="acctLabel">Account</span>
+    <span class="narrow-only">More</span>
+  </button>
+</nav>
+<div class="pop-menu acct-menu" id="acctMenu" popover>
+  <div class="acct-who"><b id="acctName">Signed in</b><span id="acctRole"></span></div>
+  <a class="narrow-only" href="/#/agents">Agents</a>
+  <a href="/admin" aria-current="page">Settings</a>
+  <a href="/logout">Log out</a>
+</div>
+
+<div class="shell-main">
 <!-- ── Top bar ────────────────────────────────────────────────── -->
 <div class="topbar">
-  <div style="display:flex;align-items:center;gap:10px;">
-    <div class="brand"><div class="brand-dot"></div>NullShift</div>
-    <span class="page-title">/ Settings</span>
-  </div>
-  <div class="topbar-right">
-    <a class="btn-nav" href="/">Chat</a>
-    <a class="btn-nav" href="/logout">Log out</a>
-  </div>
+  <h1 class="page-title">Settings</h1>
 </div>
 
 <!-- ── Page ───────────────────────────────────────────────────── -->
@@ -626,11 +715,11 @@
   <!-- Tabs -->
   <div class="tabs" role="tablist" aria-label="Settings sections">
     <button type="button" class="tab active" role="tab" id="tab-users" aria-selected="true" aria-controls="pane-users" data-pane="users">Users</button>
-    <button type="button" class="tab" role="tab" id="tab-providers" aria-selected="false" aria-controls="pane-providers" data-pane="providers">LLM Providers</button>
-    <button type="button" class="tab" role="tab" id="tab-connectors" aria-selected="false" aria-controls="pane-connectors" data-pane="connectors">Connectors</button>
-    <button type="button" class="tab" role="tab" id="tab-rag" aria-selected="false" aria-controls="pane-rag" data-pane="rag">RAG</button>
-    <button type="button" class="tab" role="tab" id="tab-vision" aria-selected="false" aria-controls="pane-vision" data-pane="vision">Vision</button>
-    <button type="button" class="tab" role="tab" id="tab-usage" aria-selected="false" aria-controls="pane-usage" data-pane="usage">Usage</button>
+    <button type="button" class="tab" role="tab" id="tab-providers" aria-selected="false" tabindex="-1" aria-controls="pane-providers" data-pane="providers">LLM Providers</button>
+    <button type="button" class="tab" role="tab" id="tab-connectors" aria-selected="false" tabindex="-1" aria-controls="pane-connectors" data-pane="connectors">Connectors</button>
+    <button type="button" class="tab" role="tab" id="tab-rag" aria-selected="false" tabindex="-1" aria-controls="pane-rag" data-pane="rag">RAG</button>
+    <button type="button" class="tab" role="tab" id="tab-vision" aria-selected="false" tabindex="-1" aria-controls="pane-vision" data-pane="vision">Vision</button>
+    <button type="button" class="tab" role="tab" id="tab-usage" aria-selected="false" tabindex="-1" aria-controls="pane-usage" data-pane="usage">Usage</button>
   </div>
 
   <!-- ─ Users ────────────────────────────────────────────────── -->
@@ -1002,6 +1091,18 @@
   </div>
 </div>
 
+</div><!-- /shell-main -->
+
+<!-- Confirmation for consequential actions (see ask()) -->
+<dialog class="ask" id="askDialog" aria-labelledby="askTitle" aria-describedby="askBody">
+  <h3 id="askTitle"></h3>
+  <p id="askBody"></p>
+  <div class="ask-actions">
+    <button type="button" class="btn btn-ghost" id="askNo">Cancel</button>
+    <button type="button" class="btn" id="askYes"></button>
+  </div>
+</dialog>
+
 <script>
   function getCookie(n){ return document.cookie.split('; ').find(r=>r.startsWith(n+'='))?.split('=')[1] }
 
@@ -1036,10 +1137,58 @@
     return opts;
   }
   const STATUS_COLORS = { ok: 'var(--green)', err: 'var(--red)', warn: 'var(--yellow)' };
+  // Sections with edits not saved yet, for the leave-page warning. Typing marks a section;
+  // an ok/warn status from that section's own Save (not a Test) clears it.
+  const _dirty = new Set(), _saving = new Set();
+  const sectionOf = el => el && el.closest('.panel, .provider-card');
+  document.querySelector('.page').addEventListener('input', e => {
+    const sec = sectionOf(e.target);
+    if (sec && !sec.closest('#pane-usage')) _dirty.add(sec);
+  });
+  document.querySelector('.page').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (b && (/^save/.test(b.id) || b.dataset.action === 'save' || b.type === 'submit')) _saving.add(sectionOf(b));
+  }, true);
+
   function setStatus(el, text, kind){
     if (!el) return;
+    const sec = sectionOf(el);
+    if (kind && _saving.has(sec)) {
+      _saving.delete(sec);
+      if (kind === 'ok' || kind === 'warn') _dirty.delete(sec);
+    }
     el.textContent = text;
     el.style.color = STATUS_COLORS[kind] || 'var(--muted)';
+  }
+
+  // ─── Confirmation dialog (same as the console's ask()) ─────────
+  // Resolves true or false. Cancel has focus first; Esc or the backdrop cancel.
+  function ask({ title, body = '', yes, danger = false }) {
+    const d = document.getElementById('askDialog');
+    const yesBtn = document.getElementById('askYes'), noBtn = document.getElementById('askNo');
+    document.getElementById('askTitle').textContent = title;
+    document.getElementById('askBody').textContent = body;
+    yesBtn.textContent = yes;
+    yesBtn.className = 'btn ' + (danger ? 'btn-danger' : 'btn-primary');
+    const back = document.activeElement;
+    return new Promise(resolve => {
+      const done = ok => {
+        d.onclose = d.onclick = null;
+        if (d.open) d.close();
+        if (back && back.isConnected) back.focus({ preventScroll: true });
+        resolve(ok);
+      };
+      yesBtn.onclick = () => done(true);
+      noBtn.onclick = () => done(false);
+      d.onclose = () => done(false);
+      d.onclick = e => {
+        if (e.target !== d) return;
+        const r = d.getBoundingClientRect();
+        if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) done(false);
+      };
+      d.showModal();
+      noBtn.focus();
+    });
   }
 
   // ─── Tabs ────────────────────────────────────────────────────
@@ -1054,14 +1203,15 @@
     rag:        () => loadRagSettings(),
     vision:     () => loadVisionSettings(),
   };
-  document.querySelectorAll('.tab').forEach(t => {
-    t.onclick = () => {
+  function openTab(t){
       const failed = _loaders[t.dataset.pane] && !_loaded.has(t.dataset.pane);  // clicking again retries
       if (t.classList.contains('active') && !failed) return;
-      document.querySelectorAll('.tab').forEach(x => { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
+      document.querySelectorAll('.tab').forEach(x => { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); x.tabIndex = -1; });
       document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
       t.classList.add('active');
       t.setAttribute('aria-selected', 'true');
+      t.tabIndex = 0;
+      history.replaceState(null, '', '#' + t.dataset.pane);  // a reload or a shared link opens this tab
       t.scrollIntoView({ block: 'nearest', inline: 'nearest' });  // the tab bar scrolls on phones
       const pane = t.dataset.pane;
       document.getElementById('pane-' + pane).classList.add('active');
@@ -1070,8 +1220,34 @@
       else if (pane === 'rag') refreshRagStatus();  // status only; the form keeps its edits
       if (pane === 'users') loadUsers();            // read-only table; the create form is untouched
       if (pane === 'usage') loadUsage();            // read-only telemetry
-    };
+  }
+  document.querySelectorAll('.tab').forEach(t => { t.onclick = () => openTab(t); });
+  // Arrow keys, Home and End move between tabs: the ARIA tabs pattern the markup promises.
+  document.querySelector('.tabs').addEventListener('keydown', e => {
+    const tabs = [...document.querySelectorAll('.tab')], i = tabs.indexOf(document.activeElement);
+    const j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+    if (i < 0 || j === undefined) return;
+    e.preventDefault();
+    const t = tabs[(j + tabs.length) % tabs.length];
+    openTab(t);
+    t.focus();
   });
+  const tabFromHash = () => document.getElementById('tab-' + location.hash.slice(1));
+  window.addEventListener('hashchange', () => { if (tabFromHash()) openTab(tabFromHash()); });
+
+  // Who is signed in, and the alert badge, for the rail.
+  api('/api/ping').then(j => {
+    const u = j.user || {};
+    document.getElementById('acctName').textContent = u.username || '';
+    document.getElementById('acctRole').textContent = { admin: 'Admin', l2: 'L2 analyst', l1: 'L1 analyst' }[u.role] || u.role || '';
+    document.getElementById('acctInitial').textContent = (u.username || '').slice(0, 1);
+    document.getElementById('acctLabel').textContent = u.username || 'Account';
+  }).catch(() => {});
+  api('/api/alerts?limit=0').then(j => {
+    const b = document.getElementById('alertCount'), n = j.new_count || 0;
+    b.textContent = n > 99 ? '99+' : String(n);
+    b.hidden = !n;
+  }).catch(() => {});
 
   // ─── Users ───────────────────────────────────────────────────
   async function loadUsers(){
@@ -1107,8 +1283,8 @@
       el.querySelectorAll('button[data-user-action]').forEach(btn => {
         btn.onclick = async () => {
           const act = btn.dataset.userAction, name = btn.dataset.name;
-          if (act === 'disable' &&
-              !confirm(`Disable ${name}? They are signed out at once and cannot log in until re-enabled.`)) return;
+          if (act === 'disable' && !await ask({ title: `Disable ${name}?`, danger: true, yes: `Disable ${name}`,
+              body: 'They are signed out at once and can’t sign in until an admin enables them again.' })) return;
           btn.disabled = true;
           try {
             await api(`/admin/users/${encodeURIComponent(btn.dataset.id)}/${act}`, send('PATCH'));
@@ -1517,7 +1693,8 @@
       btn.onclick = async () => {
         const name  = btn.closest('.provider-card').dataset.provider;
         const label = providerLabel(name);
-        if (!confirm(`Clear the stored ${label} API key? NullShift falls back to the .env value, if there is one.`)) return;
+        if (!await ask({ title: `Clear the stored ${label} API key?`, danger: true, yes: 'Clear key',
+            body: 'NullShift falls back to the key in .env, if there is one; otherwise this provider stops working.' })) return;
         btn.disabled = true;
         try {
           const r = await putSettings({ [btn.dataset.field]: '' });
@@ -1891,7 +2068,7 @@
   // already be pasted into the SIEM, so it must not be dropped silently.
   let _webhookUnsaved = false;
   window.addEventListener('beforeunload', e => {
-    if (_webhookUnsaved) { e.preventDefault(); e.returnValue = ''; }
+    if (_webhookUnsaved || _chainDirty || [..._dirty].some(sec => sec.isConnected)) { e.preventDefault(); e.returnValue = ''; }
   });
 
   function _showSiemFields(provider) {
@@ -2076,6 +2253,7 @@
 
   // ─── Init ────────────────────────────────────────────────────
   loadUsers();
+  if (tabFromHash()) openTab(tabFromHash());
 </script>
 </body>
 </html>

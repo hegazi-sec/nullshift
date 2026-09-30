@@ -1842,14 +1842,17 @@ async def api_ingest_alert(request: Request, source: Optional[str] = None, token
 
 @app.get('/api/alerts')
 def api_list_alerts(status: Optional[str] = None, limit: int = 100, offset: int = 0,
+                    severity: Optional[str] = None, q: Optional[str] = None,
                     current_user: Dict[str, Any] = Depends(get_current_user)):
-    """One page of the inbox, newest first. `total` counts every alert of this
-    status so the UI can page through the backlog; limit=0 fetches counts only."""
+    """One page of the inbox, newest first, filtered by status, severity and a search
+    (`q`: title, source or raw payload). `total` counts every match so the UI can page
+    through the backlog; limit=0 fetches counts only."""
     limit, offset = max(0, min(limit, 500)), max(0, offset)
+    q = (q or "").strip()[:200] or None
     return {
-        "alerts": alerts_inbox.list(status=status, limit=limit, offset=offset),
+        "alerts": alerts_inbox.list(status=status, limit=limit, offset=offset, severity=severity, q=q),
         "new_count": alerts_inbox.count_new(),
-        "total": alerts_inbox.count(status),
+        "total": alerts_inbox.count(status, severity, q),
     }
 
 
@@ -2071,6 +2074,21 @@ def api_dismiss_alert(alert_id: str, current_user: Dict[str, Any] = Depends(get_
     return {"ok": True}
 
 
+@app.post('/api/alerts/{alert_id}/restore')
+def api_restore_alert(alert_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Undo a dismissal. Dismissed by the analyst investigating it, it goes back to that
+    analyst's chat; otherwise it returns to the queue as 'new'."""
+    alert = alerts_inbox.get(alert_id)
+    if not alert or alert["status"] != "dismissed":
+        raise HTTPException(status_code=404, detail="Alert not found or not dismissed")
+    cid = alert.get("conversation_id")
+    own_chat = bool(cid) and alert["claimed_by"] is not None and store.owner_of(cid) == alert["claimed_by"]
+    if not alerts_inbox.restore(alert_id, "investigating" if own_chat else "new",
+                                alert["claimed_by"] if own_chat else None):
+        raise HTTPException(status_code=409, detail="The alert changed meanwhile; reload it")
+    return {"ok": True}
+
+
 # ─── Incident / case tracking ────────────────────────────────────────────────
 
 @app.post('/api/incidents')
@@ -2242,15 +2260,44 @@ def _inflight_claim(conversation_id: str, user_id: int) -> bool:
         return True
 
 
-def _inflight_update(conversation_id: str, **fields: Any) -> None:
-    with _INFLIGHT_LOCK:
-        if conversation_id in _INFLIGHT:
-            _INFLIGHT[conversation_id].update(fields)
+class InvestigationStopped(RuntimeError):
+    """An analyst stopped the run: nothing more is saved for it."""
 
 
-def _inflight_release(conversation_id: str) -> None:
+def _inflight_run(conversation_id: str) -> Dict[str, Any]:
+    """The job's own entry, taken when it starts. Stopped before that: a stopped marker."""
     with _INFLIGHT_LOCK:
-        _INFLIGHT.pop(conversation_id, None)
+        return _INFLIGHT.get(conversation_id) or {"stopped": True}
+
+
+def _inflight_update(conversation_id: str, run: Optional[Dict[str, Any]] = None, **fields: Any) -> None:
+    """A job passes its own entry as `run`: once that run is stopped this raises
+    InvestigationStopped (the job's checkpoint), and it never touches a newer run."""
+    with _INFLIGHT_LOCK:
+        if run is not None and run.get("stopped"):
+            raise InvestigationStopped("Stopped by the analyst")
+        entry = _INFLIGHT.get(conversation_id)
+        if entry is not None and (run is None or entry is run):
+            entry.update(fields)
+
+
+def _inflight_release(conversation_id: str, run: Optional[Dict[str, Any]] = None) -> None:
+    with _INFLIGHT_LOCK:
+        if run is None or _INFLIGHT.get(conversation_id) is run:
+            _INFLIGHT.pop(conversation_id, None)
+
+
+def _inflight_stop(conversation_id: str, user_id: int) -> bool:
+    """Stop this user's run and free the slot at once. The job sees it at its next
+    checkpoint; a model call already underway runs out first and its answer is
+    dropped. False when nothing runs, or the reply is already being saved."""
+    with _INFLIGHT_LOCK:
+        entry = _INFLIGHT.get(conversation_id)
+        if not entry or entry["user_id"] != user_id or entry.get("answering"):
+            return False
+        entry["stopped"] = True
+        del _INFLIGHT[conversation_id]
+        return True
 
 
 def _pending(conversation_id: str, user_id: int) -> Optional[Dict[str, str]]:
@@ -2357,17 +2404,21 @@ def api_post_message(conversation_id: str, payload: MessageCreate, current_user:
     _validate_images(payload)
     csv_markers, csv_blocks = _csv_attachments(payload)
     _begin_turn(conversation_id, payload, current_user, csv_markers)  # 409 while a run is going here
+    run = _inflight_run(conversation_id)
     try:
-        return _post_message_work(conversation_id, payload, current_user, conv, csv_blocks)
+        return _post_message_work(conversation_id, payload, current_user, conv, csv_blocks, run)
+    except InvestigationStopped:
+        raise HTTPException(status_code=409, detail="Investigation stopped")
     except Exception as exc:
-        _record_failure(conversation_id, current_user, exc)
+        if not run.get("stopped"):
+            _record_failure(conversation_id, current_user, exc)
         raise
     finally:
-        _inflight_release(conversation_id)
+        _inflight_release(conversation_id, run)
 
 
 def _post_message_work(conversation_id: str, payload: MessageCreate, current_user: Dict[str, Any],
-                       conv: Dict[str, Any], csv_blocks: str) -> Dict[str, Any]:
+                       conv: Dict[str, Any], csv_blocks: str, run: Dict[str, Any]) -> Dict[str, Any]:
     """The non-streaming endpoint's pipeline, run inside its in-flight slot."""
     # Build history for LLM. Older versions saved image-only messages as empty
     # rows, and Anthropic rejects an empty user turn, so those are skipped.
@@ -2392,7 +2443,7 @@ def _post_message_work(conversation_id: str, payload: MessageCreate, current_use
     # Optional per-request debug trace
     debug = DebugTrace() if getattr(payload, 'debug', False) else None
     # Progressive Evidence Gathering (auto-run, tiered)
-    _inflight_update(conversation_id, stage="Querying SIEM")
+    _inflight_update(conversation_id, run, stage="Querying SIEM")
     evidence = run_investigation(intent, payload.message, time_range, current_user, tool_runner, debug=debug)
     evidence["asked_time_range"] = tw["asked"]
     evidence["policy_note"] = tw.get("note")
@@ -2421,13 +2472,13 @@ def _post_message_work(conversation_id: str, payload: MessageCreate, current_use
     # Retrieve playbook snippets via RAG (no-op if disabled).
     # When the user sends images without text, fall back to a generic SOC query
     # so playbook snippets are still injected into the LLM context.
-    _inflight_update(conversation_id, stage="Retrieving playbooks")
+    _inflight_update(conversation_id, run, stage="Retrieving playbooks")
     rag_text = payload.message or ("security screenshot evidence analysis" if payload.images
                                    else "security log CSV analysis" if csv_blocks else "")
     retrieved = _rag_mod.rag.retrieve(_rag_query(rag_text))
 
     # Call LLM with full history and strict prompt
-    _inflight_update(conversation_id, stage="Waiting for the model")
+    _inflight_update(conversation_id, run, stage="Waiting for the model")
     user_prefs = prefs_store.get_all(current_user["id"])
     reply_md = chat_with_history(
         SYSTEM_PROMPT,
@@ -2445,7 +2496,8 @@ def _post_message_work(conversation_id: str, payload: MessageCreate, current_use
     if mode in _CONVERSATIONAL_MODES:
         reply_md = _strip_investigation_format(reply_md)
 
-    # Persist assistant reply (scoped write)
+    # Persist assistant reply (scoped write); stopped meanwhile: the reply is dropped.
+    _inflight_update(conversation_id, run, answering=True)
     try:
         store.add_message_for_user(current_user["id"], conversation_id, 'assistant', reply_md)
     except PermissionError:
@@ -2485,6 +2537,21 @@ def _post_message_work(conversation_id: str, payload: MessageCreate, current_use
     except Exception:
         pass
     return content
+
+
+@app.post('/api/conversations/{conversation_id}/stop')
+def api_stop_message(conversation_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Stop the investigation running in this conversation. The slot frees at once so
+    the analyst can ask again; a note records the stop. 404 when nothing is running
+    (or its reply is already being saved)."""
+    if not _inflight_stop(conversation_id, current_user["id"]):
+        raise HTTPException(status_code=404, detail="Nothing is running in this conversation")
+    try:
+        store.add_message_for_user(current_user["id"], conversation_id, 'assistant',
+                                   f"⏹ Investigation stopped by {current_user['username']}.")
+    except PermissionError:
+        pass  # deleted meanwhile
+    return {"stopped": True}
 
 
 @app.post('/api/conversations/{conversation_id}/messages/stream')
@@ -2551,6 +2618,8 @@ async def api_stream_message(conversation_id: str, payload: MessageCreate, curre
                     return
                 await asyncio.wait({job}, timeout=1.0)  # unlike wait_for, never cancels what it waits on
             yield sse(type='done', **job.result())
+        except InvestigationStopped:
+            yield sse(type='stopped')
         except HTTPException as exc:
             yield sse(type='error', text=str(exc.detail))
         except Exception as exc:
@@ -2577,6 +2646,7 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
     question and title show before the job starts)."""
     if not turn_started:
         _begin_turn(conversation_id, payload, current_user, csv_markers)
+    run = _inflight_run(conversation_id)
     answered = False
     try:
         mode = _supported_mode(mode or select_response_mode(payload.message or '', None))
@@ -2586,7 +2656,7 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
         tool_runner_local = ToolRunner()
         debug = DebugTrace() if getattr(payload, 'debug', False) else None
 
-        _inflight_update(conversation_id, stage="Querying SIEM")
+        _inflight_update(conversation_id, run, stage="Querying SIEM")
         evidence = run_investigation(intent, payload.message or '', time_range, current_user, tool_runner_local, debug=debug)
 
         msg_iocs = extract_iocs(payload.message or '')
@@ -2606,7 +2676,7 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
         user_prefs_early = prefs_store.get_all(current_user["id"]) if current_user else {}
         temperature = _temperature_for_mode(mode, user_prefs_early)
 
-        _inflight_update(conversation_id, stage="Retrieving playbooks")
+        _inflight_update(conversation_id, run, stage="Retrieving playbooks")
         rag_text = payload.message or ("security screenshot evidence analysis" if getattr(payload, 'images', None)
                                        else "security log CSV analysis" if csv_blocks else "")
         retrieved = _rag_mod.rag.retrieve(_rag_query(rag_text))
@@ -2620,7 +2690,7 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
             user_content = [{"type": "text", "text": user_text}] + [
                 {"type": "image_url", "image_url": {"url": img}} for img in payload.images]
         aug_user = {"role": "user", "content": user_content}
-        _inflight_update(conversation_id, stage="Waiting for the model")
+        _inflight_update(conversation_id, run, stage="Waiting for the model")
         reply_md = orchestrated_llm_reply(aug_user, conversation_id, mode, evidence, current_user, retrieved=retrieved, debug=debug)
         reply_md = _strip_html_from_llm(reply_md)
         # Safety net: chat-style modes must not show SECTION 1/2/3 or verdict
@@ -2631,6 +2701,7 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
         if debug:
             evidence["_debug_trace"] = debug.to_list()
 
+        _inflight_update(conversation_id, run, answering=True)  # stopped meanwhile: the reply is dropped
         try:
             store.add_message_for_user(current_user["id"], conversation_id, 'assistant', reply_md)
         except PermissionError:
@@ -2657,11 +2728,11 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
             result["debug_trace"] = evidence["_debug_trace"]
         return result
     except Exception as exc:
-        if not answered:
+        if not answered and not run.get("stopped"):
             _record_failure(conversation_id, current_user, exc)
         raise
     finally:
-        _inflight_release(conversation_id)
+        _inflight_release(conversation_id, run)
 
 
 # Admin/debug endpoint to execute approved tools via API

@@ -195,41 +195,48 @@ class AlertStore:
             self.conn.commit()
         return {"id": alert_id, **fields, "status": "new", "created_at": now}
 
-    def list(self, status: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    @staticmethod
+    def _filter(status: Optional[str], severity: Optional[str], q: Optional[str]) -> tuple:
+        """WHERE clause for the inbox filters. `q` matches title, source or anywhere in
+        the raw payload (host names, IPs, users), case-insensitively."""
+        # ponytail: LIKE over payload_json scans every row; fine at thousands, FTS5 past that
+        conds, args = [], []
+        if status:
+            conds.append("status=?")
+            args.append(status)
+        if severity:
+            conds.append("severity=?")
+            args.append(severity)
+        if q:
+            like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            conds.append("(title LIKE ? ESCAPE '\\' OR source LIKE ? ESCAPE '\\' OR payload_json LIKE ? ESCAPE '\\')")
+            args += [like] * 3
+        return (" WHERE " + " AND ".join(conds) if conds else ""), args
+
+    def list(self, status: Optional[str] = None, limit: int = 100, offset: int = 0,
+             severity: Optional[str] = None, q: Optional[str] = None) -> List[Dict[str, Any]]:
         """Inbox listing, newest first, one page at a time — payload omitted to
         keep the response small."""
+        where, args = self._filter(status, severity, q)
         with self.lock:
             cur = self.conn.cursor()
-            if status:
-                cur.execute(
-                    """
-                    SELECT id, source, title, severity, status, claimed_by,
-                           conversation_id, created_at
-                    FROM ingested_alerts WHERE status=?
-                    ORDER BY created_at DESC LIMIT ? OFFSET ?
-                    """,
-                    (status, limit, offset),
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT id, source, title, severity, status, claimed_by,
-                           conversation_id, created_at
-                    FROM ingested_alerts
-                    ORDER BY created_at DESC LIMIT ? OFFSET ?
-                    """,
-                    (limit, offset),
-                )
+            cur.execute(
+                f"""
+                SELECT id, source, title, severity, status, claimed_by,
+                       conversation_id, created_at
+                FROM ingested_alerts{where}
+                ORDER BY created_at DESC LIMIT ? OFFSET ?
+                """,
+                (*args, limit, offset),
+            )
             return [dict(r) for r in cur.fetchall()]
 
-    def count(self, status: Optional[str] = None) -> int:
-        """Alerts in the inbox (of one status if given): the total a paged list is out of."""
+    def count(self, status: Optional[str] = None, severity: Optional[str] = None, q: Optional[str] = None) -> int:
+        """Alerts matching the filters: the total a paged list is out of."""
+        where, args = self._filter(status, severity, q)
         with self.lock:
             cur = self.conn.cursor()
-            if status:
-                cur.execute("SELECT COUNT(*) FROM ingested_alerts WHERE status=?", (status,))
-            else:
-                cur.execute("SELECT COUNT(*) FROM ingested_alerts")
+            cur.execute(f"SELECT COUNT(*) FROM ingested_alerts{where}", args)
             return int(cur.fetchone()[0])
 
     def count_new(self) -> int:
@@ -382,6 +389,17 @@ class AlertStore:
                 WHERE id=? AND status IN ('new','investigating')
                 """,
                 (user_id, self._now(), alert_id),
+            )
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def restore(self, alert_id: str, status: str, claimed_by: Optional[int]) -> bool:
+        """Undo a dismissal (api_restore_alert picks 'new' or 'investigating')."""
+        with self.lock:
+            cur = self.conn.cursor()
+            cur.execute(
+                "UPDATE ingested_alerts SET status=?, claimed_by=?, updated_at=? WHERE id=? AND status='dismissed'",
+                (status, claimed_by, self._now(), alert_id),
             )
             self.conn.commit()
             return cur.rowcount > 0
