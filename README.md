@@ -325,7 +325,3 @@ NullShift is released under the [Apache License 2.0](LICENSE).
 ## Author
 
 Built and maintained by **Ahmed Hegazi**.
-
-## Acknowledgments
-
-Developed with AI-assisted engineering by **Claude** ([Claude Code](https://claude.com/claude-code), Anthropic) — feature development, SIEM query-reference knowledge bases, and code review.
