@@ -176,6 +176,95 @@
     }
     .alert-meta b { color: var(--text2); font-weight: 600; }
 
+    /* ── Alert workbench: verdict, decisions and key facts in one place ── */
+    #alertBody.panel { max-width: 1120px; container-type: inline-size; }
+    /* Key facts get the wide column (command lines, paths); the investigation and its decisions sit beside them. */
+    .wb { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: start; }
+    @container (max-width: 760px) {
+      .wb { grid-template-columns: minmax(0, 1fr); }
+      .wb-inv { order: -1; position: static; }  /* stacked: the decision comes first */
+      .wb-head { order: -2; }
+    }
+    .wb-head { grid-column: 1 / -1; }
+    .wb-head h2 { margin: 0; flex: 1; min-width: 0; font-size: 18px; color: var(--text2); overflow-wrap: anywhere; }
+    .wb-factbox, .wb-inv { min-width: 0; }
+    .wb-inv { position: sticky; top: 0; }  /* the decision buttons stay in view while the facts scroll */
+    .wb-factbox h3, .wb-inv h3 { margin: 0 0 12px; font-family: var(--font-hd); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .wb-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; margin: 0; font-size: 13px; }
+    .wb-facts dt { color: var(--muted); }
+    .wb-facts dd { margin: 0; display: flex; align-items: flex-start; gap: 4px; font-family: var(--font-mono); color: var(--text2); overflow-wrap: anywhere; }
+    .wb-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+    .wb-pivot { flex-shrink: 0; padding: 0 3px; background: none; border: none; border-radius: 3px; color: var(--muted); font-size: 12px; cursor: pointer; }
+    .wb-pivot:hover { color: var(--accent); background: rgba(0,180,216,.08); }
+    .wb-raw { margin-top: 14px; }
+    .wb-raw > summary, .wb-other > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); }
+    .wb-muted { margin: 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
+    .wb-src { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+    .wb-src a { color: var(--accent); }
+    .wb-agent { margin: 0 0 10px; font-size: 13px; color: var(--accent); }
+    .wb-running { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; color: var(--yellow); }
+    .wb-closed { margin-bottom: 12px; padding: 8px 12px; border-left: 3px solid var(--muted); border-radius: 0 4px 4px 0; background: var(--bg3); font-size: 13px; color: var(--text2); }
+    .wb-closed p { margin: 4px 0 0; color: var(--muted); white-space: pre-wrap; }
+    .wb-plain { max-height: 420px; overflow-y: auto; font-size: 13px; line-height: 1.6; color: var(--text); }
+    .wb-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .wb-actions .case-badge { font-size: 12px; }
+    .wb-other { flex-basis: 100%; }
+    .wb-other-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; font-size: 13px; }
+    .wb-other-form label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .wb-other-form textarea.fld { max-width: none; min-height: 60px; }
+
+    /* ── Alert queue (#/alerts): dense table, bulk bar, keyboard triage ── */
+    /* The table is its own scroller (both axes) so the header can stick and a phone never scrolls the page sideways. */
+    #alertBody.panel.aq-page { max-width: none; margin: 0; flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+    .aq-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .aq-bar .seg button { flex: 0 0 auto; padding: 5px 10px; }
+    .aq-bar .fld.aq-search { flex: 1 1 160px; max-width: 320px; height: 28px; padding: 4px 10px; }
+    .aq-toggle[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(0,180,216,.08); }
+    .aq-bulk {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; padding: 6px 10px;
+      background: var(--bg3); border: 1px solid var(--accent2); border-radius: 6px; font-size: 12px; color: var(--text2);
+    }
+    .aq-bulk b { font-family: var(--font-mono); font-size: 12px; color: var(--accent); margin-right: 4px; }
+    .aq-wrap { flex: 0 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--bg2); }
+    /* The fixed columns (colgroup) take 908px; min-width keeps ~220px for the title and still fits a 1280px screen. */
+    table.aq { width: 100%; min-width: 1130px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+    table.aq th {
+      position: sticky; top: 0; z-index: 1; background: var(--bg2); text-align: left; padding: 8px;
+      font-family: var(--font-hd); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+      border-bottom: 1px solid var(--border2); white-space: nowrap;
+    }
+    table.aq td { height: 34px; padding: 0 8px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    table.aq tr:last-child td { border-bottom: none; }
+    table.aq tbody tr { cursor: pointer; outline: none; color: var(--text2); }  /* on the row, so .aq-age/.aq-mono/.aq-note cells can mute themselves */
+    table.aq tbody tr:hover td { background: rgba(0,180,216,.05); }
+    table.aq tbody tr[aria-selected="true"] td { background: rgba(0,180,216,.1); }
+    table.aq tbody tr:focus-visible td { box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent); }
+    table.aq tbody tr:focus-visible td:first-child { box-shadow: inset 2px 2px 0 var(--accent), inset 0 -2px 0 var(--accent); }
+    table.aq tr.dim .aq-title { color: var(--muted); }
+    table.aq tr.aq-empty td { height: auto; padding: 24px 12px; text-align: center; white-space: normal; color: var(--muted); cursor: default; }
+    .aq-ck { width: 34px; text-align: center; user-select: none; }
+    .aq-ck input { accent-color: var(--accent); width: 14px; height: 14px; margin: 0; vertical-align: middle; cursor: pointer; }
+    .aq-age, .aq-mono { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+    .aq-age.late { color: var(--orange); font-weight: 600; }
+    .aq-age.late2 { color: var(--red); font-weight: 600; }
+    .aq-note { color: var(--muted); font-size: 12px; }
+    table.aq a { color: var(--accent); text-decoration: none; }
+    table.aq a:hover { text-decoration: underline; }
+    .aq-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 2px 0; font-size: 11px; color: var(--muted); }
+    .aq-foot:empty { display: none; }
+    .aq-reasons { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+    .aq-reasons label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .aq-reasons textarea.fld { max-width: none; min-height: 60px; }
+    .keys-h { margin: 16px 0 8px; font-family: var(--font-hd); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .case-alert-row {
+      display: flex; align-items: center; gap: 8px; padding: 7px 12px; margin-bottom: 6px; background: var(--bg3);
+      border: 1px solid var(--border); border-radius: 5px; font-size: 13px; color: var(--text2); text-decoration: none; min-width: 0; transition: border-color .12s;
+    }
+    .case-alert-row:hover { border-color: var(--accent); }
+    .case-alert-row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .case-alert-row .m { font-family: var(--font-mono); font-size: 11px; color: var(--muted); max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .case-alert-row .case-status { margin-left: 0; }
+
     .sev-dot {
       display: inline-block; width: 8px; height: 8px; border-radius: 50%;
       margin-top: 4px; flex-shrink: 0;
@@ -329,6 +418,28 @@
     .weekdays { display: flex; gap: 4px; flex-wrap: wrap; }
     .weekdays label { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--border2); border-radius: 4px; cursor: pointer; }
     .weekdays label:has(input:checked) { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Shadow scorecard: how often analysts agreed with Triage's shadow calls ── */
+    .sc-summary { margin: 0 0 12px; font-size: 13px; line-height: 1.6; color: var(--text); }
+    .sc-summary b { color: var(--text2); }
+    .sc-range { display: inline-flex; border: 1px solid var(--border2); border-radius: 5px; overflow: hidden; }
+    .sc-range button { padding: 3px 10px; background: transparent; border: none; color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer; }
+    .sc-range button + button { border-left: 1px solid var(--border2); }
+    .sc-range button[aria-pressed="true"] { background: var(--bg3); color: var(--accent); }
+    .sc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .sc-table th { padding: 4px 8px; text-align: left; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border2); }
+    .sc-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text2); font-variant-numeric: tabular-nums; }
+    .sc-bar { display: inline-block; width: 90px; height: 6px; margin-right: 8px; vertical-align: middle; border-radius: 3px; background: var(--bg3); overflow: hidden; }
+    .sc-bar > span { display: block; height: 100%; background: var(--green); }
+    .sc-bad { color: var(--red); font-weight: 600; }
+    .sc-rec { margin-top: 14px; padding: 10px 12px; border-left: 3px solid var(--muted); border-radius: 0 4px 4px 0; background: var(--bg3); font-size: 13px; line-height: 1.6; }
+    .sc-rec.go { border-left-color: var(--green); }
+    .sc-rec .btn-mini { margin-top: 8px; }
+    .sc-dis { margin-top: 14px; }
+    .sc-dis h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+    .sc-dis-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .sc-dis-row a { color: var(--text2); }
+    .sc-dis-row .sc-call { margin-left: auto; color: var(--muted); }
     .agent-ctl { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
     .agent-ctl label { display: inline-flex; align-items: center; gap: 8px; }
     .agent-ctl .fld { width: 96px; }
@@ -765,6 +876,98 @@
     .suspicious .conf-pill { background: rgba(249,115,22,.15); }
     .malicious .conf-pill  { background: rgba(239,68,68,.15); }
     .inconclusive .conf-pill { background: rgba(234,179,8,.15); }
+
+    /* Report card: verdict, summary, next steps and IOC chips above a structured reply.
+       reportCardHtml() also renders it on the alert page, so it only uses the message tokens. */
+    .report-card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 10px 12px;
+      margin: 8px 0 12px;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: var(--rad);
+    }
+    .report-card .verdict-banner { margin: 0; }
+    .report-summary { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text2); }
+    .report-label {
+      font-family: var(--font-hd);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .report-next ol { margin: 0; padding-left: 20px; font-size: 13px; }
+    .report-next li { margin: 2px 0; }
+    .ioc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ioc-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 100%;
+      padding: 2px 3px 2px 8px;
+      border-radius: 12px;
+      background: var(--bg2);
+      border: 1px solid var(--field-border);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text2);
+    }
+    .ioc-chip .ioc-val { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ioc-chip[data-vt="malicious"]  { border-color: rgba(239,68,68,.6); }
+    .ioc-chip[data-vt="suspicious"] { border-color: rgba(249,115,22,.6); }
+    .ioc-chip[data-vt="clean"]      { border-color: rgba(34,197,94,.5); }
+    .vt-badge {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      padding: 1px 5px;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+    .vt-badge.malicious  { background: rgba(239,68,68,.18);  color: #ff7070; }
+    .vt-badge.suspicious { background: rgba(249,115,22,.18); color: var(--orange); }
+    .vt-badge.clean      { background: rgba(34,197,94,.15);  color: var(--green); }
+    .ioc-acts { display: inline-flex; gap: 1px; margin-left: 2px; }
+    .ioc-act {
+      min-width: 22px;
+      min-height: 22px;
+      padding: 2px 4px;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .ioc-act:hover, .ioc-act:focus-visible { color: var(--accent); background: rgba(0,180,216,.12); }
+    .report-checked { font-family: var(--font-mono); font-size: 11px; line-height: 1.5; color: var(--muted); }
+    .report-checked .err { color: var(--orange); }
+
+    /* Folded sections: the section header is the <summary>; 1 and 2 start closed, 3 open */
+    .report-section > summary { list-style: none; cursor: pointer; }
+    .report-section > summary::-webkit-details-marker { display: none; }
+    .report-section > summary:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+    .report-section > summary .section-chev { margin-left: auto; font-size: 10px; transition: transform .15s; }
+    .report-section[open] > summary .section-chev { transform: rotate(180deg); }
+    .report-section > summary .section-copy { margin-left: 0; }
+    .report-section > .report-body {
+      padding: 2px 10px 8px;
+      border: 1px solid var(--border2);
+      border-top: none;
+      border-radius: 0 0 var(--rad) var(--rad);
+    }
+    .report-section.s1 > .report-body { border-color: rgba(0,180,216,.2); }
+    .report-section.s2 > .report-body { border-color: rgba(59,130,246,.25); }
+    .report-section.v-benign > .report-body       { border-color: rgba(34,197,94,.25); }
+    .report-section.v-suspicious > .report-body   { border-color: rgba(249,115,22,.25); }
+    .report-section.v-malicious > .report-body    { border-color: rgba(239,68,68,.25); }
+    .report-section.v-inconclusive > .report-body { border-color: rgba(234,179,8,.25); }
 
     /* Message actions */
     .msg-actions {
@@ -1331,7 +1534,7 @@
     </div>
   </section>
 
-  <section class="view view-scroll" id="view-alerts" hidden aria-label="Alert details"><div class="panel" id="alertBody"></div></section>
+  <section class="view view-scroll" id="view-alerts" hidden aria-label="Alerts"><div class="panel" id="alertBody"></div></section>
   <section class="view view-scroll" id="view-cases" hidden aria-label="Case details"><div class="panel" id="caseBody"></div></section>
   <section class="view view-scroll" id="view-dashboard" hidden aria-label="Dashboard"></section>
   <section class="view view-scroll" id="view-agents" hidden aria-label="Agents"></section>
@@ -1356,6 +1559,15 @@
     <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Move through the list</dd>
     <dt><kbd>Esc</kbd></dt><dd>Close a menu, dialog or the list drawer</dd>
     <dt><kbd>?</kbd></dt><dd>Show these shortcuts</dd>
+  </dl>
+  <h4 class="keys-h">Alert queue</h4>
+  <dl class="keys">
+    <dt><kbd>J</kbd> <kbd>K</kbd></dt><dd>Next / previous alert</dd>
+    <dt><kbd>X</kbd></dt><dd>Select or deselect the alert</dd>
+    <dt><kbd>⇧</kbd> <kbd>A</kbd></dt><dd>Select all shown</dd>
+    <dt><kbd>Enter</kbd></dt><dd>Open the alert</dd>
+    <dt><kbd>E</kbd></dt><dd>Investigate the alert</dd>
+    <dt><kbd>D</kbd></dt><dd>Close as false positive (undo from the toast)</dd>
   </dl>
   <div class="ask-actions"><button class="btn-case" type="button" id="keysClose">Close</button></div>
 </dialog>
@@ -1484,11 +1696,15 @@ const api = {
   linkConvToIncident: (incId, convId) => apiJSON(`/api/incidents/${enc(incId)}/conversations`, { method: 'POST', body: { conversation_id: convId } }),
   unlinkConvFromIncident: (incId, convId) => apiJSON(`/api/incidents/${enc(incId)}/conversations/${enc(convId)}`, { method: 'DELETE' }),
   incidentsForConv: convId => apiJSON(`/api/conversations/${enc(convId)}/incidents`),
-  listAlerts: (status, limit = 100, { severity = '', q = '' } = {}) =>
-    apiJSON(`/api/alerts?limit=${limit}${status ? `&status=${enc(status)}` : ''}${severity ? `&severity=${enc(severity)}` : ''}${q ? `&q=${enc(q)}` : ''}`),
+  listAlerts: (status, limit = 100, { severity = '', q = '', mine = false, sort = '' } = {}) =>
+    apiJSON(`/api/alerts?limit=${limit}${status ? `&status=${enc(status)}` : ''}${severity ? `&severity=${enc(severity)}` : ''}${q ? `&q=${enc(q)}` : ''}${
+      mine ? '&mine=1' : ''}${sort === 'oldest' ? '&sort=oldest' : ''}`),
+  bulkAlerts: body => apiJSON('/api/alerts/bulk', { method: 'POST', body }),  // { ids, action, resolution?, note?, case_id?, new_case? }
+  investigateGroup: ids => apiJSON('/api/alerts/investigate-group', { method: 'POST', body: { ids } }),
   getAlert: id => apiJSON(`/api/alerts/${enc(id)}`),
   investigateAlert: (id, fork = false) => apiJSON(`/api/alerts/${enc(id)}/investigate${fork ? '?fork=1' : ''}`, { method: 'POST' }),
-  dismissAlert: id => apiJSON(`/api/alerts/${enc(id)}/dismiss`, { method: 'POST' }),
+  dismissAlert: (id, resolution) => apiJSON(`/api/alerts/${enc(id)}/dismiss`, { method: 'POST', ...(resolution ? { body: resolution } : {}) }),
+  escalateAlert: (id, conversationId) => apiJSON(`/api/alerts/${enc(id)}/escalate`, { method: 'POST', body: conversationId ? { conversation_id: conversationId } : {} }),
   restoreAlert: id => apiJSON(`/api/alerts/${enc(id)}/restore`, { method: 'POST' }),
   stopRun: id => apiJSON(`/api/conversations/${enc(id)}/stop`, { method: 'POST' }),
   syncAlerts: () => apiJSON('/api/alerts/sync', { method: 'POST' }),
@@ -1496,6 +1712,7 @@ const api = {
   savePrefs: prefs => apiJSON('/api/me/prefs', { method: 'PUT', body: { prefs } }),
   dashboard: hours => apiJSON(`/api/dashboard?hours=${hours}`),
   agents: () => apiJSON('/api/agents'),
+  scorecard: days => apiJSON(`/api/agents/scorecard?days=${days}`),
 }
 
 // ─── Toast + screen-reader announcements ─────────────────────────
@@ -1659,7 +1876,9 @@ function copySectionContent(btn) {
   const header = btn.closest('.section-header')
   if (!header) return
   let text = ''
-  for (let el = header.nextElementSibling; el && !el.classList.contains('section-header'); el = el.nextElementSibling) {
+  const folded = header.closest('.report-section')
+  if (folded) text = folded.querySelector('.report-body')?.textContent || ''
+  else for (let el = header.nextElementSibling; el && !el.classList.contains('section-header'); el = el.nextElementSibling) {
     text += (el.textContent || '') + '\n'
   }
   copyText(text.trim(), btn, '✓')
@@ -1687,6 +1906,257 @@ function extractVerdict(text) {
 function verdictClass(verdict) {
   const vl = String(verdict || '').toLowerCase()
   return vl.includes('benign') ? 'benign' : vl.includes('malicious') ? 'malicious' : vl.includes('suspicious') ? 'suspicious' : 'inconclusive'
+}
+
+// ─── Structured reports ──────────────────────────────────────────
+// Investigation replies come in two shapes: "SECTION 1/2/3 — …" headers, or
+// "## Evidence / ## Assessment / ## Verdict" headings. Both carry the "**Verdict:**"
+// line; conversational replies have neither and are left as plain markdown.
+// parseReport() and reportCardHtml() are shared with the alert page.
+
+// Markdown to plain text, for the summary and next-step lines.
+function mdPlain(s) {
+  return String(s ?? '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/(\*\*|__)(.+?)\1/g, '$2')
+    .replace(/(^|[^*\w])[*_]([^*_\n]+)[*_](?!\w)/g, '$1$2')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, '')
+    .replace(/\s+/g, ' ').trim()
+}
+
+// The first 1–3 prose sentences of a block: headings, lists, tables and "**Label:**" lines don't count.
+function reportSummary(text) {
+  const prose = String(text ?? '').replace(/```[\s\S]*?```/g, '\n').split('\n').map(l => l.trim())
+    .filter(l => l && !/^#{1,6}\s/.test(l) && !/^(?:[-*+]|\d+[.)])\s/.test(l) && !/^\|/.test(l)
+      && !/^(?:-{3,}|\*{3,}|_{3,})$/.test(l) && !/^\*\*[^*\n]{1,40}:?\*\*:?(\s|$)/.test(l) && !/^time window:/i.test(l))
+  const plain = mdPlain(prose.join(' '))
+  if (!plain) return ''
+  const sentences = []
+  const endRe = /[.!?]+(?=\s+[A-Z0-9"'(\[])/g  // sentence ends; "10.0.0.5" and "e.g. x" don't split
+  let start = 0, m
+  while (sentences.length < 3 && (m = endRe.exec(plain))) { sentences.push(plain.slice(start, endRe.lastIndex)); start = endRe.lastIndex }
+  if (sentences.length < 3 && start < plain.length) sentences.push(plain.slice(start))
+  const out = sentences.map(s => s.trim()).join(' ')
+  return out.length > 400 ? out.slice(0, 399).replace(/\s+\S*$/, '') + '…' : out
+}
+
+// Domains: only these endings count, so file names (report.pdf, payload.exe) and dotted
+// SIEM field paths (agent.name, data.win.system.eventID) don't become chips. Endings that
+// are also common field names (id, name, win, group, host, email, to, as, pe) are left out.
+const IOC_TLDS = new Set(('com net org io info biz co us uk de fr nl it es pl se no fi dk be ch at cz ro hu bg ua by kz tr il ir in sa ae eg ' +
+  'za ng ke br ar mx cl ve ca au nz jp kr hk tw sg my th vn ph pk bd lk is ie pt gr lt lv ee sk si hr ba ge am az uz ru cn su eu asia ' +
+  'me tv cc ws tk ml ga cf gq pw vip work buzz icu cyou click cloud tech store space fun pro mobi gov edu mil int ai gg ly lol one pics ' +
+  'quest rest bid date download loan men party racing review science stream trade monster sbs bond cfd wiki life live club shop site ' +
+  'online top xyz world today digital systems solutions agency company center media news blog page run app dev link').split(' '))
+const IOC_FIELD_PREFIXES = new Set(('agent rule data event process file user source destination src dst dest sensor routing detect syscheck ' +
+  'eventdata decoder predecoder manager cluster input timestamp mitre osquery sca vulnerability package flow geoip threat observer related ' +
+  'winlog ecs fields parent target signature image registry').split(' '))
+const IOC_NOISE = ['example.com', 'example.org', 'example.net', 'virustotal.com', 'mitre.org', 'nist.gov', 'cve.org', 'wazuh.com',
+  'limacharlie.io', 'suricata.io', 'pfsense.org', 'github.com', 'learn.microsoft.com', 'docs.microsoft.com', 'schema.org', 'w3.org']
+
+// IOCs in order of appearance: IPv4, domains, MD5/SHA1/SHA256 and URLs, deduped, at most 12.
+function extractIocs(text) {
+  // Refang first so "hxxp://evil[.]com" is found as one IOC.
+  const t = String(text ?? '').replace(/\[\.\]|\(\.\)|\{\.\}/g, '.').replace(/hxxp(s?):\/\//gi, 'http$1://')
+  const found = new Map()
+  const add = (value, type, at) => { if (!found.has(value)) found.set(value, { value, type, at }) }
+  let m
+  const urlRe = /\bhttps?:\/\/[^\s<>"'`]+/gi
+  while ((m = urlRe.exec(t))) { const u = m[0].replace(/[.,;:!?)\]}>]+$/, ''); if (u.length > 10) add(u, 'url', m.index) }
+  // A leading group stands in for a lookbehind (which older Safari can't parse).
+  const hashRe = /(^|[^a-z0-9])((?:[a-f0-9]{64}|[a-f0-9]{40}|[a-f0-9]{32}))(?![a-z0-9])/gi
+  while ((m = hashRe.exec(t))) add(m[2].toLowerCase(), 'hash', m.index + m[1].length)
+  const ipRe = /(^|[^\w.-])(\d{1,3}(?:\.\d{1,3}){3})(?![\w-]|\.\d)/g
+  while ((m = ipRe.exec(t))) {
+    const ip = m[2], at = m.index + m[1].length, oct = ip.split('.').map(Number)
+    if (oct.some(o => o > 255) || ip === '0.0.0.0' || oct[0] === 127) continue
+    if (/(?:\bv|\bver(?:sion)?\.?)\s*$/i.test(t.slice(Math.max(0, at - 12), at))) continue  // "v1.2.3.4"
+    add(ip, 'ip', at)
+  }
+  const domRe = /(^|[^\w.-])((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24})(?![\w-])/gi
+  while ((m = domRe.exec(t))) {
+    const d = m[2].toLowerCase(), labels = d.split('.')
+    if (!IOC_TLDS.has(labels[labels.length - 1]) || IOC_FIELD_PREFIXES.has(labels[0])) continue
+    if (IOC_NOISE.some(n => d === n || d.endsWith('.' + n))) continue
+    add(d, 'domain', m.index + m[1].length)
+  }
+  return [...found.values()].sort((a, b) => a.at - b.at).slice(0, 12).map(({ value, type }) => ({ value, type }))
+}
+
+function parseReport(markdown) {
+  const src = String(markdown ?? '').replace(/\r\n?/g, '\n')
+  const vd = extractVerdict(src)
+  const sections = { 1: '', 2: '', 3: '' }
+  const marks = [...src.matchAll(/^SECTION\s*([123])\s*[—–-]+.*$/gm)]
+  let opening = ''
+  if (marks.length) {
+    marks.forEach((mk, i) => {
+      const n = +mk[1], end = i + 1 < marks.length ? marks[i + 1].index : undefined
+      sections[n] = (sections[n] ? sections[n] + '\n' : '') + src.slice(mk.index + mk[0].length, end).trim()
+    })
+    // The 1–3 line direct answer sits before SECTION 1; fall back to the section itself.
+    opening = reportSummary(src.slice(0, marks[0].index)) ? src.slice(0, marks[0].index) : sections[1]
+  } else {
+    // "## Evidence / ## Verdict" shape: 1 = everything up to the verdict, 2 = a next-steps heading if any
+    const heads = [...src.matchAll(/^#{1,3}\s+(.+)$/gm)]
+    const block = h => { if (!h) return ''; const next = heads[heads.indexOf(h) + 1]; return src.slice(h.index + h[0].length, next?.index).trim() }
+    const v = heads.find(h => /verdict/i.test(h[1])), nx = heads.find(h => /next step|recommend|action/i.test(h[1]))
+    sections[1] = src.slice(0, v?.index).trim()
+    sections[2] = block(nx)
+    sections[3] = block(v)
+    opening = heads.length ? src.slice(0, heads[0].index) : src
+  }
+  const recommended = sections[2].split('\n')
+    .map(l => l.match(/^\s*(?:[-*+]|\d+[.)])\s+(.+)$/)).filter(Boolean).map(m => mdPlain(m[1])).filter(Boolean).slice(0, 5)
+  return {
+    structured: !!(marks.length || vd),
+    verdict: vd ? vd.verdict : null,
+    confidence: vd ? vd.conf : null,
+    verdictClass: vd ? vd.cls : null,
+    summary: reportSummary(opening),
+    recommended,
+    iocs: extractIocs(src),
+    sections,
+  }
+}
+
+function iocChipHtml({ value, type }) {
+  const v = esc(value)
+  return `<span class="ioc-chip" data-ioc="${v}" data-ioc-type="${esc(type)}"><span class="ioc-val" title="${v}">${v}</span>` +
+    `<span class="ioc-acts">` +
+    `<button type="button" class="ioc-act" data-ioc-act="search" title="Search alerts" aria-label="Search alerts for ${v}">⌕</button>` +
+    `<button type="button" class="ioc-act" data-ioc-act="investigate" title="Investigate" aria-label="Investigate ${v}">⇢</button>` +
+    `<button type="button" class="ioc-act" data-ioc-act="copy" title="Copy" aria-label="Copy ${v}">⎘</button>` +
+    `</span></span>`
+}
+
+// "Checked: 3 sources (limacharlie, wazuh) · last 24h · 7 queries, 142 results · …" from a reply's meta.
+function checkedLineHtml(meta) {
+  if (!meta || typeof meta !== 'object') return ''
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`
+  const bits = []
+  const sources = Array.isArray(meta.sources) ? meta.sources.map(String) : []
+  if (sources.length) bits.push(`${plural(sources.length, 'source')} (${sources.join(', ')})`)
+  if (meta.time_window) bits.push(String(meta.time_window))
+  if (Number.isFinite(meta.queries)) {
+    if (!sources.length && meta.queries === 0) bits.push('no sources queried')
+    else bits.push(`${meta.queries} ${meta.queries === 1 ? 'query' : 'queries'}, ${plural(Number.isFinite(meta.results) ? meta.results : 0, 'result')}`)
+  }
+  if (meta.vt_checked > 0) bits.push(`${plural(meta.vt_checked, 'IOC')} on VirusTotal`)
+  if (meta.playbooks > 0) bits.push(plural(meta.playbooks, 'playbook'))
+  const errors = Array.isArray(meta.errors) ? meta.errors.filter(Boolean).map(String) : []
+  if (!bits.length && !errors.length) return ''
+  let html = bits.map(esc).join(' · ')
+  if (errors.length) {
+    const first = errors[0].length > 90 ? errors[0].slice(0, 89) + '…' : errors[0]
+    html += `${html ? ' · ' : ''}<span class="err" title="${esc(errors.join('\n'))}">${plural(errors.length, 'error')}: ${esc(first)}</span>`
+  }
+  return `<div class="report-checked">Checked: ${html}</div>`
+}
+
+// The card above a structured reply ('' for a conversational one). compact drops the next-steps
+// list (the alert page's side panel). Call decorateIocChips(container) after inserting it for the VirusTotal badges.
+function reportCardHtml(parsed, meta, { compact = false } = {}) {
+  const p = parsed || {}
+  if (!p.structured) return ''
+  const cls = p.verdictClass || 'inconclusive'
+  const icon = { benign: '✓', malicious: '✕', suspicious: '⚠', inconclusive: '?' }[cls]
+  const parts = []
+  if (p.verdict) {
+    parts.push(`<div class="verdict-banner ${cls}"><span class="verdict-icon" aria-hidden="true">${icon}</span>` +
+      `<span>Verdict: ${esc(p.verdict)}</span>${p.confidence ? `<span class="conf-pill">${esc(p.confidence)} confidence</span>` : ''}</div>`)
+  }
+  if (p.summary) parts.push(`<p class="report-summary">${esc(p.summary)}</p>`)
+  if (!compact && p.recommended?.length) {
+    parts.push(`<div class="report-next"><div class="report-label">Next steps</div><ol>${p.recommended.map(r => `<li>${esc(r)}</li>`).join('')}</ol></div>`)
+  }
+  if (p.iocs?.length) parts.push(`<div class="report-iocs"><div class="report-label">IOCs</div><div class="ioc-chips">${p.iocs.map(iocChipHtml).join('')}</div></div>`)
+  parts.push(checkedLineHtml(meta))
+  if (!parts.some(Boolean)) return ''
+  return `<div class="report-card v-${cls}">${parts.join('')}</div>`
+}
+
+// VirusTotal badges on IOC chips, from the server's cache only. Chips rendered in the same
+// tick share one request; results are kept for the session. Never blocks a reply.
+const iocVerdicts = new Map()   // ioc -> cache entry | null (unknown)
+let iocPending = new Map()      // ioc -> [chip, …] waiting on the next batch
+let iocTimer = null
+
+function paintIocChip(chip, info) {
+  chip.querySelector('.vt-badge')?.remove()
+  const v = info?.verdict
+  if (!['malicious', 'suspicious', 'clean'].includes(v)) { delete chip.dataset.vt; return }
+  chip.dataset.vt = v
+  const votes = info.malicious_votes, total = info.total_engines
+  const counts = Number.isFinite(votes) && Number.isFinite(total)
+  const badge = Object.assign(document.createElement('span'), { className: `vt-badge ${v}`, textContent: counts ? `VT ${votes}/${total}` : `VT ${v}` })
+  badge.title = `VirusTotal: ${v}` + (counts ? ` (${votes} of ${total} engines)` : '')
+  badge.setAttribute('aria-label', badge.title)
+  ;(chip.querySelector('.ioc-val') || chip).after(badge)
+}
+
+function decorateIocChips(root) {
+  root.querySelectorAll('.ioc-chip[data-ioc]').forEach(chip => {
+    const v = chip.dataset.ioc
+    if (iocVerdicts.has(v)) { paintIocChip(chip, iocVerdicts.get(v)); return }
+    if (!iocPending.has(v)) iocPending.set(v, [])
+    iocPending.get(v).push(chip)
+  })
+  if (iocPending.size && !iocTimer) iocTimer = setTimeout(flushIocLookups, 0)
+}
+
+async function flushIocLookups() {
+  iocTimer = null
+  const batch = iocPending
+  iocPending = new Map()
+  const values = [...batch.keys()]
+  for (let i = 0; i < values.length; i += 20) {  // the endpoint takes 20 values per call
+    const part = values.slice(i, i + 20)
+    let res
+    try { res = await apiJSON('/api/iocs?' + part.map(v => 'v=' + enc(v)).join('&')) } catch { continue }
+    part.forEach(v => {
+      const info = res?.iocs?.[v] ?? null
+      iocVerdicts.set(v, info)
+      batch.get(v).forEach(chip => paintIocChip(chip, info))
+    })
+  }
+}
+
+// Wrap each SECTION header and what follows it in <details>: the header becomes the
+// <summary>, so its styling, copy button and verdict colour carry over. Only SECTION 3 starts open.
+function foldSections(body) {
+  body.querySelectorAll('.section-header').forEach(h => {
+    const n = h.dataset.section || ''
+    const det = document.createElement('details')
+    det.className = `report-section s${n}`
+    det.open = n === '3'
+    const sum = document.createElement('summary')
+    sum.className = h.className
+    sum.dataset.section = n
+    sum.append(...h.childNodes)
+    const copy = sum.querySelector('.section-copy')
+    const chev = Object.assign(document.createElement('span'), { className: 'section-chev', textContent: '▾' })
+    chev.setAttribute('aria-hidden', 'true')
+    if (copy) copy.before(chev); else sum.appendChild(chev)
+    const content = Object.assign(document.createElement('div'), { className: 'report-body' })
+    h.replaceWith(det)
+    let el = det.nextSibling
+    while (el && !(el.nodeType === 1 && el.matches('.section-header, .report-section'))) { const next = el.nextSibling; content.appendChild(el); el = next }
+    det.append(sum, content)
+  })
+}
+
+// The card's summary already shows the opening answer: drop it from the body when it is the same text.
+function dropEchoedOpening(body, summary) {
+  if (!summary) return
+  const lead = []
+  for (let el = body.firstChild; el && !(el.nodeType === 1 && el.matches('.report-section, .section-header, h1, h2, h3')); el = el.nextSibling) lead.push(el)
+  const text = lead.map(n => n.textContent).join(' ').replace(/\s+/g, ' ').trim()
+  if (text && text === summary) lead.forEach(n => n.remove())
 }
 
 // ─── DOM refs ────────────────────────────────────────────────────
@@ -1733,7 +2203,8 @@ function showNewReply() { $('newReplyBtn').hidden = false }
 $('newReplyBtn').onclick = () => { chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' }); $('newReplyBtn').hidden = true; inputEl.focus({ preventScroll: true }) }
 chatArea.addEventListener('scroll', () => { if (nearBottom()) $('newReplyBtn').hidden = true }, { passive: true })
 
-function buildMessage(role, content, { debugTrace = null, timestamp = null, images = [] } = {}) {
+// meta: the investigation summary stored with the reply ({ time_window, sources, queries, … }), if any.
+function buildMessage(role, content, { debugTrace = null, timestamp = null, images = [], meta: reportMeta = null } = {}) {
   const wrap = document.createElement('div')
   wrap.className = `msg-wrap ${role}`
 
@@ -1766,18 +2237,20 @@ function buildMessage(role, content, { debugTrace = null, timestamp = null, imag
     }
     bubble.appendChild(document.createTextNode(content))
   } else {
-    const vd = extractVerdict(content)
-    if (vd) {
-      const banner = document.createElement('div')
-      banner.className = `verdict-banner ${vd.cls}`
-      banner.innerHTML = `<span class="verdict-icon" aria-hidden="true">${vd.icon}</span>
-        <span>Verdict: ${esc(vd.verdict)}</span>
-        ${vd.conf ? `<span class="conf-pill">${esc(vd.conf)} confidence</span>` : ''}`
-      bubble.appendChild(banner)
-    }
+    const rep = parseReport(content)
     const body = document.createElement('div')
     body.innerHTML = renderMarkdown(content)
-    if (vd) body.querySelectorAll('.section-header.s3').forEach(h => h.classList.add(`v-${vd.cls}`))
+    if (rep.structured) {
+      // The card carries the verdict banner; the full sections fold underneath it.
+      bubble.insertAdjacentHTML('beforeend', reportCardHtml(rep, reportMeta))
+      foldSections(body)
+      dropEchoedOpening(body, rep.summary)
+      decorateIocChips(bubble)
+    }
+    if (rep.verdictClass) body.querySelectorAll('.section-header.s3').forEach(h => {
+      h.classList.add(`v-${rep.verdictClass}`)
+      h.closest('.report-section')?.classList.add(`v-${rep.verdictClass}`)
+    })
     bubble.appendChild(body)
   }
   wrap.append(meta, bubble)
@@ -1826,7 +2299,7 @@ function renderTranscript(s, data) {
   const msgs = data.messages || []
   const follow = !s.loaded || nearBottom(), grew = msgs.length > s.count
   const frag = document.createDocumentFragment()
-  msgs.forEach(m => frag.appendChild(buildMessage(m.role, m.content, { timestamp: m.created_at })))
+  msgs.forEach(m => frag.appendChild(buildMessage(m.role, m.content, { timestamp: m.created_at, meta: m.meta || null })))
   if (s.inflight && s.indicator) frag.appendChild(s.indicator)
   s.el.replaceChildren(frag)
   s.loaded = true
@@ -2039,10 +2512,10 @@ async function failOrFollow(s, text) {
   finishReply(s, '⚠ ' + text, null, true)
 }
 
-function finishReply(s, text, trace, failed = false) {
+function finishReply(s, text, trace, failed = false, meta = null) {
   clearInflight(s)
   if (s.deleted) return
-  if (text) { appendMessage(s, 'assistant', text, { debugTrace: trace }); s.count++ }
+  if (text) { appendMessage(s, 'assistant', text, { debugTrace: trace, meta }); s.count++ }
   if (isVisible(s)) announce(failed ? 'The investigation failed' : 'Reply received')
   else markUnread(s, failed)
   refreshList('chat')
@@ -2330,7 +2803,7 @@ async function sendInConv(convId, text, images = [], files = [], restoreKey = nu
       let ev
       try { ev = JSON.parse(line.slice(6)) } catch { return }
       if (ev.type === 'status') { if (s.inflight) { s.inflight.stage = ev.text; updateIndicator(s) } }
-      else if (ev.type === 'done') { terminal = true; finishReply(s, ev.reply, ev.debug_trace) }
+      else if (ev.type === 'done') { terminal = true; finishReply(s, ev.reply, ev.debug_trace, false, ev.meta || null) }
       else if (ev.type === 'error') { terminal = true; failOrFollow(s, ev.text) }
       else if (ev.type === 'stopped') { terminal = true; if (s.inflight?.ctl === ctl) { clearInflight(s); reloadTranscript(s) } }  // stopped elsewhere
     }
@@ -2374,6 +2847,29 @@ welcomeEl.addEventListener('click', e => {
 chatLog.addEventListener('click', e => {
   const b = e.target.closest('.section-copy')
   if (b) copySectionContent(b)
+})
+// IOC chip actions, document-level so the alert page's card gets them too.
+document.addEventListener('click', e => {
+  const act = e.target.closest('[data-ioc-act]')
+  if (!act) {
+    if (e.target.closest('summary .section-copy')) e.preventDefault()  // copy the section, don't fold it
+    return
+  }
+  const value = act.closest('.ioc-chip')?.dataset.ioc || ''
+  if (!value) return
+  const kind = act.dataset.iocAct
+  if (kind === 'search') openAlerts({ q: value })
+  else if (kind === 'copy') copyText(value, act, '✓')
+  else if (kind === 'investigate') {
+    navigate('#/new')
+    setTimeout(() => {  // after the route has loaded the new-chat draft
+      const lead = `Investigate ${value}: `
+      inputEl.value = lead + (inputEl.value.trim() ? '\n' + inputEl.value : '')
+      inputEl.setSelectionRange(lead.length, lead.length)
+      autoGrow()
+      inputEl.focus()
+    }, 0)
+  }
 })
 
 function openLightbox(src, alt) {
@@ -2431,7 +2927,7 @@ const listQuery = { chat: '', alerts: '', cases: '' }
 const listSeq = { chat: 0, alerts: 0, cases: 0 }
 const listSig = { chat: null, alerts: null, cases: null }
 const listLoaded = { chat: false, alerts: false, cases: false }
-const alertsMeta = { limit: 100, total: null, note: '', status: 'new', severity: '' }  // the server filters and searches alerts
+const alertsMeta = { limit: 100, total: null, note: '', status: 'new', severity: '', mine: false, sort: 'newest' }  // the server filters and searches alerts
 let listSection = 'chat'
 const listSearch = $('listSearch')
 
@@ -2475,7 +2971,7 @@ async function refreshList(sec = listSection) {
     else if (sec === 'cases') items = (await api.listIncidents()).incidents || []
     else {
       const d = await api.listAlerts(alertsMeta.status, alertsMeta.limit,
-        { severity: alertsMeta.severity, q: listQuery.alerts.trim() })
+        { severity: alertsMeta.severity, q: listQuery.alerts.trim(), mine: alertsMeta.mine, sort: alertsMeta.sort })
       items = d.alerts || []
       alertsMeta.total = d.total ?? null
       updateAlertBadge(d.new_count || 0)
@@ -2572,12 +3068,13 @@ function renderList() {
     ;(focusMore ? row?.querySelector('.more-btn') : row?.querySelector('.row-main'))?.focus({ preventScroll: true })
   }
   renderListFoot()
+  if (sec === 'alerts') renderQueueRows()  // the queue table at #/alerts shows the same data
 }
 
 function emptyText(sec, q) {
   if (!listLoaded[sec]) return 'Loading…'
   if (sec !== 'alerts') return q ? 'No matches' : LISTS[sec].empty
-  if (q || alertsMeta.severity) return 'No matches'
+  if (q || alertsMeta.severity || alertsMeta.mine) return 'No matches'
   if (alertsMeta.status === 'new') return 'No new alerts right now.'
   if (alertsMeta.status) return 'No alerts being investigated.'
   return conn.role === 'admin'
@@ -2604,6 +3101,7 @@ function refilterAlerts() {
   alertsMeta.limit = 100
   listSig.alerts = null
   listLoaded.alerts = false  // show Loading… rather than the old matches
+  queueClearSelection()  // a different query is a different working set
   renderList()
   refreshList('alerts')
 }
@@ -2616,6 +3114,7 @@ listSearch.addEventListener('input', () => {
 function syncAlertFilters() {
   $('alertFilters').querySelectorAll('[data-status]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.status === alertsMeta.status)))
   $('alertFilters').querySelectorAll('[data-sev]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.sev === alertsMeta.severity)))
+  syncQueueToolbar()  // the queue table's toolbar mirrors the same state
 }
 $('alertFilters').addEventListener('click', e => {
   const b = e.target.closest('button')
@@ -2627,7 +3126,7 @@ $('alertFilters').addEventListener('click', e => {
 })
 // Open the Alerts list with these filters (a dashboard drill-down).
 function openAlerts({ status = '', severity = '', q = '' }) {
-  Object.assign(alertsMeta, { status, severity })
+  Object.assign(alertsMeta, { status, severity, mine: false })
   listQuery.alerts = q
   if (listSection === 'alerts') listSearch.value = q
   syncAlertFilters()
@@ -2657,6 +3156,7 @@ $('alertSyncBtn').onclick = async () => {
     btn.textContent = 'Pull missed'
   }
   renderListFoot()
+  renderQueueRows()  // the note shows even when the pull changed nothing
   refreshList('alerts')
 }
 
@@ -2824,17 +3324,476 @@ async function enterChat(id) {
   }
 }
 
+// ─── Alert queue (#/alerts) ──────────────────────────────────────
+// A full-width table of the same alerts the list pane shows, bound to the same filters
+// (alertsMeta, listQuery.alerts), for working the backlog at volume: select, then close,
+// dismiss, add to a case or investigate together in one go; j/k/x/e/d from the keyboard.
+// Only <tbody> is rebuilt on a live refresh, so toolbar and bulk-bar focus is never lost.
+const SLA_MIN = { critical: 15, high: 60, medium: 240, low: 1440 }  // minutes a new alert may wait before it shows as late
+const SEV_RANK = ['low', 'medium', 'high', 'critical']
+const aqBody = $('alertBody')
+const aqSel = new Set()   // selected alert ids
+let aqCur = null          // the row that holds the roving tabindex
+let aqAnchor = null       // last checkbox clicked without shift: the start of a shift-click range
+let aqSig = null
+let aqSearchTimer = null
+
+function fmtAge(t) {
+  const m = Math.floor((Date.now() - new Date(t).getTime()) / 60000)
+  if (isNaN(m)) return ''
+  return m < 1 ? '<1m' : m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`
+}
+// '' | 'late' | 'late2': an unhandled alert past its severity's target, or past twice it.
+function ageClass(a) {
+  const target = a.status === 'new' ? SLA_MIN[a.severity] : null
+  const m = (Date.now() - new Date(a.created_at).getTime()) / 60000
+  return !target || !(m > target) ? '' : m > 2 * target ? 'late2' : 'late'
+}
+function queueShown() { return route.view === 'alerts' && !route.id && !!$('aqRows') }
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+function renderQueue() {
+  aqBody.classList.add('aq-page')
+  if (!$('aqRows')) {
+    aqBody.innerHTML = `
+      <div class="aq-bar" id="aqBar">
+        <div class="seg" role="group" aria-label="Alert status" id="aqStatus">
+          <button type="button" data-status="new">New</button>
+          <button type="button" data-status="investigating">Investigating</button>
+          <button type="button" data-status="">All</button>
+        </div>
+        <div class="sev-chips" role="group" aria-label="Severity" id="aqSevs">
+          ${['critical', 'high', 'medium', 'low'].map(s => `<button type="button" class="tag tag-${s}" data-sev="${s}" aria-pressed="false">${s}</button>`).join('')}
+        </div>
+        <label class="sr-only" for="aqSearch">Search alerts</label>
+        <input type="search" class="fld aq-search" id="aqSearch" placeholder="Search alerts, hosts, IPs…" autocomplete="off"/>
+        <button type="button" class="btn-mini aq-toggle" id="aqMine" aria-pressed="false" title="Only alerts claimed by me">Mine</button>
+        <div class="seg" role="group" aria-label="Sort" id="aqSortSeg">
+          <button type="button" data-sort="newest">Newest</button>
+          <button type="button" data-sort="oldest">Oldest</button>
+        </div>
+        <button type="button" class="btn-mini" id="aqSync" title="Pull alerts the SIEM webhook missed (last 24h)">Pull missed</button>
+      </div>
+      <div class="aq-bulk" id="aqBulk" hidden role="region" aria-label="Selected alerts">
+        <b id="aqCount">0 selected</b>
+        <button type="button" class="btn-mini" data-bulk="fp">Close as false positive</button>
+        <button type="button" class="btn-mini" data-bulk="dismiss">Dismiss…</button>
+        <button type="button" class="btn-mini" data-bulk="case">Add to case…</button>
+        <button type="button" class="btn-mini" data-bulk="group" title="One investigation of all the selected alerts (2 to 25)">Investigate together</button>
+        <button type="button" class="btn-mini" data-bulk="clear">Clear</button>
+      </div>
+      <div class="aq-wrap" id="aqWrap">
+        <table class="aq" id="aqTable" role="grid" aria-multiselectable="true" aria-label="Alert queue">
+          <colgroup><col style="width:34px"><col style="width:84px"><col style="width:56px"><col><col style="width:140px"><col style="width:96px">
+            <col style="width:118px"><col style="width:100px"><col style="width:180px"><col style="width:100px"></colgroup>
+          <thead><tr>
+            <th class="aq-ck"><input type="checkbox" id="aqAll" aria-label="Select all shown alerts"/></th>
+            <th>Sev</th><th>Age</th><th>Title</th><th>Host</th><th>Source</th><th>Status</th><th>Owner</th><th>Agent</th><th>Case</th>
+          </tr></thead>
+          <tbody id="aqRows"></tbody>
+        </table>
+      </div>
+      <div class="aq-foot" id="aqFoot"></div>`
+  }
+  aqSig = null  // the data may have moved while another view was open
+  syncQueueToolbar()
+  renderQueueRows()
+}
+
+function syncQueueToolbar() {
+  const bar = $('aqBar')
+  if (!bar) return
+  bar.querySelectorAll('[data-status]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.status === alertsMeta.status)))
+  bar.querySelectorAll('[data-sev]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.sev === alertsMeta.severity)))
+  bar.querySelectorAll('[data-sort]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.sort === alertsMeta.sort)))
+  $('aqMine').setAttribute('aria-pressed', String(alertsMeta.mine))
+  const s = $('aqSearch')
+  if (document.activeElement !== s && s.value !== listQuery.alerts) s.value = listQuery.alerts
+}
+
+function queueRowHtml(a) {
+  const id = String(a.id), sel = aqSel.has(id)
+  const owner = a.status !== 'new' && a.claimed_by_username ? a.claimed_by_username : ''
+  // Another analyst's case: the server leaves out its id and number, so name whose it is, without a link.
+  const theirCase = !a.case_number && a.case_owner_username ? `In ${a.case_owner_username}’s case` : ''
+  return `<tr data-alert="${esc(id)}" tabindex="${id === aqCur ? 0 : -1}" aria-selected="${sel}"${a.status === 'dismissed' ? ' class="dim"' : ''}>
+    <td class="aq-ck"><input type="checkbox" id="aqSel-${esc(id)}" data-sel="${esc(id)}"${sel ? ' checked' : ''} aria-label="Select ${esc(a.title || 'alert')}"/></td>
+    <td>${sevTag(a.severity)}</td>
+    <td class="aq-age ${ageClass(a)}" title="${esc(fmtTime(a.created_at))}">${esc(fmtAge(a.created_at))}</td>
+    <td class="aq-title" title="${esc(a.title || '')}">${esc(a.title || 'Untitled alert')}</td>
+    <td class="aq-mono" title="${esc(a.host || '')}">${esc(a.host || '')}</td>
+    <td class="aq-mono">${esc(a.source || '')}</td>
+    <td>${alertStatusBadgeHtml(a.status)}</td>
+    <td class="aq-mono" title="${esc(owner)}">${esc(owner)}</td>
+    <td class="aq-note" title="${esc(a.agent_note || '')}">${esc(a.agent_note || '')}</td>
+    <td${theirCase ? ` class="aq-note" title="${esc(theirCase)}"` : ''}>${a.case_number ? `<a href="#/cases/${enc(a.incident_id)}">${esc(a.case_number)}</a>` : esc(theirCase)}</td>
+  </tr>`
+}
+
+function renderQueueRows() {
+  if (!queueShown()) return
+  const items = listData.alerts
+  const empty = items.length ? '' : emptyText('alerts', listQuery.alerts.trim().toLowerCase())
+  const sig = `${listLoaded.alerts}|${empty}|${alertsMeta.total}|${alertsMeta.note}|${JSON.stringify(items)}`
+  if (sig === aqSig) return
+  aqSig = sig
+  const ids = new Set(items.map(a => String(a.id)))
+  for (const id of aqSel) if (!ids.has(id)) aqSel.delete(id)  // closed elsewhere or filtered out
+  if (!ids.has(aqCur)) aqCur = items.length ? String(items[0].id) : null
+  const rows = $('aqRows')
+  const focusedRow = document.activeElement?.closest?.('#aqRows tr')
+  const focusIdx = focusedRow ? [...rows.children].indexOf(focusedRow) : -1
+  withFocus(aqBody, () => {
+    rows.innerHTML = items.length ? items.map(queueRowHtml).join('') : `<tr class="aq-empty"><td colspan="10">${esc(empty)}</td></tr>`
+  })
+  if (focusIdx >= 0 && !aqBody.contains(document.activeElement)) {  // the focused row is gone (closed, claimed): stay at that spot
+    const trs = rows.querySelectorAll('tr[data-alert]')
+    queueFocusRow(trs[Math.min(focusIdx, trs.length - 1)])
+  }
+  renderQueueFoot()
+  updateQueueSelection()
+}
+
+function renderQueueFoot() {
+  const foot = $('aqFoot')
+  const shown = listData.alerts.length, total = alertsMeta.total
+  const parts = []
+  if (listLoaded.alerts && total != null) parts.push(`<span>${total > shown ? `Showing ${shown} of ${fmtCount(total)}` : plural(fmtCount(total), 'alert')}</span>`)
+  if (total != null && total > shown && alertsMeta.limit < 500) parts.push('<button type="button" class="btn-mini" id="aqMoreBtn">Load more</button>')
+  if (alertsMeta.note) parts.push(`<span>${esc(alertsMeta.note)}</span>`)
+  const html = parts.join('')
+  if (foot._html !== html) { foot._html = html; foot.innerHTML = html }
+}
+
+function queueSetCur(tr) {
+  const prev = $('aqRows').querySelector('tr[tabindex="0"]')
+  if (prev && prev !== tr) prev.tabIndex = -1
+  tr.tabIndex = 0
+  aqCur = tr.dataset.alert
+}
+function queueFocusRow(tr) {
+  if (!tr) return
+  queueSetCur(tr)
+  tr.focus({ preventScroll: true })
+  tr.scrollIntoView({ block: 'nearest' })
+}
+
+// Checkboxes, row highlight, the header checkbox and the bulk bar all follow aqSel.
+function updateQueueSelection() {
+  const rows = $('aqRows')
+  if (!rows) return
+  const trs = rows.querySelectorAll('tr[data-alert]')
+  trs.forEach(tr => {
+    const on = aqSel.has(tr.dataset.alert)
+    tr.setAttribute('aria-selected', String(on))
+    tr.querySelector('[data-sel]').checked = on
+  })
+  const all = $('aqAll'), n = aqSel.size
+  all.checked = trs.length > 0 && n === trs.length
+  all.indeterminate = n > 0 && n < trs.length
+  $('aqBulk').hidden = !n
+  $('aqCount').textContent = `${n} selected`
+  aqBody.querySelector('[data-bulk="group"]').disabled = n < 2 || n > 25
+}
+function queueSetSelected(ids, on) {
+  ids.forEach(id => on ? aqSel.add(String(id)) : aqSel.delete(String(id)))
+  updateQueueSelection()
+}
+function queueClearSelection() { if (aqSel.size) { aqSel.clear(); updateQueueSelection() } }
+
+function queueCheckboxClick(ck, shift) {
+  const id = ck.dataset.sel, on = ck.checked
+  if (shift && aqAnchor && aqAnchor !== id) {
+    const ids = [...$('aqRows').querySelectorAll('tr[data-alert]')].map(tr => tr.dataset.alert)
+    const a = ids.indexOf(aqAnchor), b = ids.indexOf(id)
+    if (a >= 0 && b >= 0) { queueSetSelected(ids.slice(Math.min(a, b), Math.max(a, b) + 1), on); return }
+  }
+  aqAnchor = id
+  queueSetSelected([id], on)
+}
+
+function queueFilterChanged() { syncAlertFilters(); refilterAlerts() }
+function refreshQueue() { listSig.alerts = null; return refreshList('alerts') }
+// The list pane's button does the work (its disabled state stops a double pull) and sets alertsMeta.note.
+async function queueSync(b) {
+  if ($('alertSyncBtn').disabled) return
+  b.textContent = 'Pulling…'
+  try { await $('alertSyncBtn').onclick() } finally { b.textContent = 'Pull missed' }
+}
+
+aqBody.addEventListener('click', e => {
+  if (!queueShown()) return
+  const t = e.target
+  const st = t.closest('#aqStatus [data-status]'), sv = t.closest('#aqSevs [data-sev]'), so = t.closest('#aqSortSeg [data-sort]')
+  if (st) { alertsMeta.status = st.dataset.status; queueFilterChanged() }
+  else if (sv) { alertsMeta.severity = alertsMeta.severity === sv.dataset.sev ? '' : sv.dataset.sev; queueFilterChanged() }  // click again to clear
+  else if (so) { alertsMeta.sort = so.dataset.sort; queueFilterChanged() }
+  else if (t.closest('#aqMine')) { alertsMeta.mine = !alertsMeta.mine; queueFilterChanged() }
+  else if (t.closest('#aqSync')) queueSync(t.closest('#aqSync'))
+  else if (t.closest('#aqMoreBtn')) {
+    alertsMeta.limit = Math.min(alertsMeta.limit + 100, 500)
+    refreshList('alerts').then(() => ($('aqMoreBtn') || $('aqRows').querySelector('tr[tabindex="0"]'))?.focus({ preventScroll: true }))
+  } else if (t.closest('[data-bulk]')) queueBulk(t.closest('[data-bulk]'))
+  else if (t.closest('[data-sel]')) queueCheckboxClick(t.closest('[data-sel]'), e.shiftKey)
+  else if (t.closest('#aqAll')) queueSetSelected(listData.alerts.map(a => a.id), $('aqAll').checked)
+  else if (t.closest('.aq-ck')) {  // the cell around a checkbox counts as the checkbox, not as a click on the row
+    const ck = t.closest('.aq-ck').querySelector('input')
+    ck.checked = !ck.checked
+    if (ck.id === 'aqAll') queueSetSelected(listData.alerts.map(a => a.id), ck.checked)
+    else queueCheckboxClick(ck, e.shiftKey)
+  } else {
+    const tr = t.closest('#aqRows tr[data-alert]')
+    if (tr && !t.closest('a, input, button, label')) navigate(`#/alerts/${enc(tr.dataset.alert)}`)
+  }
+})
+aqBody.addEventListener('input', e => {
+  if (e.target.id !== 'aqSearch') return
+  listQuery.alerts = e.target.value
+  if (listSection === 'alerts') listSearch.value = e.target.value  // renderList reads the list pane's box
+  clearTimeout(aqSearchTimer)
+  aqSearchTimer = setTimeout(refilterAlerts, 250)
+})
+aqBody.addEventListener('focusin', e => {  // clicking into a row makes it the current one for j/k
+  const tr = e.target.closest?.('#aqRows tr[data-alert]')
+  if (tr && tr.dataset.alert !== aqCur) queueSetCur(tr)
+})
+
+// One bulk call, summed up for the toast: "12 closed, 1 skipped: already dismissed".
+async function queueBulkCall(body, what) {
+  const ids = body.ids.map(String)
+  let res
+  try { res = await api.bulkAlerts({ ...body, ids }) } catch (e) {
+    if (e.status !== 401) notify(`${what} failed: ${e.message}`)
+    return null
+  }
+  const results = res.results || {}
+  const ok = ids.filter(id => results[id] === 'ok')
+  const why = {}
+  ids.forEach(id => { if (results[id] !== 'ok') { const r = results[id] || 'no response'; why[r] = (why[r] || 0) + 1 } })
+  const skipped = ids.length - ok.length
+  const tail = skipped ? `, ${skipped} skipped: ${Object.entries(why).map(([r, n]) => n > 1 ? `${r} (${n})` : r).join(', ')}` : ''
+  return { ok, tail, incident: res.incident || null }
+}
+// Only the ids acted on leave the selection: `d` on one row keeps the rest selected.
+function queueAfterBulk(ids) {
+  const el = document.activeElement
+  const lost = el === document.body || !!$('aqBulk')?.contains(el)  // the bar hides under the button, or a toast's Undo went away
+  ids.forEach(id => aqSel.delete(String(id)))
+  updateQueueSelection()
+  if (lost && queueShown() && $('aqBulk').hidden) queueFocusRow($('aqRows').querySelector('tr[tabindex="0"]'))
+  refreshQueue()
+}
+async function queueDismiss(ids, resolution, note) {
+  const r = await queueBulkCall({ ids, action: 'dismiss', resolution, note }, 'Dismiss')
+  if (!r) return
+  notify(`${r.ok.length} closed as ${RESOLUTIONS[resolution] || resolution}${r.tail}`,
+    r.ok.length ? { label: 'Undo', onClick: () => queueRestore(r.ok) } : null, { error: !r.ok.length })
+  queueAfterBulk(ids)
+}
+async function queueRestore(ids) {
+  const r = await queueBulkCall({ ids, action: 'restore' }, 'Restore')
+  if (!r) return
+  notify(`${r.ok.length} restored${r.tail}`, null, { error: !r.ok.length })
+  queueAfterBulk(ids)
+}
+async function queueAddToCase(ids, target) {
+  const r = await queueBulkCall({ ids, action: 'add_to_case', ...target }, 'Add to case')
+  if (!r) return
+  const inc = r.incident
+  notify(`${r.ok.length} added to ${inc?.case_number || 'the case'}${r.tail}`,
+    inc ? { label: 'Open case', href: `#/cases/${enc(inc.id)}` } : null, { error: !r.ok.length })
+  refreshList('cases')
+  queueAfterBulk(ids)
+}
+function topSeverity(ids) {
+  const set = new Set(ids.map(String))
+  return listData.alerts.filter(a => set.has(String(a.id))).map(a => a.severity)
+    .sort((x, y) => SEV_RANK.indexOf(y) - SEV_RANK.indexOf(x))[0]
+}
+
+// Same as the workbench's Investigate (claim, then send the seed), staying on the table.
+async function queueInvestigate(id) {
+  const a = listData.alerts.find(x => String(x.id) === String(id))
+  try {
+    const res = await api.investigateAlert(id)
+    if (!res.conversation_id || res.conversation_is_mine === false) {
+      notify(`This alert is already being investigated by ${res.claimed_by_username || 'someone else'}.`, null, { error: false })
+      refreshQueue()
+      return
+    }
+    getSession(res.conversation_id, `[Alert] ${a?.title || ''}`.slice(0, 60))
+    const open = { label: 'Open', href: `#/chat/${enc(res.conversation_id)}` }
+    if (res.already_claimed && !res.seed_message) { notify(`You are already investigating ${a?.title || 'this alert'}.`, open, { error: false }); return }
+    if (res.seed_message) sendInConv(res.conversation_id, res.seed_message)
+    // Shown now; the next refresh has the server's word (listSig reset so an unchanged answer still redraws).
+    if (a) { a.status = 'investigating'; a.claimed_by_username = conn.user; listSig.alerts = aqSig = null; renderQueueRows() }
+    notify(`Investigation started: ${a?.title || 'alert'}`, open, { error: false })
+  } catch (err) {
+    if (err.status !== 401) notify(`Investigate failed: ${err.message}`)
+  }
+}
+async function queueInvestigateGroup(ids) {
+  let res
+  try { res = await api.investigateGroup(ids) } catch (e) {
+    if (e.status !== 401) notify(`Investigate together failed: ${e.message}`)  // a 409 says fewer than two could be claimed
+    return
+  }
+  getSession(res.conversation_id, res.title || `[Alerts] ${plural((res.claimed || []).length, 'alert')}`)
+  if (res.seed_message) sendInConv(res.conversation_id, res.seed_message)
+  const skipped = Object.values(res.skipped || {})
+  if (skipped.length) {
+    const why = {}
+    skipped.forEach(r => { why[r] = (why[r] || 0) + 1 })
+    notify(`${plural(skipped.length, 'alert')} left out: ${Object.entries(why).map(([r, n]) => n > 1 ? `${r} (${n})` : r).join(', ')}`, null, { error: false })
+  }
+  queueAfterBulk(ids)
+  navigate(`#/chat/${enc(res.conversation_id)}`)
+}
+
+// Dismiss… and Add to case… share one dialog, built here so the page's HTML stays as it is.
+const aqDialog = Object.assign(document.createElement('dialog'), { className: 'modal', id: 'aqDialog' })
+aqDialog.setAttribute('aria-labelledby', 'aqDialogTitle')
+document.body.appendChild(aqDialog)
+let aqDialogBack = null
+let aqDialogIds = []  // the alerts the dialog was opened for: a refresh meanwhile may drop some from the selection
+function openQueueDialog(html, opener, ids) {
+  aqDialog.innerHTML = html
+  aqDialogBack = opener
+  aqDialogIds = ids
+  aqDialog.showModal()
+}
+aqDialog.addEventListener('close', () => { if (aqDialogBack?.isConnected) aqDialogBack.focus({ preventScroll: true }); aqDialogBack = null })
+aqDialog.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.id === 'aqNewCase') { e.preventDefault(); aqDialog.querySelector('[data-dlg="newcase"]').click() }
+})
+aqDialog.addEventListener('click', e => {
+  const b = e.target.closest('[data-dlg], [data-case]')
+  const ids = aqDialogIds
+  if (!b) {
+    if (e.target !== aqDialog) return
+    const r = aqDialog.getBoundingClientRect()  // the dialog's own padding is a click on it, not on the backdrop
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) aqDialog.close()
+  } else if (b.dataset.dlg === 'cancel') aqDialog.close()
+  else if (b.dataset.dlg === 'dismiss') {
+    const resolution = aqDialog.querySelector('[name="aqReason"]:checked')?.value || 'not_actionable'
+    const note = $('aqNote')?.value.trim() || ''
+    aqDialog.close()
+    queueDismiss(ids, resolution, note)
+  } else if (b.dataset.dlg === 'newcase') {
+    const title = $('aqNewCase').value.trim() || 'Untitled case'
+    aqDialog.close()
+    queueAddToCase(ids, { new_case: { title, severity: topSeverity(ids) } })
+  } else if (b.dataset.case) {
+    aqDialog.close()
+    queueAddToCase(ids, { case_id: b.dataset.case })
+  }
+})
+
+async function queueBulk(btn) {
+  const kind = btn.dataset.bulk
+  const ids = [...aqSel], n = ids.length
+  if (kind === 'clear') {
+    queueClearSelection()
+    queueFocusRow($('aqRows').querySelector('tr[tabindex="0"]'))  // the bar goes away under the button
+    return
+  }
+  if (!n) return
+  const first = listData.alerts.find(a => aqSel.has(String(a.id)))
+  if (kind === 'fp') {
+    btn.disabled = true
+    await queueDismiss(ids, 'false_positive', '')
+    btn.disabled = false
+  } else if (kind === 'dismiss') {
+    openQueueDialog(`<h3 id="aqDialogTitle">Dismiss ${plural(n, 'alert')}</h3>
+      <div class="aq-reasons">
+        ${Object.entries(RESOLUTIONS).filter(([k]) => k !== 'false_positive').map(([k, l], i) =>
+          `<label><input type="radio" name="aqReason" value="${k}"${i ? '' : ' checked'}/> ${esc(l[0].toUpperCase() + l.slice(1))}</label>`).join('')}
+        <label class="sr-only" for="aqNote">Note</label>
+        <textarea class="fld" id="aqNote" maxlength="500" placeholder="Note for the record (optional)"></textarea>
+      </div>
+      <div class="ask-actions"><button type="button" class="btn-case" data-dlg="cancel">Cancel</button>
+        <button type="button" class="btn-case primary" data-dlg="dismiss">Dismiss ${plural(n, 'alert')}</button></div>`, btn, ids)
+  } else if (kind === 'case') {
+    openQueueDialog(`<h3 id="aqDialogTitle">Add ${plural(n, 'alert')} to a case</h3>
+      <div id="aqCaseChoices" style="font-size:12px;color:var(--muted)">Loading…</div>
+      <div class="modal-new">
+        <label class="sr-only" for="aqNewCase">New case title</label>
+        <input type="text" class="fld" id="aqNewCase" value="${esc(`${plural(n, 'alert')}: ${first?.title || ''}`.slice(0, 120))}" placeholder="New case title…"/>
+        <button type="button" class="btn-case" data-dlg="newcase">Create</button>
+      </div>
+      <div style="text-align:right;margin-top:12px"><button type="button" class="btn-case" data-dlg="cancel">Cancel</button></div>`, btn, ids)
+    try {
+      const open = ((await api.listIncidents()).incidents || []).filter(i => i.status !== 'closed')
+      const box = $('aqCaseChoices')
+      if (!box) return  // closed meanwhile
+      box.innerHTML = open.length
+        ? open.map(inc => `<button type="button" class="case-choice" data-case="${esc(inc.id)}">${sevTag(inc.severity)}
+            <span style="flex:1;min-width:0;overflow-wrap:anywhere">${esc(inc.title)}</span>
+            <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">${esc(inc.case_number)}</span></button>`).join('')
+        : '<div style="margin-bottom:6px">No open cases — create one below.</div>'
+    } catch (e) {
+      const box = $('aqCaseChoices')
+      if (box) box.innerHTML = `<div style="color:var(--red)">Could not load cases: ${esc(e.message)}</div>`
+    }
+  } else if (kind === 'group') {
+    btn.disabled = true
+    try { await queueInvestigateGroup(ids) } finally { btn.disabled = false }
+  }
+}
+
+// Keyboard triage: only on the queue, never while typing, never under a dialog. j/k reach the
+// table from the page (body, the main region or its title); the rest act on the focused row.
+const aqTyping = el => !!el?.matches?.('input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"]')
+function queueKeydown(e) {
+  if (!queueShown() || e.altKey || e.ctrlKey || e.metaKey || document.querySelector('dialog[open]')) return false
+  const el = document.activeElement
+  if (aqTyping(el) || !(el === document.body || el === $('main') || el === viewTitleEl || aqBody.contains(el))) return false
+  const rows = [...$('aqRows').querySelectorAll('tr[data-alert]')]
+  const focused = el.closest?.('#aqRows tr[data-alert]') || null
+  const k = e.key
+  if (e.repeat && k !== 'j' && k !== 'k') return false  // holding d must not fire a request per repeat
+  if (e.shiftKey) {
+    if (k.toLowerCase() !== 'a') return false
+    queueSetSelected(rows.map(tr => tr.dataset.alert), true)
+  } else if (k === 'j' || k === 'k') {
+    if (!rows.length) return false
+    const cur = rows.find(tr => tr.dataset.alert === aqCur) || rows[0]
+    // From outside the table, land on the current row; from a row, move on.
+    queueFocusRow(focused ? rows[Math.max(0, Math.min(rows.length - 1, rows.indexOf(cur) + (k === 'j' ? 1 : -1)))] : cur)
+  } else if (!focused) return false
+  else if (k === 'x') { aqAnchor = focused.dataset.alert; queueSetSelected([aqAnchor], !aqSel.has(aqAnchor)) }
+  else if (k === 'Enter') { if (el.matches('a, button')) return false; navigate(`#/alerts/${enc(focused.dataset.alert)}`) }
+  else if (k === 'e') queueInvestigate(focused.dataset.alert)
+  else if (k === 'd') queueDismiss([focused.dataset.alert], 'false_positive', '')
+  else return false
+  e.preventDefault()
+  return true
+}
+
+setInterval(() => {  // ages drift without a data change: touch the cells in place
+  if (!queueShown() || document.hidden) return
+  const byId = new Map(listData.alerts.map(a => [String(a.id), a]))
+  $('aqRows').querySelectorAll('tr[data-alert]').forEach(tr => {
+    const a = byId.get(tr.dataset.alert)
+    if (!a) return
+    const td = tr.querySelector('.aq-age')
+    td.textContent = fmtAge(a.created_at)
+    td.className = `aq-age ${ageClass(a)}`
+  })
+}, 30_000)
+
 // ─── Alert view ──────────────────────────────────────────────────
 const alertBody = $('alertBody')
 
 async function enterAlerts(id, seq) {
   if (!id) {
     setViewTitle('Alerts')
-    alertBody.innerHTML = `<div class="empty-panel">Select an alert from the list to see its details and investigate it.
-      ${isNarrow() ? '<br><button type="button" class="btn-case" data-open-drawer>Browse alerts</button>' : ''}</div>`
+    alertBody.alert = null  // the workbench click handler must not act on a stale alert
+    renderQueue()
     return
   }
   setViewTitle('Alert')
+  alertBody.classList.remove('aq-page')
   alertBody.innerHTML = '<div class="empty-panel">Loading alert…</div>'
   let a
   try { a = await api.getAlert(id) } catch (e) {
@@ -2845,50 +3804,212 @@ async function enterAlerts(id, seq) {
   renderAlert(a)
 }
 
+// The alert page is the analyst's workspace: the investigation's verdict and the decision
+// that follows it (close, escalate, ask more) sit next to the alert's key facts. The chat
+// behind it stays one click away as the full working.
+const RESOLUTIONS = { false_positive: 'false positive', benign: 'benign, expected activity', duplicate: 'duplicate', not_actionable: 'not actionable' }
+const AGENT_NAMES = { triage: 'Triage agent', investigator: 'Investigator agent' }
+let alertWatch = null  // re-fetch timer while the alert's investigation runs
+
 function renderAlert(a) {
   setViewTitle(`Alert — ${a.title}`)
   let payload = a.payload_json || '{}'
   try { payload = JSON.stringify(JSON.parse(payload), null, 2) } catch {}
+  const facts = a.facts || []
+  withFocus(alertBody, () => {
+    alertBody.innerHTML = `
+      <div class="wb">
+        <div class="wb-head">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${sevTag(a.severity)}<h2>${esc(a.title)}</h2></div>
+          <div class="alert-meta">
+            <span>${esc(a.source)}</span>
+            <span>Received <b>${esc(fmtTime(a.created_at))}</b></span>
+            <span>${alertStatusBadgeHtml(a.status)}</span>
+            ${a.claimed_by_username && a.status === 'investigating' ? `<span>Claimed by <b>${esc(a.claimed_by_username)}</b></span>` : ''}
+          </div>
+        </div>
+        <section class="case-card wb-factbox" aria-label="Key facts">
+          <h3>Key facts</h3>
+          ${facts.length ? `<dl class="wb-facts">${facts.map(f => `<dt>${esc(f.label)}</dt><dd>${factHtml(f)}</dd>`).join('')}</dl>`
+            : '<p class="wb-muted">No familiar fields in this alert; see the raw payload.</p>'}
+          <details class="wb-raw"${facts.length ? '' : ' open'}><summary>Raw payload</summary>
+            <div class="alert-payload" tabindex="0" aria-label="Raw alert payload">${esc(payload)}</div></details>
+        </section>
+        <aside class="case-card wb-inv" aria-label="Investigation">
+          <h3>Investigation</h3>
+          ${workbenchMainHtml(a)}
+        </aside>
+      </div>`
+  })
+  alertBody.dataset.alertId = a.id
+  alertBody.alert = a
+  decorateIocChips(alertBody)
+  loadAlertCases(a)
+  watchAlert(a)
+}
+
+// IPs, domains, hashes and URLs become IOC chips (VirusTotal status, search, investigate, copy);
+// other facts get a search button. Facts join several values with ", ".
+const FACT_IOC = { 'Source IP': 'ip', 'Destination IP': 'ip', Domain: 'domain', Hash: 'hash', URL: 'url' }
+function factHtml(f) {
+  if (FACT_IOC[f.label]) {
+    const values = f.label === 'URL' ? [f.value] : f.value.split(', ')  // a URL may itself contain ", "
+    return `<span class="wb-chips">${values.map(v => iocChipHtml({ value: v, type: FACT_IOC[f.label] })).join('')}</span>`
+  }
+  return `<span>${esc(f.value)}</span>${f.label === 'Event time' ? ''
+    : `<button type="button" class="wb-pivot" data-wb-search="${esc(f.value)}" aria-label="Search alerts for ${esc(f.value)}" title="Search alerts for this">⌕</button>`}`
+}
+
+function alertRunning(a) {
+  const inv = a.investigation
+  return !!inv && !!(inv.pending || sessions.get(inv.conversation_id)?.inflight)
+}
+
+function workbenchMainHtml(a) {
+  const inv = a.investigation
   const mine = a.conversation_is_mine ?? true
   const claimedByOther = a.status === 'investigating' && a.conversation_id && !mine
   // Someone else's chat, or dismissed: the analyst can still take their own look.
   const canFork = a.conversation_is_mine === false && (!!a.conversation_id || a.status === 'dismissed')
-  alertBody.innerHTML = `
-    <div class="case-card">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        ${sevTag(a.severity)}
-        <h2 style="margin:0;flex:1;min-width:0;overflow-wrap:anywhere">${esc(a.title)}</h2>
-      </div>
-      <div class="alert-meta">
-        <span>Source: <b>${esc(a.source)}</b></span>
-        <span>Severity: <b>${esc(a.severity)}</b></span>
-        <span>Status: <b>${esc(a.status)}</b></span>
-        <span>Received: <b>${esc(fmtTime(a.created_at))}</b></span>
-        ${a.claimed_by_username ? `<span>Claimed by: <b>${esc(a.claimed_by_username)}</b></span>` : ''}
-      </div>
-      ${a.agent_note ? `<div class="alert-meta"><span>Agent: <b>${esc(a.agent_note)}</b></span></div>` : ''}
-      <div class="alert-payload" tabindex="0" aria-label="Raw alert payload">${esc(payload)}</div>
-      <div class="case-actions">
-        ${a.status !== 'dismissed' && !claimedByOther ? '<button type="button" class="btn-case" data-act="investigate">Investigate</button>' : ''}
-        ${!canFork ? '' : a.conversation_id
-          ? '<button type="button" class="btn-case" data-act="fork" title="Start your own investigation chat; the alert itself is left as it is">Investigate separately</button>'
-          : '<button type="button" class="btn-case" data-act="fork" title="Opens a new chat; the alert stays dismissed">Investigate anyway</button>'}
-        ${a.status === 'new' ? '<button type="button" class="btn-case danger" data-act="dismiss">Dismiss</button>' : ''}
-        ${a.status === 'dismissed' ? '<button type="button" class="btn-case" data-act="restore">Restore alert</button>' : ''}
-        ${a.conversation_id && mine ? `<a class="btn-case" href="#/chat/${enc(a.conversation_id)}">Open investigation</a>` : ''}
-        ${claimedByOther ? `<span class="claim-note">Being investigated by ${esc(a.claimed_by_username || 'another analyst')}.</span>` : ''}
-      </div>
-    </div>`
-  alertBody.dataset.alertId = a.id
-  alertBody.alert = a
+  const running = alertRunning(a)
+  // A failure or stop note is the last message, but it is not a verdict: offer a retry instead.
+  const halted = /^(⚠ Investigation failed|⏹ Investigation stopped)/.test(inv?.report || '')
+  const parsed = inv?.report && !halted ? parseReport(inv.report) : null
+  const open = a.status !== 'dismissed' && !claimedByOther
+  const out = []
+
+  if (a.status === 'dismissed') out.push(`<div class="wb-closed">Dismissed${a.resolution ? ` as <b>${esc(RESOLUTIONS[a.resolution] || a.resolution)}</b>` : ''}${
+    a.claimed_by_username ? ` by ${esc(a.claimed_by_username)}` : ''}${a.resolution_note ? `<p>${esc(a.resolution_note)}</p>` : ''}</div>`)
+  if (claimedByOther) out.push(`<p class="claim-note" style="margin:0 0 10px">Being investigated by ${esc(a.claimed_by_username || 'another analyst')}.</p>`)
+  if (inv?.source === 'agent' && a.agent_note) out.push(`<p class="wb-agent">${esc(a.agent_note)}</p>`)
+  else if (!inv && a.agent_note) out.push(`<p class="wb-agent">${esc(a.agent_note)}</p>`)
+
+  if (inv && (running || inv.report)) {
+    const who = inv.source === 'agent' ? `${AGENT_NAMES[inv.agent] || 'Agent'}${inv.agent_action === 'shadow' ? ' (shadow)' : ''}` : 'Your investigation'
+    out.push(`<div class="wb-src"><span>${esc(who)}${inv.updated_at && !running ? ` · ${esc(fmtAlertTime(inv.updated_at))}` : ''}</span>
+      <a href="#/chat/${enc(inv.conversation_id)}">Open full investigation</a></div>`)
+  }
+  if (running) {
+    const stage = sessions.get(inv.conversation_id)?.inflight?.stage || inv.pending?.stage || 'Working…'
+    out.push(`<div class="wb-running"><span class="run-dot"></span>Investigating: ${esc(stage)}</div>`)
+  } else if (halted) out.push(`<p class="wb-muted">${esc(inv.report)}</p>`)
+  else if (parsed?.structured) out.push(reportCardHtml(parsed, inv.meta))
+  else if (inv?.report) out.push(`<div class="wb-plain">${renderMarkdown(inv.report)}</div>`)
+  else if (open) out.push('<p class="wb-muted">Not investigated yet. Investigate runs the full pipeline (SIEM queries, playbooks, VirusTotal) and shows the verdict here.</p>')
+
+  // The decision that fits the verdict goes first and gets the accent.
+  const btn = (act, label, primary) => `<button type="button" class="btn-case${primary ? ' primary' : ''}" data-act="${act}">${label}</button>`
+  const acts = []
+  if (open && !running) {
+    const lean = parsed?.verdictClass
+    if (halted) acts.push(btn('retry', 'Retry investigation', true))
+    else if (!inv?.report || inv.source === 'agent') acts.push(btn('investigate', inv?.report ? 'Investigate myself' : 'Investigate', !inv?.report))
+    if (inv?.report && !halted) {
+      acts.push(btn('close-fp', 'Close as false positive', lean === 'benign'))
+      // Disabled until loadAlertCases knows there is no case yet: escalating twice makes two cases.
+      acts.push(`<span id="wbCases"></span>${btn('escalate', 'Escalate to case', lean === 'malicious' || lean === 'suspicious').replace('<button', '<button disabled')}`)
+      acts.push(btn('follow-up', 'Ask a follow-up'))
+    } else acts.push(btn('close-fp', 'Close as false positive'))
+    acts.push(`<details class="wb-other"><summary>Dismiss for another reason…</summary>
+      <div class="wb-other-form">
+        ${Object.entries(RESOLUTIONS).filter(([k]) => k !== 'false_positive').map(([k, l], i) =>
+          `<label><input type="radio" name="wbReason" value="${k}" ${i ? '' : 'checked'}> ${esc(l[0].toUpperCase() + l.slice(1))}</label>`).join('')}
+        <label class="sr-only" for="wbNote">Note</label>
+        <textarea class="fld" id="wbNote" maxlength="500" placeholder="Note for the record (optional)"></textarea>
+        <div>${btn('dismiss-other', 'Dismiss alert')}</div>
+      </div></details>`)
+  }
+  if (a.status === 'dismissed') acts.push(btn('restore', 'Restore alert'))
+  if (canFork) acts.push(a.conversation_id
+    ? '<button type="button" class="btn-case" data-act="fork" title="Start your own investigation; the alert itself is left as it is">Investigate separately</button>'
+    : '<button type="button" class="btn-case" data-act="fork" title="Opens a new investigation; the alert stays dismissed">Investigate anyway</button>')
+  if (acts.length) out.push(`<div class="wb-actions">${acts.join('')}</div>`)
+  return out.join('')
+}
+
+// A linked case replaces Escalate with a link to it.
+async function loadAlertCases(a) {
+  const conv = a.investigation?.conversation_id
+  if (!conv || !$('wbCases')) return
+  let incs = []
+  try { incs = (await api.incidentsForConv(conv)).incidents || [] } catch {}
+  const slot = $('wbCases'), escalate = alertBody.querySelector('[data-act="escalate"]')
+  if (!slot || alertBody.alert !== a) return
+  if (!incs.length) { if (escalate) escalate.disabled = false; return }
+  slot.replaceChildren(...incs.map(i => Object.assign(document.createElement('a'), {
+    className: 'case-badge', href: `#/cases/${enc(i.id)}`, textContent: `In ${i.case_number}`, title: i.title })))
+  escalate?.remove()
+}
+
+// While the investigation runs, re-fetch every 2 s so its stage, then its verdict, show up here.
+function watchAlert(a) {
+  clearTimeout(alertWatch)
+  if (!alertRunning(a)) return
+  alertWatch = setTimeout(async () => {
+    if (route.view !== 'alerts' || route.id !== a.id) return
+    try {
+      const fresh = await api.getAlert(a.id)
+      if (route.view === 'alerts' && route.id === a.id) {
+        // Our own send may not have reached the server yet: keep showing it as running.
+        const local = sessions.get(a.investigation.conversation_id)
+        if (local?.inflight && fresh.investigation?.conversation_id !== local.id) fresh.investigation = a.investigation
+        renderAlert(fresh)
+      }
+    } catch { watchAlert(a) }
+  }, 2000)
+}
+
+async function dismissAlertAs(a, resolution) {
+  try {
+    const seq = navSeq
+    await api.dismissAlert(a.id, resolution)
+    const fresh = await api.getAlert(a.id)
+    if (seq === navSeq) { renderAlert(fresh); viewTitleEl.focus({ preventScroll: true }) }
+    refreshList('alerts')
+    const label = resolution ? RESOLUTIONS[resolution.resolution] : null
+    notify(label ? `Closed as ${label}.` : 'Alert dismissed.', { label: 'Undo', onClick: () => restoreAlert(a.id) })
+    return true
+  } catch (err) {
+    if (err.status !== 401) notify(`Dismiss failed: ${err.message}`)
+    return false
+  }
 }
 
 alertBody.addEventListener('click', async e => {
   if (e.target.closest('[data-open-drawer]')) { openDrawer(); return }
+  const pivot = e.target.closest('[data-wb-search]')
+  if (pivot) { openAlerts({ q: pivot.dataset.wbSearch }); return }
   const b = e.target.closest('[data-act]')
   const a = alertBody.alert
   if (!b || !a) return
-  if (b.dataset.act === 'investigate' || b.dataset.act === 'fork') {
+  const conv = a.investigation?.conversation_id
+  if (b.dataset.act === 'retry') {
+    // Same chat, so the model has the alert from the first message; it runs here like Investigate.
+    b.disabled = true
+    getSession(conv)
+    sendInConv(conv, 'Run the investigation of this alert again from the start.')
+    renderAlert({ ...a, investigation: { ...a.investigation, pending: { stage: 'Starting…' }, report: null } })
+  } else if (b.dataset.act === 'follow-up') {
+    navigate(`#/chat/${enc(conv)}`)
+    setTimeout(() => inputEl.focus(), 0)
+  } else if (b.dataset.act === 'close-fp' || b.dataset.act === 'dismiss-other') {
+    // No confirm: it can be undone, from the toast or the alert's Restore button.
+    const resolution = b.dataset.act === 'close-fp' ? { resolution: 'false_positive' }
+      : { resolution: alertBody.querySelector('[name="wbReason"]:checked')?.value || 'not_actionable', note: $('wbNote')?.value.trim() || '' }
+    b.disabled = true
+    if (!await dismissAlertAs(a, resolution)) b.disabled = false
+  } else if (b.dataset.act === 'escalate') {
+    b.disabled = true
+    try {
+      const res = await api.escalateAlert(a.id, conv)
+      if (route.view === 'alerts' && route.id === a.id) renderAlert(res.alert)
+      refreshList('alerts'); refreshList('cases')
+      notify(`Escalated to ${res.incident.case_number}.`, { label: 'Open case', href: `#/cases/${enc(res.incident.id)}` })
+    } catch (err) {
+      b.disabled = false
+      if (err.status !== 401) notify(`Escalate failed: ${err.message}`)
+    }
+  } else if (b.dataset.act === 'investigate' || b.dataset.act === 'fork') {
     b.disabled = true
     const seq = navSeq
     try {
@@ -2905,27 +4026,21 @@ alertBody.addEventListener('click', async e => {
       }
       getSession(res.conversation_id, `[Alert] ${a.title}`.slice(0, 60))
       if (res.seed_message) sendInConv(res.conversation_id, res.seed_message)
-      // Moved on while the claim was in flight? Don't pull the analyst back; offer the chat instead.
-      if (seq === navSeq) navigate(`#/chat/${enc(res.conversation_id)}`)
-      else notify(`Investigation started: ${a.title}`, { label: 'Open', href: `#/chat/${enc(res.conversation_id)}` })
       refreshList('alerts')
+      // The investigation runs here on the alert page; the chat is one click away. Moved on while
+      // the claim was in flight? Don't pull the analyst back; offer it instead.
+      if (seq !== navSeq) { notify(`Investigation started: ${a.title}`, { label: 'Open', href: `#/chat/${enc(res.conversation_id)}` }, { error: false }); return }
+      if (b.dataset.act === 'fork') { navigate(`#/chat/${enc(res.conversation_id)}`); return }  // a separate look, not linked to the alert
+      const fresh = await api.getAlert(a.id).catch(() => a)
+      if (seq !== navSeq) return
+      if (res.seed_message || fresh.investigation?.conversation_id !== res.conversation_id)
+        fresh.investigation = { conversation_id: res.conversation_id, source: 'analyst', agent: null, agent_action: null,
+          pending: { stage: 'Starting…' }, report: null, meta: null, updated_at: null }
+      renderAlert(fresh)
+      viewTitleEl.focus({ preventScroll: true })
     } catch (err) {
       b.disabled = false
       if (err.status !== 401) notify(`Investigate failed: ${err.message}`)
-    }
-  } else if (b.dataset.act === 'dismiss') {
-    // No confirm: it can be undone, from the toast or the alert's Restore button.
-    b.disabled = true
-    try {
-      const seq = navSeq
-      await api.dismissAlert(a.id)
-      const fresh = await api.getAlert(a.id)
-      if (seq === navSeq) { renderAlert(fresh); viewTitleEl.focus({ preventScroll: true }) }
-      refreshList('alerts')
-      notify('Alert dismissed.', { label: 'Undo', onClick: () => restoreAlert(a.id) })
-    } catch (err) {
-      b.disabled = false
-      if (err.status !== 401) notify(`Dismiss failed: ${err.message}`)
     }
   } else if (b.dataset.act === 'restore') {
     b.disabled = true
@@ -3036,6 +4151,7 @@ function renderCase(inc) {
   setViewTitle(`${inc.case_number} — ${inc.title}`)
   const opts = (vals, cur) => vals.map(v => `<option value="${v}" ${cur === v ? 'selected' : ''}>${v}</option>`).join('')
   const convs = inc.conversations || []
+  const alerts = inc.alerts || []
   caseBody.innerHTML = `
     <div class="case-card">
       <div class="case-num">${esc(inc.case_number)}</div>
@@ -3053,6 +4169,13 @@ function renderCase(inc) {
           <a class="btn-case" data-export href="/api/incidents/${enc(inc.id)}/report?format=md" download>Export report (MD)</a>
           <button type="button" class="btn-case danger" data-act="delete">Delete case</button>
         </div>
+      </div>
+      <div class="case-convs">
+        <h3>Linked alerts (${alerts.length})</h3>
+        ${alerts.map(a => `
+          <a class="case-alert-row" href="#/alerts/${enc(a.id)}">${sevTag(a.severity)}<span class="t">${esc(a.title || 'Untitled alert')}</span>
+            <span class="m">${esc(a.host || '')}</span>${alertStatusBadgeHtml(a.status)}<span class="aq-age" title="${esc(fmtTime(a.created_at))}">${esc(fmtAge(a.created_at))}</span></a>`).join('')
+          || '<div style="font-size:12px;color:var(--muted)">None yet — select alerts in the queue and press “Add to case”.</div>'}
       </div>
       <div class="case-convs">
         <h3>Linked investigations (${convs.length})</h3>
@@ -3117,7 +4240,8 @@ caseBody.addEventListener('click', async e => {
 function focusSelector(el) {
   if (!el || el === document.body) return null
   for (const a of ['data-move', 'data-hide', 'data-show', 'data-reset', 'data-hours', 'data-alert', 'data-inc', 'data-go', 'data-q', 'data-sev', 'data-run',
-                   'data-stop', 'data-prop', 'data-undo', 'data-open-conv', 'data-open-case', 'data-agent', 'data-weekday', 'data-tz-use', 'id']) {
+                   'data-stop', 'data-prop', 'data-undo', 'data-open-conv', 'data-open-case', 'data-agent', 'data-weekday', 'data-tz-use',
+                   'data-act', 'data-wb-search', 'data-sc-days', 'data-sc-go', 'id']) {
     if (el.hasAttribute?.(a)) {
       let sel = `[${a}="${CSS.escape(el.getAttribute(a))}"]`
       if (a === 'data-move') sel += `[data-dir="${el.dataset.dir}"]`
@@ -3540,7 +4664,7 @@ function renderAgents() {
       : `Agents act as <b>${esc(d.config.owner)}</b> · Only admins can change agent settings.`)
       + (d.is_admin && anyOn ? ' <button type="button" class="btn-mini danger" data-stop="all">Stop all agents</button>' : '')
     const pending = d.proposals.filter(p => p.status === 'proposed').length
-    agentsGrid.innerHTML = Object.keys(AGENT_INFO).map(n => agentCardHtml(n, d)).join('') + scheduleCardHtml(d) + `
+    agentsGrid.innerHTML = Object.keys(AGENT_INFO).map(n => agentCardHtml(n, d)).join('') + scheduleCardHtml(d) + scorecardHtml(d) + `
       <section class="dash-card wide" aria-label="Containment proposals">
         <header><h2>Containment proposals${pending ? ` (${pending} awaiting approval)` : ''}</h2></header>
         ${d.proposals.length ? d.proposals.map(p => proposalRowHtml(p, d)).join('') : '<div class="dash-empty">No isolation proposals yet</div>'}
@@ -3558,6 +4682,7 @@ async function loadAgents(force = false) {
   const live = agentsEl.querySelector('#agentsLive')
   try {
     const d = await api.agents()
+    if (Date.now() - sc.at > 60_000) loadScorecard()  // heavier than the 3 s agents poll: once a minute
     live.textContent = 'Live'
     live.title = `Updated ${new Date().toLocaleTimeString()}`
     live.classList.remove('off')
@@ -3577,6 +4702,60 @@ function enterAgents() {
   setViewTitle('Agents')
   agentsSig = null
   loadAgents()
+  loadScorecard()
+}
+
+// ─── Shadow scorecard ─────────────────────────────────────────────
+// Compares what Triage would have done in shadow mode with what analysts then did, per
+// severity, so "is it safe to go autonomous?" is a number rather than a guess.
+const sc = { days: 7, data: null, error: '', at: 0 }
+
+async function loadScorecard() {
+  sc.at = Date.now()  // also marks it in flight, so the agents poll doesn't start a second one
+  try { sc.data = await api.scorecard(sc.days); sc.error = '' }
+  catch (e) { if (e.status === 401) return; sc.error = e.message }
+  sc.at = Date.now()
+  if (agentsData && route.view === 'agents') renderAgents()
+}
+
+const pct = x => `${Math.round(x * 100)}%`
+
+function scorecardHtml(d) {
+  const t = sc.data?.triage
+  const head = `<header><h2>Triage shadow scorecard</h2><span class="sc-range" role="group" aria-label="Scorecard period">${
+    [7, 30].map(n => `<button type="button" data-sc-days="${n}" aria-pressed="${sc.days === n}">${n}d</button>`).join('')}</span></header>`
+  if (!t) return `<section class="dash-card wide" aria-label="Triage shadow scorecard">${head}<div class="dash-empty">${
+    sc.error ? `Could not load the scorecard: ${esc(sc.error)}` : 'Loading…'}</div></section>`
+  const summary = t.decided
+    ? `Analysts agreed with Triage on <b>${t.agreed} of ${t.decided}</b> alerts they have decided (<b>${pct(t.agreement)}</b>) in the last ${sc.data.days} days.${t.pending ? ` ${t.pending} more still wait for an analyst.` : ''}`
+    : t.assessed
+      ? `Triage assessed ${t.assessed} alert${t.assessed === 1 ? '' : 's'} in shadow mode; none has been closed or escalated by an analyst yet. Work the queue as usual and this fills in.`
+      : 'No shadow assessments in this period. Run Triage in shadow mode and work the queue as usual; this compares its calls with yours.'
+  const rows = Object.entries(t.by_severity).map(([sev, s]) => `<tr>
+      <td>${sevTag(sev)}</td><td>${s.assessed}</td><td>${s.decided}</td>
+      <td>${s.decided ? `<span class="sc-bar"><span style="width:${Math.round(s.agreed / s.decided * 100)}%"></span></span>${pct(s.agreed / s.decided)}` : '—'}</td>
+      <td class="${s.false_dismissals ? 'sc-bad' : ''}">${s.false_dismissals}</td><td>${s.missed_dismissals}</td></tr>`).join('')
+  const rec = t.recommendation || {}, cur = d.config.triage
+  const already = cur.mode === 'autonomous' && cur.max_dismiss_severity === rec.max_dismiss_severity
+  const go = rec.max_dismiss_severity && d.is_admin && !already
+    ? `<br><button type="button" class="btn-mini" data-sc-go="${esc(rec.max_dismiss_severity)}">Go autonomous up to ${esc(rec.max_dismiss_severity)} severity</button>` : ''
+  const recHtml = `<div class="sc-rec${rec.max_dismiss_severity ? ' go' : ''}">${rec.max_dismiss_severity
+    ? `<b>Safe to let Triage dismiss up to ${esc(rec.max_dismiss_severity)} severity.</b> ` : '<b>Not enough evidence to go autonomous yet.</b> '}${esc(rec.reason || '')}${
+    already ? ' <span style="color:var(--green)">Triage already runs this way.</span>' : ''}${go}</div>`
+  const dis = (t.disagreements || []).map(x => `<div class="sc-dis-row">${sevTag(x.severity)}
+      <a href="#/alerts/${enc(x.alert_id)}">${esc(x.title)}</a>
+      <span class="sc-call${x.agent === 'dismiss' && x.analyst === 'case' ? ' sc-bad' : ''}">${x.agent === 'dismiss' && x.analyst === 'case'
+        ? 'Triage would have dismissed it; escalated' : 'Triage would have opened a case; closed'}${x.by ? ` by ${esc(x.by)}` : ''}${x.at ? ` · ${esc(fmtAlertTime(x.at))}` : ''}</span></div>`).join('')
+  return `<section class="dash-card wide" aria-label="Triage shadow scorecard">${head}
+    <p class="sc-summary">${summary}</p>
+    <div style="overflow-x:auto"><table class="sc-table">
+      <thead><tr><th>Severity</th><th>Assessed</th><th>Decided</th><th>Agreement</th>
+        <th title="Triage would have dismissed; an analyst escalated. Must stay at 0.">False dismissals</th>
+        <th title="Triage would have opened a case; an analyst closed it.">Too cautious</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    ${recHtml}
+    ${dis ? `<div class="sc-dis"><h3>Where you disagreed</h3>${dis}</div>` : ''}
+  </section>`
 }
 
 // A change that lets an agent decide without a human asks first: switching Triage on in
@@ -3624,9 +4803,16 @@ agentsEl.addEventListener('change', async e => {
 agentsEl.addEventListener('click', async e => {
   const b = e.target.closest('button')
   if (!b) return
-  const { run, stop, prop, decision, undo, openConv, openCase, tzUse } = b.dataset
+  const { run, stop, prop, decision, undo, openConv, openCase, tzUse, scDays, scGo } = b.dataset
   if (openConv) { navigate(`#/chat/${enc(openConv)}`); return }
   if (tzUse) { saveAgents({ timezone: tzUse }); return }
+  if (scDays) { sc.days = +scDays; renderAgents(); loadScorecard(); return }
+  if (scGo) {
+    if (await ask({ title: `Let Triage dismiss up to ${scGo} severity?`, yes: 'Go autonomous',
+      body: `From its next run it dismisses the alerts it judges high-confidence false positives, up to ${scGo} severity, with no human review, and opens cases for the rest. ${sc.data?.triage?.recommendation?.reason || ''} Its dismissals can be undone in Activity.` }))
+      saveAgents({ triage: { mode: 'autonomous', max_dismiss_severity: scGo } })
+    return
+  }
   if (openCase) { navigate(`#/cases/${enc(openCase)}`); return }
   try {
     if (stop) {  // stopping is always safe: no confirm
@@ -3769,7 +4955,7 @@ function render() {
 
   VIEWS.forEach(v => { $(`view-${v}`).hidden = v !== route.view })
   if (route.view !== 'dashboard') dashTip.style.display = 'none'
-  document.body.classList.toggle('no-list', !LISTS[route.view])
+  document.body.classList.toggle('no-list', !LISTS[route.view] || (route.view === 'alerts' && !route.id))  // #/alerts is the full-width queue
   document.querySelectorAll('[data-nav]').forEach(a => {
     if (a.dataset.nav === route.view) a.setAttribute('aria-current', 'page')
     else a.removeAttribute('aria-current')
@@ -3781,7 +4967,7 @@ function render() {
   updateCaseControls(route.view === 'chat' ? route.id : null)
   VIEW_ENTER[route.view](route.id, seq)
   if (hadFocusInView) viewTitleEl.focus({ preventScroll: true })
-  if (isNarrow() && LISTS[route.view] && route.view !== 'chat' && !route.id) openDrawer()
+  if (isNarrow() && LISTS[route.view] && route.view !== 'chat' && route.view !== 'alerts' && !route.id) openDrawer()
 }
 
 window.addEventListener('hashchange', render)
@@ -3791,6 +4977,7 @@ document.querySelector('.skip-link').addEventListener('click', e => { e.preventD
 // ─── Keyboard shortcuts ──────────────────────────────────────────
 const isTyping = el => !!el?.matches?.('input, textarea, select, [contenteditable="true"]')
 function focusListSearch() {
+  if (route.view === 'alerts' && !route.id && $('aqSearch')) { $('aqSearch').focus(); $('aqSearch').select(); return }  // the queue's own search box
   if (!LISTS[route.view]) navigate('#/chat')
   if (isNarrow()) openDrawer()
   setTimeout(() => { listSearch.focus(); listSearch.select() }, 60)  // after the drawer's own focus
@@ -3803,6 +4990,7 @@ $('acctMenu').addEventListener('click', e => { if (e.target.closest('a, button')
 
 document.addEventListener('keydown', e => {
   if (e.defaultPrevented || e.isComposing) return
+  if (queueKeydown(e)) return  // j/k/x/e/d/Enter/⇧A triage on the alert queue
   const mod = e.ctrlKey || e.metaKey
   const k = e.key.toLowerCase()
   if (mod && e.shiftKey && k === 'o') {  // new investigation

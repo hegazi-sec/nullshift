@@ -236,7 +236,11 @@ def run_triage(cfg: Dict[str, Any]) -> str:
             would = "dismiss as false positive" if fp else f"open a case: {outcome}"
             detail = f"Would dismiss as false positive: {label}" if fp else f"Would open a case: {label}, {outcome}"
             alerts_inbox.mark_triaged(ids, f"Triage agent (shadow): would {would}")
-            agent_store.log("triage", "shadow", conv, detail, data)
+            # decision/severity feed the scorecard (app/scorecard.py) that compares these with what analysts did
+            agent_store.log("triage", "shadow", conv, detail, {
+                **data, "decision": "dismiss" if fp else "case",
+                "verdict": verdict, "confidence": conf, "severity": severity,
+            })
         elif fp:
             alerts_inbox.set_agent_outcome(ids, "dismissed", "Triage agent: false positive (High confidence)", conv)
             agent_store.log("triage", "dismissed", conv, f"False positive: {label}", data)

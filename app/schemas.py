@@ -83,3 +83,31 @@ class IncidentUpdate(BaseModel):
 
 class IncidentLink(BaseModel):
     conversation_id: str
+
+
+# Alert workbench schemas
+class AlertDismiss(BaseModel):
+    resolution: Optional[str] = None  # validated in the route so a bad value is a 400, not a 422
+    note: Optional[str] = None
+
+
+class AlertEscalate(BaseModel):
+    conversation_id: Optional[str] = None  # chat to link to the new case; ignored unless the caller owns it
+
+
+class AlertGroup(BaseModel):
+    ids: List[str]  # 2–25 distinct alert ids; counted in the route so a bad set is a 400, not a 422
+
+
+class AlertBulkNewCase(BaseModel):
+    title: str
+    severity: Optional[str] = None  # default: the highest severity among the selected alerts
+
+
+class AlertBulk(BaseModel):
+    ids: List[str]  # 1–200 alert ids; counted and deduped in the route so a bad set is a 400, not a 422
+    action: str  # dismiss | restore | add_to_case; validated in the route
+    resolution: Optional[str] = None  # dismiss only, same values as AlertDismiss
+    note: Optional[str] = None
+    case_id: Optional[str] = None  # add_to_case: exactly one of case_id / new_case
+    new_case: Optional[AlertBulkNewCase] = None

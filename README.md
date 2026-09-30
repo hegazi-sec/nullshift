@@ -31,6 +31,8 @@ It works with any major LLM provider — Anthropic Claude, OpenAI GPT, or a full
 - **Case management & reports** — group investigations into cases (`INC-0001`…) with severity, status, verdict, and notes; export Markdown or print-ready HTML/PDF.
 - **Webhook alert ingestion** — SIEMs push alerts straight into NullShift's inbox; one click turns an alert into a full investigation.
 - **Autonomous SOC agents** — Triage, Investigator and Reporter work the alert queue on their own. Start them in shadow mode, cap what they may decide by severity and confidence, limit them to after-hours, and keep host isolation behind a human approval.
+- **Alert queue** — a dense table of the inbox with age against severity targets, a "Mine" filter, oldest-first sorting, bulk close / dismiss / add to case, one investigation for several related alerts, and keyboard triage.
+- **Alert workbench** — each alert shows its key facts, the investigation's verdict and summary, and the next decision (close as false positive, escalate to case, ask a follow-up) on one page.
 - **Built for the queue** — search alerts by host or IP across the raw payload, filter by status and severity, undo a dismissal, stop a running investigation, paste or drop screenshots, and move around with keyboard shortcuts.
 - **Live dashboard** — alert volume, severity, top rules and hosts, open cases; click a count or a severity, rule or host bar to open the matching alerts.
 - **Automatic IOC enrichment** — IPs, domains, and hashes in each message are checked against VirusTotal automatically.
@@ -114,6 +116,7 @@ The left rail switches between **Investigations**, **Alerts**, **Cases**, **Dash
 
 - **Investigations keep running when you leave.** Switch views, open another chat or reload: the investigation carries on and its reply lands in its own chat, with a notification if you're elsewhere.
 - **Stop an investigation** with **Stop investigation**, shown above the message box while one runs. The chat frees up at once so you can ask again; a model call already underway finishes in the background and its answer is dropped.
+- **Investigation reports** open with a summary card: verdict and confidence, a short summary, next steps, the IOCs as chips (VirusTotal status, search alerts for it, start an investigation, copy) and what was checked (sources, time window, queries and results). The full evidence sections fold underneath.
 - **Attachments** — paste a screenshot straight into the message box, drop it anywhere on the chat, or use the paperclip. CSV files (up to 3, 5 MB each) are profiled and analyzed as data.
 - **Options** next to the message box holds the debug trace and the response temperature; a chip shows either one when it isn't at its default.
 - **Deletes and other one-way actions** ask in a dialog that names exactly what is affected. Dismissing an alert doesn't ask, because you can undo it.
@@ -126,6 +129,7 @@ The left rail switches between **Investigations**, **Alerts**, **Cases**, **Dash
 | `↑` `↓` | Move through the list |
 | `Esc` | Close a menu, dialog or the list drawer |
 | `?` | Show all shortcuts |
+| `j` `k` · `x` · `e` · `d` | Alert queue: move · select · investigate · close as false positive |
 
 ## Case Management & Reports
 
@@ -149,9 +153,13 @@ Reports include case metadata, analyst notes, the **IOC verdict trail** across e
 
 ## Webhook Alert Ingestion
 
-Let your SIEM push alerts directly into NullShift instead of analysts pasting them in. Alerts land in a shared **Alerts** inbox (sidebar tab) with a live unread badge. An analyst clicks **Investigate** to auto-create a chat seeded with the alert and run it through the normal pipeline, or **Dismiss** to clear it — **Undo** (or **Restore alert** later) puts it back.
+Let your SIEM push alerts directly into NullShift instead of analysts pasting them in. Alerts land in a shared **Alerts** inbox (sidebar tab) with a live unread badge.
 
-The inbox opens on **New** alerts; switch to **Investigating** or **All**, filter by severity, and search by title, source or anything in the raw payload — a hostname, IP or user finds its alerts even when it isn't in the title.
+Each alert opens as a **workbench**: the key facts pulled out of the raw payload (host, user, process, command line, IPs, hashes, domain, rule, MITRE technique, event time) beside the investigation, with the raw JSON one click away. **Investigate** runs the full pipeline right there; when it finishes, the verdict, a short summary, next steps and the IOCs appear on the alert together with the decision that follows — **Close as false positive** (or dismiss for another reason, with a note), **Escalate to case**, or **Ask a follow-up** in the chat behind it. If the Triage agent already looked at the alert, its verdict and reasoning show there too. Every dismissal can be undone (**Undo**, or **Restore alert** later).
+
+**Alerts** opens as a queue table: severity, age, rule, host, source, status, owner, the agent's suggestion and the case. It starts on **New** alerts; switch to **Investigating** or **All**, filter by severity, show only **Mine**, sort oldest first to work the backlog, and search by title, source or anything in the raw payload — a hostname, IP or user finds its alerts even when it isn't in the title. An alert's age turns amber when it has waited past its severity's target (critical 15 min, high 1 h, medium 4 h, low 24 h) and red past twice that.
+
+Select rows (shift-click for a range) to **Close as false positive**, **Dismiss…** for another reason, **Add to case…** (an open case or a new one), or **Investigate together** — one investigation for up to 25 related alerts that decides whether they are one incident. Keyboard: `j`/`k` move, `x` selects, `Enter` opens, `e` investigates, `d` closes as false positive, `Shift+A` selects all. A case lists the alerts added to it.
 
 **1. Enable it**
 
@@ -264,7 +272,8 @@ Agents work the alert inbox without an analyst at the keyboard. They investigate
 
 - Switching an agent on only asks for confirmation when it can act without a human (Triage in autonomous mode, the Investigator closing cases). Shadow mode and switching off never ask.
 - Autonomous dismissals and closures have **Undo** in Activity; **Stop run** ends a run after its current step, and **Stop all agents** switches everything off.
-- A suggested rollout: set the timezone, turn Triage on in **Shadow**, read its notes on the alerts and its reasoning under **Activity → Open investigation** for a few days, then switch to **Autonomous** with a severity limit you're comfortable with.
+- **Triage shadow scorecard** (Agents view): compares what Triage would have done in shadow mode with what analysts then did — agreement per severity, *false dismissals* (Triage would have dismissed, an analyst escalated) and *too cautious* calls, plus the alerts where you disagreed. A severity counts as safe once it has 20 decided alerts, 95% agreement and no false dismissals; the card then offers **Go autonomous up to** that severity.
+- A suggested rollout: set the timezone, turn Triage on in **Shadow**, work the queue as usual for a week or two, and switch to **Autonomous** when the scorecard says a severity is safe.
 
 ## IOC Auto-Enrichment (VirusTotal)
 

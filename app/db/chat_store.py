@@ -1,7 +1,8 @@
+import json
 import sqlite3
 import threading
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 from datetime import datetime, timezone
 import uuid
 
@@ -41,6 +42,7 @@ class ChatStore:
                   role TEXT CHECK(role IN ('user','assistant','system')),
                   content TEXT,
                   created_at TEXT,
+                  meta_json TEXT,
                   FOREIGN KEY(conversation_id) REFERENCES conversations(id)
                 )
                 """
@@ -53,7 +55,25 @@ class ChatStore:
                     cur.execute("ALTER TABLE conversations ADD COLUMN user_id INTEGER")
                 except Exception:
                     pass
+            # Migration: what an assistant reply was built from (report header)
+            cur.execute("PRAGMA table_info(messages)")
+            cols = {r[1] for r in cur.fetchall()}
+            if 'meta_json' not in cols:
+                try:
+                    cur.execute("ALTER TABLE messages ADD COLUMN meta_json TEXT")
+                except Exception:
+                    pass
             self.conn.commit()
+
+    @staticmethod
+    def _row_to_message(r: sqlite3.Row) -> Dict[str, Any]:
+        meta = None
+        if r["meta_json"]:
+            try:
+                meta = json.loads(r["meta_json"])
+            except Exception:
+                meta = None  # a bad row must not hide the conversation
+        return {"role": r["role"], "content": r["content"], "created_at": r["created_at"], "meta": meta}
 
     @staticmethod
     def _now() -> str:
@@ -135,10 +155,10 @@ class ChatStore:
             if not conv:
                 return None
             cur.execute(
-                "SELECT role, content, created_at FROM messages WHERE conversation_id=? ORDER BY created_at ASC",
+                "SELECT role, content, created_at, meta_json FROM messages WHERE conversation_id=? ORDER BY created_at ASC",
                 (conversation_id,),
             )
-            msgs = [dict(r) for r in cur.fetchall()]
+            msgs = [self._row_to_message(r) for r in cur.fetchall()]
             return {"id": conv["id"], "title": conv["title"], "created_at": conv["created_at"], "updated_at": conv["updated_at"], "messages": msgs}
 
     def get_conversation_for_user(self, user_id: int, conversation_id: str) -> Optional[Dict]:
@@ -152,10 +172,10 @@ class ChatStore:
             if not conv:
                 return None
             cur.execute(
-                "SELECT role, content, created_at FROM messages WHERE conversation_id=? ORDER BY created_at ASC",
+                "SELECT role, content, created_at, meta_json FROM messages WHERE conversation_id=? ORDER BY created_at ASC",
                 (conversation_id,),
             )
-            msgs = [dict(r) for r in cur.fetchall()]
+            msgs = [self._row_to_message(r) for r in cur.fetchall()]
             return {"id": conv["id"], "title": conv["title"], "created_at": conv["created_at"], "updated_at": conv["updated_at"], "messages": msgs}
 
     def add_message(self, conversation_id: str, role: str, content: str) -> Dict[str, str]:
@@ -174,11 +194,13 @@ class ChatStore:
             self.conn.commit()
             return {"id": msg_id, "created_at": now}
 
-    def add_message_for_user(self, user_id: int, conversation_id: str, role: str, content: str) -> Dict[str, str]:
+    def add_message_for_user(self, user_id: int, conversation_id: str, role: str, content: str,
+                             meta: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
         """Insert a message only if the conversation belongs to user_id.
 
         Raises PermissionError if the conversation does not exist or is owned
         by a different user (including orphaned rows with user_id IS NULL).
+        `meta` is what an assistant reply was built from (sources, counts).
         """
         with self.lock:
             cur = self.conn.cursor()
@@ -189,8 +211,8 @@ class ChatStore:
             msg_id = uuid.uuid4().hex
             now = self._now()
             cur.execute(
-                "INSERT INTO messages(id, conversation_id, role, content, created_at) VALUES(?,?,?,?,?)",
-                (msg_id, conversation_id, role, content, now),
+                "INSERT INTO messages(id, conversation_id, role, content, created_at, meta_json) VALUES(?,?,?,?,?,?)",
+                (msg_id, conversation_id, role, content, now, json.dumps(meta) if meta is not None else None),
             )
             cur.execute(
                 "UPDATE conversations SET updated_at=? WHERE id=?",
@@ -214,13 +236,13 @@ class ChatStore:
                 )
                 self.conn.commit()
 
-    def last_messages(self, conversation_id: str, limit: int = 20) -> List[Dict[str, str]]:
+    def last_messages(self, conversation_id: str, limit: int = 20) -> List[Dict[str, Any]]:
         with self.lock:
             cur = self.conn.cursor()
             cur.execute(
                 """
-                SELECT role, content, created_at FROM (
-                  SELECT role, content, created_at
+                SELECT role, content, created_at, meta_json FROM (
+                  SELECT role, content, created_at, meta_json
                   FROM messages WHERE conversation_id=?
                   ORDER BY created_at DESC
                   LIMIT ?
@@ -229,7 +251,7 @@ class ChatStore:
                 """,
                 (conversation_id, limit),
             )
-            return [dict(r) for r in cur.fetchall()]
+            return [self._row_to_message(r) for r in cur.fetchall()]
 
     def owner_of(self, conversation_id: str) -> Optional[int]:
         """user_id owning the conversation, or None if it does not exist."""
@@ -251,7 +273,7 @@ class ChatStore:
             self.conn.commit()
             return True
 
-    def last_messages_for_user(self, user_id: int, conversation_id: str, limit: int = 20) -> List[Dict[str, str]]:
+    def last_messages_for_user(self, user_id: int, conversation_id: str, limit: int = 20) -> List[Dict[str, Any]]:
         """Return last messages only if the conversation belongs to user_id.
 
         Raises PermissionError if the conversation does not exist or is owned
@@ -266,8 +288,8 @@ class ChatStore:
                 raise PermissionError(f"conversation {conversation_id} not accessible")
             cur.execute(
                 """
-                SELECT role, content, created_at FROM (
-                  SELECT role, content, created_at
+                SELECT role, content, created_at, meta_json FROM (
+                  SELECT role, content, created_at, meta_json
                   FROM messages WHERE conversation_id=?
                   ORDER BY created_at DESC
                   LIMIT ?
@@ -276,7 +298,7 @@ class ChatStore:
                 """,
                 (conversation_id, limit),
             )
-            return [dict(r) for r in cur.fetchall()]
+            return [self._row_to_message(r) for r in cur.fetchall()]
 
 
 store = ChatStore()

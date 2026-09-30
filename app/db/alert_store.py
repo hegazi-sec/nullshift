@@ -22,6 +22,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.db.incident_store import case_number
+
 
 DB_PATH = Path(__file__).resolve().parent.parent / 'data' / 'chat.db'
 
@@ -131,11 +133,17 @@ class AlertStore:
                 """
             )
             cols = {r[1] for r in cur.execute("PRAGMA table_info(ingested_alerts)")}
-            for col in ("agent_note", "triaged_at"):  # written by the triage/investigator agents
+            # agent_note/triaged_at: written by the triage/investigator agents;
+            # resolution/resolution_note: why an analyst dismissed the alert;
+            # incident_id: the case the alert was escalated or added to.
+            for col in ("agent_note", "triaged_at", "resolution", "resolution_note", "incident_id"):
                 if col not in cols:
                     cur.execute(f"ALTER TABLE ingested_alerts ADD COLUMN {col} TEXT")
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_alerts_status ON ingested_alerts(status, created_at)"
+            )
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS idx_alerts_incident ON ingested_alerts(incident_id)"
             )
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_alerts_detect_id "
@@ -196,9 +204,11 @@ class AlertStore:
         return {"id": alert_id, **fields, "status": "new", "created_at": now}
 
     @staticmethod
-    def _filter(status: Optional[str], severity: Optional[str], q: Optional[str]) -> tuple:
+    def _filter(status: Optional[str], severity: Optional[str], q: Optional[str],
+                claimed_by: Optional[int] = None) -> tuple:
         """WHERE clause for the inbox filters. `q` matches title, source or anywhere in
-        the raw payload (host names, IPs, users), case-insensitively."""
+        the raw payload (host names, IPs, users), case-insensitively; `claimed_by` is
+        the inbox's "mine" filter."""
         # ponytail: LIKE over payload_json scans every row; fine at thousands, FTS5 past that
         conds, args = [], []
         if status:
@@ -211,29 +221,51 @@ class AlertStore:
             like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
             conds.append("(title LIKE ? ESCAPE '\\' OR source LIKE ? ESCAPE '\\' OR payload_json LIKE ? ESCAPE '\\')")
             args += [like] * 3
+        if claimed_by is not None:
+            conds.append("claimed_by=?")
+            args.append(claimed_by)
         return (" WHERE " + " AND ".join(conds) if conds else ""), args
 
     def list(self, status: Optional[str] = None, limit: int = 100, offset: int = 0,
-             severity: Optional[str] = None, q: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Inbox listing, newest first, one page at a time — payload omitted to
-        keep the response small."""
-        where, args = self._filter(status, severity, q)
+             severity: Optional[str] = None, q: Optional[str] = None,
+             claimed_by: Optional[int] = None, oldest: bool = False) -> List[Dict[str, Any]]:
+        """Inbox listing, newest first (oldest first with `oldest`), one page at a
+        time — payload omitted to keep the response small. Rows carry the host and
+        the linked case's number and owner (case_user_id; cases and their numbers
+        are per analyst, so the caller decides who gets to see them)."""
+        where, args = self._filter(status, severity, q, claimed_by)
+        order = "ASC" if oldest else "DESC"
+
+        def sql(case_cols: str) -> str:
+            return f"""
+                SELECT id, source, title, severity, status, claimed_by, conversation_id,
+                       created_at, updated_at, agent_note, resolution, incident_id,
+                       {HOST_EXPR} AS host, {case_cols}
+                FROM ingested_alerts{where}
+                ORDER BY created_at {order} LIMIT ? OFFSET ?
+            """
+
         with self.lock:
             cur = self.conn.cursor()
-            cur.execute(
-                f"""
-                SELECT id, source, title, severity, status, claimed_by,
-                       conversation_id, created_at
-                FROM ingested_alerts{where}
-                ORDER BY created_at DESC LIMIT ? OFFSET ?
-                """,
-                (*args, limit, offset),
-            )
-            return [dict(r) for r in cur.fetchall()]
+            try:
+                # Scalar subqueries, not a JOIN: incidents shares id/status/severity/title
+                # column names with this table and the filters are unqualified.
+                cur.execute(sql("(SELECT case_seq FROM incidents WHERE id = ingested_alerts.incident_id) AS case_seq, "
+                                "(SELECT user_id FROM incidents WHERE id = ingested_alerts.incident_id) AS case_user_id"),
+                            (*args, limit, offset))
+            except sqlite3.OperationalError:
+                # incidents lives in incident_store; a DB without it yet lists without case numbers
+                cur.execute(sql("NULL AS case_seq, NULL AS case_user_id"), (*args, limit, offset))
+            rows = [dict(r) for r in cur.fetchall()]
+        for r in rows:
+            seq = r.pop("case_seq")
+            r["case_number"] = case_number(seq) if seq is not None else None
+        return rows
 
-    def count(self, status: Optional[str] = None, severity: Optional[str] = None, q: Optional[str] = None) -> int:
+    def count(self, status: Optional[str] = None, severity: Optional[str] = None, q: Optional[str] = None,
+              claimed_by: Optional[int] = None) -> int:
         """Alerts matching the filters: the total a paged list is out of."""
-        where, args = self._filter(status, severity, q)
+        where, args = self._filter(status, severity, q, claimed_by)
         with self.lock:
             cur = self.conn.cursor()
             cur.execute(f"SELECT COUNT(*) FROM ingested_alerts{where}", args)
@@ -344,6 +376,19 @@ class AlertStore:
             row = cur.fetchone()
             return dict(row) if row else None
 
+    @staticmethod
+    def _reclaim_cond(conversation_id: Optional[str], user_id: int) -> tuple:
+        """WHERE for re-claiming an 'investigating' alert the caller saw linked to
+        conversation_id (or to none). IS, not =: an alert an agent's undo left
+        'investigating' may have no link at all. With no link, a claim made without
+        a chat (a bulk add to a case) still belongs to its claimant, so only that
+        analyst, or anyone when nobody claimed it, may take it again."""
+        cond, args = "status='investigating' AND conversation_id IS ?", (conversation_id,)
+        if conversation_id is None:
+            cond += " AND (claimed_by IS NULL OR claimed_by=?)"
+            args += (user_id,)
+        return cond, args
+
     def mark_investigating(self, alert_id: str, user_id: int, conversation_id: str,
                            stale_conversation_id: Optional[str] = None, reclaim: bool = False) -> bool:
         """Claim an alert. Only transitions from 'new' — first analyst wins.
@@ -351,10 +396,9 @@ class AlertStore:
         With reclaim (implied by stale_conversation_id), re-claims instead an
         'investigating' alert whose linked conversation (that id, or none when
         it is None) is gone; matching the old link keeps two analysts from
-        both winning the re-claim."""
+        both winning the re-claim (see _reclaim_cond for an alert with no link)."""
         if reclaim or stale_conversation_id:
-            # IS, not =: an alert an agent's undo left 'investigating' may have no link at all
-            cond, args = "status='investigating' AND conversation_id IS ?", (stale_conversation_id,)
+            cond, args = self._reclaim_cond(stale_conversation_id, user_id)
         else:
             cond, args = "status='new'", ()
         with self.lock:
@@ -390,16 +434,18 @@ class AlertStore:
             self.conn.commit()
             return cur.rowcount
 
-    def dismiss(self, alert_id: str, user_id: int) -> bool:
+    def dismiss(self, alert_id: str, user_id: int, resolution: Optional[str] = None,
+                note: Optional[str] = None) -> bool:
+        """Close the alert; claimed_by records who did it, resolution/note why (both optional)."""
         with self.lock:
             cur = self.conn.cursor()
             cur.execute(
                 """
                 UPDATE ingested_alerts
-                SET status='dismissed', claimed_by=?, updated_at=?
+                SET status='dismissed', claimed_by=?, resolution=?, resolution_note=?, updated_at=?
                 WHERE id=? AND status IN ('new','investigating')
                 """,
-                (user_id, self._now(), alert_id),
+                (user_id, resolution, note, self._now(), alert_id),
             )
             self.conn.commit()
             return cur.rowcount > 0
@@ -409,11 +455,107 @@ class AlertStore:
         with self.lock:
             cur = self.conn.cursor()
             cur.execute(
-                "UPDATE ingested_alerts SET status=?, claimed_by=?, updated_at=? WHERE id=? AND status='dismissed'",
+                "UPDATE ingested_alerts SET status=?, claimed_by=?, resolution=NULL, resolution_note=NULL, "
+                "updated_at=? WHERE id=? AND status='dismissed'",
                 (status, claimed_by, self._now(), alert_id),
             )
             self.conn.commit()
             return cur.rowcount > 0
+
+    def claim_group(self, alerts: List[Dict[str, Any]], user_id: int,
+                    conversation_id: str) -> List[Dict[str, Any]]:
+        """Claim several alerts into one conversation, each under
+        mark_investigating's guard for the state the caller read it in: 'new',
+        or 'investigating' still linked to the same (gone) conversation. Returns
+        the rows that were won, oldest first, with their host; an alert missing
+        from them changed meanwhile and is left as it is."""
+        now = self._now()
+        won: List[str] = []
+        with self.lock:
+            cur = self.conn.cursor()
+            for a in alerts:
+                if a["status"] == "investigating":
+                    cond, args = self._reclaim_cond(a.get("conversation_id"), user_id)
+                else:
+                    cond, args = "status='new'", ()
+                cur.execute(
+                    f"""
+                    UPDATE ingested_alerts
+                    SET status='investigating', claimed_by=?, conversation_id=?, updated_at=?
+                    WHERE id=? AND {cond}
+                    """,
+                    (user_id, conversation_id, now, a["id"], *args),
+                )
+                if cur.rowcount > 0:
+                    won.append(a["id"])
+            self.conn.commit()
+            if not won:
+                return []
+            cur.execute(
+                f"SELECT *, {HOST_EXPR} AS host FROM ingested_alerts "
+                f"WHERE id IN ({','.join('?' * len(won))}) ORDER BY created_at",
+                won,
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    # ── Bulk actions and case links ──────────────────────────────────────────
+
+    def get_many(self, ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Full rows for these ids, keyed by id (missing ids are simply absent)."""
+        if not ids:
+            return {}
+        with self.lock:
+            cur = self.conn.execute(
+                f"SELECT * FROM ingested_alerts WHERE id IN ({','.join('?' * len(ids))})", ids)
+            return {r["id"]: dict(r) for r in cur.fetchall()}
+
+    def set_incident(self, ids: List[str], incident_id: str) -> int:
+        """Attach alerts to a case. Dismissed alerts are left out; updated_at is not
+        touched because it marks the last status change (see stats.triage_s)."""
+        if not ids:
+            return 0
+        with self.lock:
+            cur = self.conn.execute(
+                f"UPDATE ingested_alerts SET incident_id=? "
+                f"WHERE id IN ({','.join('?' * len(ids))}) AND status != 'dismissed'",
+                (incident_id, *ids),
+            )
+            self.conn.commit()
+            return cur.rowcount
+
+    def claim_new(self, ids: List[str], user_id: int) -> int:
+        """Claim whichever of these alerts are still 'new' for user_id, leaving any
+        conversation link as it is. A claim made meanwhile by someone else stands."""
+        if not ids:
+            return 0
+        with self.lock:
+            cur = self.conn.execute(
+                f"UPDATE ingested_alerts SET status='investigating', claimed_by=?, updated_at=? "
+                f"WHERE id IN ({','.join('?' * len(ids))}) AND status='new'",
+                (user_id, self._now(), *ids),
+            )
+            self.conn.commit()
+            return cur.rowcount
+
+    def for_incident(self, incident_id: str) -> List[Dict[str, Any]]:
+        """The alerts attached to a case, newest first (what the case page lists)."""
+        with self.lock:
+            cur = self.conn.execute(
+                f"""
+                SELECT id, title, severity, status, {HOST_EXPR} AS host, created_at
+                FROM ingested_alerts WHERE incident_id=? ORDER BY created_at DESC
+                """,
+                (incident_id,),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    def unlink_incident(self, incident_id: str) -> int:
+        """A case was deleted: its alerts keep their status but no longer point at it."""
+        with self.lock:
+            cur = self.conn.execute(
+                "UPDATE ingested_alerts SET incident_id=NULL WHERE incident_id=?", (incident_id,))
+            self.conn.commit()
+            return cur.rowcount
 
 
 alerts_inbox = AlertStore()

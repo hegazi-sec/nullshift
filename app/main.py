@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, HTTPException, Depends, Header
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse, Response
 from app.schemas import (
     ChatRequest, ConversationCreate, MessageCreate, ToolExecuteRequest, PrefsUpdate,
-    IncidentCreate, IncidentUpdate, IncidentLink,
+    IncidentCreate, IncidentUpdate, IncidentLink, AlertDismiss, AlertEscalate, AlertGroup, AlertBulk,
 )
 from app.config import settings
 from app.connectors import wazuh, virustotal
@@ -26,6 +26,8 @@ from app.db.verdict_store import verdicts as verdict_store, parse_decision
 from app.db.incident_store import incidents as incident_store
 from app.db.alert_store import alerts_inbox
 from app.db.agent_store import agent_store
+from app.alert_facts import alert_facts
+from app.scorecard import triage_scorecard
 from app.db import user_store
 from app import agents
 from app.reports import build_incident_report_md, build_incident_report_html
@@ -1802,6 +1804,26 @@ def api_get_messages(conversation_id: str, current_user: Dict[str, Any] = Depend
     return {"messages": conv["messages"], "title": conv["title"], "pending": pending}
 
 
+@app.get('/api/iocs')
+def api_get_iocs(request: Request, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """VirusTotal status for the IOC chips: `?v=<ioc>&v=<ioc>` (20 at most, deduped),
+    answered from the VT cache only. An IOC nobody has looked up yet is null: this
+    never calls VirusTotal, so it works without a key and spends no quota."""
+    out: Dict[str, Any] = {}
+    for ioc in request.query_params.getlist("v"):
+        ioc = (ioc or "").strip()
+        if not ioc or len(ioc) > 256 or ioc in out:
+            continue
+        if len(out) >= 20:
+            break
+        try:
+            raw = virustotal.cache.get(ioc)
+            out[ioc] = virustotal.vt_summarize(ioc, raw) if raw else None
+        except Exception:
+            out[ioc] = None  # a corrupt cache row is not the analyst's problem
+    return {"iocs": out}
+
+
 # ─── Webhook alert ingestion ─────────────────────────────────────────────────
 
 _MAX_WEBHOOK_BYTES = 128 * 1024
@@ -1843,16 +1865,39 @@ async def api_ingest_alert(request: Request, source: Optional[str] = None, token
 @app.get('/api/alerts')
 def api_list_alerts(status: Optional[str] = None, limit: int = 100, offset: int = 0,
                     severity: Optional[str] = None, q: Optional[str] = None,
+                    mine: int = 0, sort: str = "newest",
                     current_user: Dict[str, Any] = Depends(get_current_user)):
-    """One page of the inbox, newest first, filtered by status, severity and a search
-    (`q`: title, source or raw payload). `total` counts every match so the UI can page
-    through the backlog; limit=0 fetches counts only."""
-    limit, offset = max(0, min(limit, 500)), max(0, offset)
+    """One page of the inbox, newest first (sort=oldest flips it), filtered by status,
+    severity, a search (`q`: title, source or raw payload) and mine=1 (claimed by this
+    analyst). `total` counts every match so the UI can page through the backlog;
+    limit=0 fetches counts only. Rows carry the host, the holder's username and the
+    linked case's number so the queue can be worked without opening each alert. Cases
+    are per analyst, so incident_id and case_number show only for the viewer's own;
+    another analyst's case reads as case_owner_username instead."""
+    limit, offset = max(0, min(limit, 500)), max(0, min(offset, 2**31))  # sqlite raises on an int past 64 bits
     q = (q or "").strip()[:200] or None
+    me = current_user["id"]
+    claimed_by = me if mine else None
+    rows = alerts_inbox.list(status=status, limit=limit, offset=offset, severity=severity, q=q,
+                             claimed_by=claimed_by, oldest=sort == "oldest")
+    # One lookup per distinct id, whether it holds an alert, owns a case, or both.
+    ids = {r["claimed_by"] for r in rows if r["claimed_by"]} | {
+        r["case_user_id"] for r in rows if r["case_user_id"] not in (None, me)}
+    users = {uid: user_store.get_user_by_id(uid) for uid in ids}
+    for r in rows:
+        holder = users.get(r["claimed_by"])
+        r["claimed_by_username"] = holder["username"] if holder else None
+        r["case_owner_username"] = None
+        case_owner = r.pop("case_user_id")
+        if case_owner not in (None, me):
+            # A case number is per analyst, so another's would read as one of the viewer's own.
+            r["incident_id"] = r["case_number"] = None
+            owner = users.get(case_owner)
+            r["case_owner_username"] = owner["username"] if owner else None
     return {
-        "alerts": alerts_inbox.list(status=status, limit=limit, offset=offset, severity=severity, q=q),
+        "alerts": rows,
         "new_count": alerts_inbox.count_new(),
-        "total": alerts_inbox.count(status, severity, q),
+        "total": alerts_inbox.count(status, severity, q, claimed_by),
     }
 
 
@@ -1904,6 +1949,13 @@ def api_agents(current_user: Dict[str, Any] = Depends(get_current_user)):
         "me": current_user["username"],
         "me_id": current_user["id"],  # agent log rows carry owner_id; the UI links only its own chats
     }
+
+
+@app.get('/api/agents/scorecard')
+def api_agents_scorecard(days: int = 7, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """How the triage agent's shadow decisions compare with what analysts then did
+    with the same alerts, per severity, with a recommended auto-dismiss limit."""
+    return triage_scorecard(max(1, min(days, 90)))
 
 
 @app.put('/api/agents/config')
@@ -2006,12 +2058,107 @@ def _alert_seed(alert: Dict[str, Any]) -> str:
     )
 
 
+_GROUP_SEED_MAX = 20_000
+_GROUP_PAYLOAD_MAX = 1_500
+
+
+def _alert_group_seed(alerts: List[Dict[str, Any]]) -> str:
+    """Seed for investigating several alerts as one: every alert side by side
+    (rows from AlertStore.claim_group, which carry the host), then the verdict
+    ask the single-alert flow gets. Payloads are cut to 1,500 chars, and to an
+    even share of what is left when the whole seed would pass 20,000."""
+    def block(a: Dict[str, Any], payload: str) -> str:
+        return (f"### {a['title']}\n"
+                f"severity: {a['severity']} · source: {a['source']} · host: {a.get('host') or 'unknown host'} · "
+                f"received {a['created_at']}\n```json\n{payload}\n```")
+
+    head = (f"Investigate these {len(alerts)} related alerts together, first at {alerts[0]['created_at']}, "
+            f"last at {alerts[-1]['created_at']}. Decide whether they are one incident (the same activity, "
+            f"host or attacker seen more than once) or separate events, and assess them as a whole.")
+    frame = "\n\n".join([head, *(block(a, "\n… (truncated)") for a in alerts), agents._VERDICT_ASK])
+    cap = min(_GROUP_PAYLOAD_MAX, max(0, (_GROUP_SEED_MAX - len(frame)) // len(alerts)))
+    blocks = []
+    for a in alerts:
+        payload = a.get("payload_json") or "{}"
+        if len(payload) > cap:
+            payload = payload[:cap] + "\n… (truncated)"
+        blocks.append(block(a, payload))
+    return "\n\n".join([head, *blocks, agents._VERDICT_ASK])
+
+
+def _alert_investigation(alert: Dict[str, Any], current_user: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The investigation this analyst can open for the alert, or None: their own
+    chat on it once it has a reply or is running, else the triage agent's chat
+    (when they own it), else their own chat even if still empty. Chats belong
+    to one user, so nobody else's ever shows."""
+    import json as _json
+    uid = current_user["id"]
+    own_cid = alert.get("conversation_id")
+    # The agent's chat comes from its newest log entry naming this alert; in
+    # autonomous mode it is also the alert's own conversation_id.
+    entry = next((e for e in agent_store.for_alert(alert["id"]) if e["agent"] == "triage"), None)
+    agent_cid = _json.loads(entry["data_json"] or "{}").get("conversation_id") if entry else None
+    # Pending before the messages, as in api_get_messages: a run saves its reply
+    # before it leaves the registry, so a finishing chat never looks dead.
+    pending = {c: _pending(c, uid) for c in (own_cid, agent_cid) if c}
+    own = store.get_conversation_for_user(uid, own_cid) if own_cid else None
+    agent = own if agent_cid == own_cid else (store.get_conversation_for_user(uid, agent_cid) if agent_cid else None)
+
+    def last_reply(conv: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        return next((x for x in reversed(conv["messages"]) if x["role"] == "assistant"), None)
+
+    if own and (pending[own_cid] or last_reply(own)):
+        conv = own
+    elif agent:
+        conv = agent
+    elif own:
+        conv = own
+    else:
+        return None
+    reply = last_reply(conv)
+    is_agent = conv["id"] == agent_cid
+    return {
+        "conversation_id": conv["id"],
+        "source": "agent" if is_agent else "analyst",
+        "agent": "triage" if is_agent else None,
+        "agent_action": entry["action"] if is_agent else None,
+        "pending": pending[conv["id"]],
+        "report": reply["content"] if reply else None,
+        "meta": reply.get("meta") if reply else None,  # set by the message pipeline on newer replies
+        "updated_at": reply["created_at"] if reply else None,
+    }
+
+
+def _alert_view(alert: Dict[str, Any], current_user: Dict[str, Any]) -> Dict[str, Any]:
+    """GET /api/alerts/{id}: the row, who holds it, its key facts and the
+    investigation this analyst can open — everything the alert page shows."""
+    import json as _json
+    try:
+        payload = _json.loads(alert.get("payload_json") or "{}")
+    except Exception:
+        payload = None
+    return {
+        **alert, **_alert_claim(alert, current_user),
+        "facts": alert_facts(payload) if payload is not None else [],
+        "investigation": _alert_investigation(alert, current_user),
+    }
+
+
 @app.get('/api/alerts/{alert_id}')
 def api_get_alert(alert_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     alert = alerts_inbox.get(alert_id)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    return {**alert, **_alert_claim(alert, current_user)}
+    return _alert_view(alert, current_user)
+
+
+def _chatless_claimant(alert: Dict[str, Any], uid: int) -> Optional[int]:
+    """The other analyst who holds an 'investigating' alert that has no chat, else
+    None. A claim made without a chat (a bulk add to a case) still belongs to its
+    claimant; one nobody made (an undone agent decision) can be claimed by anyone."""
+    holder = alert.get("claimed_by")
+    held = alert["status"] == "investigating" and not alert.get("conversation_id")
+    return holder if held and holder not in (None, uid) else None
 
 
 @app.post('/api/alerts/{alert_id}/investigate')
@@ -2023,14 +2170,17 @@ def api_investigate_alert(alert_id: str, fork: bool = False,
     With fork=1, an alert whose chat belongs to someone else (or a dismissed
     one) gets a separate chat for this analyst instead, and the alert itself
     (status, claim, linked chat) is left as it is. A 'new' alert is claimed as
-    usual even if an undone agent decision left another user's chat on it."""
+    usual even if an undone agent decision left another user's chat on it. An
+    alert someone else claimed without a chat stays theirs: the answer is
+    already_claimed (or, with fork=1, a separate chat), never a takeover."""
     alert = alerts_inbox.get(alert_id)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
+    claimant = _chatless_claimant(alert, current_user["id"])
     if fork and alert["status"] != "new":
         cid = alert.get("conversation_id")
         owner = store.owner_of(cid) if cid else None
-        theirs = owner is not None and owner != current_user["id"]
+        theirs = claimant is not None or (owner is not None and owner != current_user["id"])
         if theirs or (alert["status"] == "dismissed" and owner != current_user["id"]):
             conv = store.create_conversation_for_user(
                 current_user["id"], title=f"[Alert] {alert['title']}"[:60]
@@ -2039,6 +2189,9 @@ def api_investigate_alert(alert_id: str, fork: bool = False,
                     "forked": True, **_alert_claim(alert, current_user), "conversation_is_mine": True}
     if alert["status"] == "dismissed":
         raise HTTPException(status_code=409, detail="Alert was dismissed")
+    if claimant is not None:
+        return {"conversation_id": None, "already_claimed": True, "seed_message": None,
+                **_alert_claim(alert, current_user)}
     reclaim = alert["status"] == "investigating"
     cid = alert.get("conversation_id") if reclaim else None
     if cid:
@@ -2069,11 +2222,128 @@ def api_investigate_alert(alert_id: str, fork: bool = False,
             "claimed_by_username": current_user["username"], "conversation_is_mine": True}
 
 
+def _group_shortfall(skipped: Dict[str, str]) -> str:
+    """409 detail: too few alerts could be investigated, and why the rest were skipped."""
+    counts: Dict[str, int] = {}
+    for reason in skipped.values():
+        counts[reason] = counts.get(reason, 0) + 1
+    why = ", ".join(f"{n} {r}" if n > 1 else r for r, n in counts.items())
+    n = len(skipped)
+    return (f"Need at least 2 alerts that can be investigated; "
+            f"{n} {'was' if n == 1 else 'were'} skipped: {why}")
+
+
+@app.post('/api/alerts/investigate-group')
+def api_investigate_alert_group(payload: AlertGroup, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Claim several related alerts into ONE new chat for this analyst and
+    return the seed message the UI sends through the normal chat pipeline, as
+    the single-alert Investigate does. An alert is claimable on the same terms
+    as there: 'new', or 'investigating' with its chat gone (unless someone else
+    claimed it without a chat). The rest (dismissed, held by someone else,
+    already in one of this analyst's chats, unknown) are
+    reported in `skipped` and left alone; under 2 claimable is a 409 and
+    nothing is created."""
+    ids = list(dict.fromkeys(i.strip() for i in payload.ids if i and i.strip()))
+    if not 2 <= len(ids) <= 25:
+        raise HTTPException(status_code=400, detail="Send 2 to 25 distinct alert ids")
+    uid = current_user["id"]
+    claimable: List[Dict[str, Any]] = []
+    skipped: Dict[str, str] = {}
+    for alert_id in ids:
+        alert = alerts_inbox.get(alert_id)
+        if not alert:
+            skipped[alert_id] = "not found"
+        elif alert["status"] == "dismissed":
+            skipped[alert_id] = "dismissed"
+        else:
+            # A 'new' alert's stale link (an undone agent decision) is ignored, as in api_investigate_alert.
+            cid = alert.get("conversation_id") if alert["status"] == "investigating" else None
+            owner = store.owner_of(cid) if cid else None
+            holder_id = owner if owner is not None else _chatless_claimant(alert, uid)
+            if holder_id is None:
+                claimable.append(alert)
+            elif holder_id == uid:
+                skipped[alert_id] = "already in your investigation"
+            else:
+                holder = user_store.get_user_by_id(holder_id)
+                skipped[alert_id] = f"being investigated by {holder['username'] if holder else 'another analyst'}"
+    if len(claimable) < 2:
+        raise HTTPException(status_code=409, detail=_group_shortfall(skipped))
+
+    n, first = len(claimable), claimable[0]["title"]
+    same = all(a["title"] == first for a in claimable)
+    title = (f"[Alerts] {n} × {first}" if same else f"[Alerts] {n} alerts: {first}")[:60]
+    conv = store.create_conversation_for_user(uid, title=title)
+    claimed = alerts_inbox.claim_group(claimable, uid, conv["id"])
+    won = {a["id"] for a in claimed}
+    for a in claimable:
+        if a["id"] not in won:
+            skipped[a["id"]] = "claimed meanwhile"
+    if len(claimed) < 2:
+        # Raced with another analyst down to one or none: undo the claims we did
+        # win (back to 'new', unclaimed) and drop the chat, as deleting it would.
+        alerts_inbox.detach_conversation(conv["id"])
+        store.delete_conversation_for_user(uid, conv["id"])
+        raise HTTPException(status_code=409, detail=_group_shortfall(skipped))
+    log.info("Alerts %s investigated as a group in %s by %s", sorted(won), conv["id"], current_user.get("username"))
+    return {"conversation_id": conv["id"], "title": conv["title"], "seed_message": _alert_group_seed(claimed),
+            "claimed": [a["id"] for a in claimed], "skipped": skipped}
+
+
+_RESOLUTIONS = ("false_positive", "benign", "duplicate", "not_actionable")
+
+
 @app.post('/api/alerts/{alert_id}/dismiss')
-def api_dismiss_alert(alert_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
-    if not alerts_inbox.dismiss(alert_id, current_user["id"]):
+def api_dismiss_alert(alert_id: str, payload: Optional[AlertDismiss] = None,
+                      current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Close an alert, optionally recording why (resolution + note). No body: a plain dismissal."""
+    resolution = ((payload.resolution if payload else None) or "").strip() or None
+    note = ((payload.note if payload else None) or "").strip() or None
+    if resolution and resolution not in _RESOLUTIONS:
+        raise HTTPException(status_code=400, detail=f"resolution must be one of: {', '.join(_RESOLUTIONS)}")
+    if note and len(note) > 500:
+        raise HTTPException(status_code=400, detail="note must be 500 characters or fewer")
+    if not alerts_inbox.dismiss(alert_id, current_user["id"], resolution, note):
         raise HTTPException(status_code=404, detail="Alert not found or already dismissed")
     return {"ok": True}
+
+
+@app.post('/api/alerts/{alert_id}/escalate')
+def api_escalate_alert(alert_id: str, payload: Optional[AlertEscalate] = None,
+                       current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Open a case for the alert as this analyst, linked to the chat they own on
+    it (the body's conversation_id, else the alert's own), attach the alert to
+    it and claim the alert if it is still queued. Someone else's investigation
+    is not taken over."""
+    alert = alerts_inbox.get(alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    if alert["status"] == "dismissed":
+        raise HTTPException(status_code=409, detail="Alert was dismissed; restore it first")
+    uid = current_user["id"]
+    own_cid = alert.get("conversation_id")
+    owner = store.owner_of(own_cid) if own_cid else None
+    # The claimant, else the chat's owner: a case-only claim (bulk add to case) has no chat.
+    holder_id = alert.get("claimed_by") or owner
+    if alert["status"] == "investigating" and holder_id not in (None, uid):
+        holder = user_store.get_user_by_id(holder_id)
+        raise HTTPException(status_code=409,
+                            detail=f"Being investigated by {holder['username'] if holder else 'another analyst'}")
+    wanted = payload.conversation_id if payload else None
+    cid = wanted if wanted and store.owner_of(wanted) == uid else (own_cid if owner == uid else None)
+    inc = incident_store.create(
+        user_id=uid, title=alert["title"][:120], severity=alert["severity"],
+        notes=f"Escalated from alert: {alert['title']} ({alert['source']}).",
+    )
+    if cid:
+        incident_store.link_conversation(uid, inc["id"], cid)
+    if alert["status"] == "new":
+        # Only from 'new': a claim another analyst made meanwhile stands. cid may be None.
+        alerts_inbox.mark_investigating(alert_id, uid, cid)
+    alerts_inbox.set_incident([alert_id], inc["id"])  # escalating again moves the alert to the newer case
+    log.info("Alert %s escalated to case %s by %s", alert_id, inc["case_number"], current_user.get("username"))
+    return {"incident": incident_store.get_for_user(uid, inc["id"]),
+            "alert": _alert_view(alerts_inbox.get(alert_id) or alert, current_user)}
 
 
 @app.post('/api/alerts/{alert_id}/restore')
@@ -2089,6 +2359,101 @@ def api_restore_alert(alert_id: str, current_user: Dict[str, Any] = Depends(get_
                                 alert["claimed_by"] if own_chat else None):
         raise HTTPException(status_code=409, detail="The alert changed meanwhile; reload it")
     return {"ok": True}
+
+
+_BULK_ACTIONS = ("dismiss", "restore", "add_to_case")
+
+
+@app.post('/api/alerts/bulk')
+def api_bulk_alerts(payload: AlertBulk, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Work the queue at volume: dismiss, restore or add up to 200 alerts to a case
+    (an existing one of this analyst's, or a new one) in one call. Every id gets
+    its own outcome ("ok" or a short reason) so one bad id never fails the rest;
+    only a malformed request (400) or someone else's case_id (404) does."""
+    from app.db.incident_store import SEVERITIES
+    if len(payload.ids) > 200:
+        raise HTTPException(status_code=400, detail="ids must contain at most 200 alert ids")
+    ids = list(dict.fromkeys(i.strip() for i in payload.ids if i and i.strip()))
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids must contain at least one alert id")
+    if payload.action not in _BULK_ACTIONS:
+        raise HTTPException(status_code=400, detail=f"action must be one of: {', '.join(_BULK_ACTIONS)}")
+    uid = current_user["id"]
+    alerts = alerts_inbox.get_many(ids)
+    results = {i: "not found" for i in ids}  # request order; overwritten below for the ids that exist
+
+    if payload.action == "dismiss":
+        # Same rules as api_dismiss_alert.
+        resolution = (payload.resolution or "").strip() or None
+        note = (payload.note or "").strip() or None
+        if resolution and resolution not in _RESOLUTIONS:
+            raise HTTPException(status_code=400, detail=f"resolution must be one of: {', '.join(_RESOLUTIONS)}")
+        if note and len(note) > 500:
+            raise HTTPException(status_code=400, detail="note must be 500 characters or fewer")
+        for i, a in alerts.items():
+            if a["status"] == "dismissed":
+                results[i] = "already dismissed"
+            else:
+                results[i] = "ok" if alerts_inbox.dismiss(i, uid, resolution, note) else "changed meanwhile"
+        log.info("Bulk dismiss by %s: %d ok of %d", current_user.get("username"),
+                 sum(r == "ok" for r in results.values()), len(ids))
+        return {"results": results, "incident": None}
+
+    if payload.action == "restore":
+        # Same rules as api_restore_alert.
+        for i, a in alerts.items():
+            if a["status"] != "dismissed":
+                results[i] = "not dismissed"
+                continue
+            cid = a.get("conversation_id")
+            own_chat = bool(cid) and a["claimed_by"] is not None and store.owner_of(cid) == a["claimed_by"]
+            ok = alerts_inbox.restore(i, "investigating" if own_chat else "new", a["claimed_by"] if own_chat else None)
+            results[i] = "ok" if ok else "changed meanwhile"
+        return {"results": results, "incident": None}
+
+    # add_to_case
+    new_case = payload.new_case
+    if bool(payload.case_id) == bool(new_case):
+        raise HTTPException(status_code=400, detail="add_to_case needs exactly one of case_id or new_case")
+    if new_case and new_case.severity and new_case.severity not in SEVERITIES:
+        raise HTTPException(status_code=400, detail=f"severity must be one of: {', '.join(SEVERITIES)}")
+    inc = incident_store.get_for_user(uid, payload.case_id) if payload.case_id else None
+    if payload.case_id and not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    # Who holds each alert: the claimant, else the owner of its chat (agent-triaged
+    # alerts record no claimant). One lookup per distinct chat and per distinct holder.
+    owners = {cid: store.owner_of(cid) for cid in {a.get("conversation_id") for a in alerts.values()} if cid}
+    holders = {i: a["claimed_by"] or owners.get(a.get("conversation_id")) for i, a in alerts.items()}
+    names = {h: user_store.get_user_by_id(h) for h in set(holders.values()) if h not in (None, uid)}
+    eligible = []
+    for i, a in alerts.items():
+        if a["status"] == "dismissed":
+            results[i] = "dismissed"
+        elif a["status"] == "investigating" and holders[i] not in (None, uid):
+            who = names.get(holders[i])
+            results[i] = f"being investigated by {who['username'] if who else 'another analyst'}"
+        else:
+            eligible.append(i)
+    if not inc:
+        if not eligible:
+            return {"results": results, "incident": None}  # nothing to put in a case, so none is opened
+        severity = new_case.severity or max((alerts[i]["severity"] for i in eligible), key=SEVERITIES.index)
+        inc = incident_store.create(user_id=uid, title=new_case.title, severity=severity,
+                                    notes=f"Created from {len(eligible)} alerts.")
+        inc["conversations"] = []
+    alerts_inbox.set_incident(eligible, inc["id"])
+    alerts_inbox.claim_new(eligible, uid)  # guarded on status='new': an existing claim, own or not, stands
+    linked = {c["conversation_id"] for c in inc["conversations"]}
+    for i in eligible:
+        cid = alerts[i].get("conversation_id")
+        if cid and cid not in linked and owners.get(cid) == uid:
+            incident_store.link_conversation(uid, inc["id"], cid)
+            linked.add(cid)
+        results[i] = "ok"
+    log.info("Bulk add to case %s by %s: %d of %d alerts", inc["case_number"], current_user.get("username"),
+             len(eligible), len(ids))
+    return {"results": results, "incident": {k: inc[k] for k in ("id", "case_number", "title")}}
 
 
 # ─── Incident / case tracking ────────────────────────────────────────────────
@@ -2122,6 +2487,7 @@ def api_get_incident(incident_id: str, current_user: Dict[str, Any] = Depends(ge
     inc = incident_store.get_for_user(current_user["id"], incident_id)
     if not inc:
         raise HTTPException(status_code=404, detail="Incident not found")
+    inc["alerts"] = alerts_inbox.for_incident(incident_id)
     return inc
 
 
@@ -2142,6 +2508,7 @@ def api_update_incident(incident_id: str, payload: IncidentUpdate, current_user:
 def api_delete_incident(incident_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     if not incident_store.delete_for_user(current_user["id"], incident_id):
         raise HTTPException(status_code=404, detail="Incident not found")
+    alerts_inbox.unlink_incident(incident_id)
     return {"ok": True}
 
 
@@ -2499,9 +2866,10 @@ def _post_message_work(conversation_id: str, payload: MessageCreate, current_use
         reply_md = _strip_investigation_format(reply_md)
 
     # Persist assistant reply (scoped write); stopped meanwhile: the reply is dropped.
+    meta = _report_meta(evidence, retrieved)
     _inflight_update(conversation_id, run, answering=True)
     try:
-        store.add_message_for_user(current_user["id"], conversation_id, 'assistant', reply_md)
+        store.add_message_for_user(current_user["id"], conversation_id, 'assistant', reply_md, meta=meta)
     except PermissionError:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -2526,7 +2894,7 @@ def _post_message_work(conversation_id: str, payload: MessageCreate, current_use
             log.exception("verdict_store.record failed")
 
     # Include debug trace if requested (the title was set with the user message)
-    content = {"reply": reply_md}
+    content = {"reply": reply_md, "meta": meta}
     try:
         if getattr(payload, 'debug', False):
             # Prefer the debug trace from this run's evidence if present
@@ -2635,6 +3003,45 @@ async def api_stream_message(conversation_id: str, payload: MessageCreate, curre
     )
 
 
+def _report_meta(evidence: Any, retrieved: Any) -> Optional[Dict[str, Any]]:
+    """What a reply was built from, for the report's "what was checked" line.
+    Tolerates a malformed bundle: the reply matters more than its header."""
+    def count(x: Any) -> int:
+        try:
+            return len(x) if x else 0
+        except TypeError:
+            return 0
+    try:
+        ev = evidence if isinstance(evidence, dict) else {}
+        raw_sources = ev.get("sources_queried")
+        sources: List[str] = []
+        for s in (raw_sources if isinstance(raw_sources, (list, tuple)) else []):
+            if s and str(s) not in sources:
+                sources.append(str(s))
+        raw_calls = ev.get("executed_calls")
+        calls = raw_calls if isinstance(raw_calls, (list, tuple)) else []
+        results = 0
+        for call in calls:
+            try:
+                results += int((call or {}).get("result_count") or 0)
+            except (TypeError, ValueError, AttributeError):
+                pass
+        errors = ev.get("errors")
+        tw = ev.get("time_window")
+        return {
+            "time_window": str(tw) if tw else None,
+            "sources": sources,
+            "queries": len(calls),
+            "results": results,
+            "errors": sorted(str(k) for k, v in errors.items() if v) if isinstance(errors, dict) else [],
+            "vt_checked": count(ev.get("vt_enrichment")),
+            "playbooks": count(retrieved),
+        }
+    except Exception:
+        log.exception("Could not build the report meta")
+        return None
+
+
 def _do_message_work(conversation_id: str, payload: MessageCreate, current_user: Dict[str, Any],
                      csv_markers: str = "", csv_blocks: str = "", mode: Optional[str] = None,
                      turn_started: bool = False) -> Dict[str, Any]:
@@ -2703,9 +3110,10 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
         if debug:
             evidence["_debug_trace"] = debug.to_list()
 
+        meta = _report_meta(evidence, retrieved)
         _inflight_update(conversation_id, run, answering=True)  # stopped meanwhile: the reply is dropped
         try:
-            store.add_message_for_user(current_user["id"], conversation_id, 'assistant', reply_md)
+            store.add_message_for_user(current_user["id"], conversation_id, 'assistant', reply_md, meta=meta)
         except PermissionError:
             pass
         answered = True
@@ -2725,7 +3133,7 @@ def _do_message_work(conversation_id: str, payload: MessageCreate, current_user:
             except Exception:
                 pass
 
-        result: Dict[str, Any] = {"reply": reply_md}
+        result: Dict[str, Any] = {"reply": reply_md, "meta": meta}
         if debug and evidence.get("_debug_trace"):
             result["debug_trace"] = evidence["_debug_trace"]
         return result

@@ -356,5 +356,16 @@ class IncidentStore:
             )
             return [self._row_to_dict(r) for r in cur.fetchall()]
 
+    def case_ids_for_conversation(self, conversation_id: str) -> List[str]:
+        """Ids of every case linked to this conversation, whoever owns it. The
+        agents' scorecard reads alerts across all analysts, so no user scope."""
+        with self.lock:
+            cur = self.conn.cursor()
+            cur.execute(
+                "SELECT incident_id FROM incident_conversations WHERE conversation_id=?",
+                (conversation_id,),
+            )
+            return [r["incident_id"] for r in cur.fetchall()]
+
 
 incidents = IncidentStore()

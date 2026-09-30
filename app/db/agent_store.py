@@ -98,6 +98,15 @@ class AgentStore:
     def targets(self, agent: str) -> Set[str]:
         return {r["target_id"] for r in self._rows("SELECT target_id FROM agent_log WHERE agent=?", agent)}
 
+    def for_alert(self, alert_id: str) -> List[Dict[str, Any]]:
+        """Every entry whose data.alert_ids names this alert, newest first (undone ones included)."""
+        return self._rows(
+            "SELECT * FROM agent_log WHERE EXISTS "
+            "(SELECT 1 FROM json_each(agent_log.data_json, '$.alert_ids') WHERE value = ?) "
+            "ORDER BY created_at DESC",
+            alert_id,
+        )
+
     def last(self, agent: str, action: str) -> Optional[Dict[str, Any]]:
         rows = self._rows(
             "SELECT * FROM agent_log WHERE agent=? AND action=? ORDER BY created_at DESC LIMIT 1", agent, action
