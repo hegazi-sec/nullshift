@@ -2,12 +2,17 @@
 
   triage        every minute: groups new inbox alerts (same source + rule + host),
                 investigates each group once, dismisses high-confidence false
-                positives and opens a case for everything else
+                positives up to a severity limit and opens a case for everything
+                else; shadow mode (the default) only records what it would do
   investigator  every 2 minutes: L2 deep dive on the cases triage opened; closes
                 confirmed false positives, flags the rest for a human and proposes
                 host isolation for malicious findings
-  reporter      once a day: shift report posted as a conversation
+  reporter      at a local hour, then every 24/12/8 hours: shift report covering
+                the hours since the last one, posted as a conversation
   responder     executes an isolation proposal only after an analyst approves it
+
+Optional active hours (a local window plus whole weekend days) gate triage and the
+investigator; the reporter's own schedule and "Run now" ignore them.
 
 Investigations run through the normal chat pipeline (SIEM evidence, playbooks,
 approved tools), acting as the configured owner user because cases and chats
@@ -25,6 +30,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 
@@ -41,11 +47,29 @@ log = logging.getLogger("nullshift.agents")
 AGENTS = ("triage", "investigator", "reporter", "responder")
 DEFAULTS: Dict[str, Any] = {
     "owner": "admin",
-    "triage": {"enabled": False, "max_per_run": 5, "enabled_at": None},
-    "investigator": {"enabled": False, "max_per_run": 2},
-    "reporter": {"enabled": False, "hour_utc": 6},
+    "timezone": "UTC",  # IANA name: the reporter's hour and the active hours are local to it
+    # Triage and investigator run only inside these local hours (start..end, may wrap midnight),
+    # plus all day on the `weekend` weekdays (Monday=0). The reporter keeps its own schedule.
+    "active_hours": {"enabled": False, "start": 18, "end": 8, "weekend": [5, 6]},
+    # mode: "shadow" investigates and notes what it would do, changing nothing; "autonomous" acts.
+    # max_dismiss_severity: groups above it always get a case, whatever the model says.
+    "triage": {"enabled": False, "max_per_run": 5, "enabled_at": None,
+               "mode": "shadow", "max_dismiss_severity": "medium"},
+    # auto_close: "on" closes confirmed false positives, "shadow" only notes it would, "off" never does.
+    # isolate_min_confidence: the lowest confidence that may propose isolation (still needs approval).
+    "investigator": {"enabled": False, "max_per_run": 2, "auto_close": "on", "isolate_min_confidence": "medium"},
+    # First report at `hour` local time, then every `every_hours`; each covers the hours since the last.
+    "reporter": {"enabled": False, "hour": 6, "every_hours": 24},
     "responder": {"enabled": False},
 }
+_CHOICES = {  # option -> allowed values
+    ("triage", "mode"): ("shadow", "autonomous"),
+    ("triage", "max_dismiss_severity"): ("low", "medium", "high", "critical"),
+    ("investigator", "auto_close"): ("on", "shadow", "off"),
+    ("investigator", "isolate_min_confidence"): ("low", "medium", "high"),
+    ("reporter", "every_hours"): (24, 12, 8),
+}
+_CONFIDENCE_ORDER = ["low", "medium", "high"]
 INTERVAL_S = {"triage": 60, "investigator": 120}
 _SEVERITY_ORDER = ["low", "medium", "high", "critical"]
 _VERDICT_ASK = ("End with **Verdict:** (Likely Benign | Suspicious | Malicious | Inconclusive) "
@@ -71,6 +95,17 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _local_now(cfg: Dict[str, Any], now: Optional[datetime] = None) -> datetime:
+    """`now` (default: this moment) in the agents' configured timezone; UTC if that name is unknown
+    here (a hand-edited config, or no tz database), so a bad name never stops the agents."""
+    try:
+        tz = ZoneInfo(cfg.get("timezone") or "UTC")
+    except Exception:
+        log.warning("unknown agent timezone %r, using UTC", cfg.get("timezone"))
+        tz = timezone.utc
+    return (now or datetime.now(timezone.utc)).astimezone(tz)
+
+
 # ── config ────────────────────────────────────────────────────────────
 def load_config() -> Dict[str, Any]:
     try:
@@ -79,9 +114,19 @@ def load_config() -> Dict[str, Any]:
         saved = {}
     cfg = json.loads(json.dumps(DEFAULTS))
     cfg["owner"] = saved.get("owner") or cfg["owner"]
-    for a in AGENTS:
-        if isinstance(saved.get(a), dict):
-            cfg[a].update({k: v for k, v in saved[a].items() if k in cfg[a]})
+    cfg["timezone"] = saved.get("timezone") or cfg["timezone"]
+    for section in ("active_hours", *AGENTS):
+        if isinstance(saved.get(section), dict):
+            cfg[section].update({k: v for k, v in saved[section].items() if k in cfg[section]})
+    # Saved before these options existed: running agents keep doing what they did (autonomous triage
+    # dismissing at any severity, isolation proposed at any confidence); the UTC hour carries over.
+    old_triage, old_inv, old_reporter = saved.get("triage") or {}, saved.get("investigator") or {}, saved.get("reporter") or {}
+    if old_triage.get("enabled") and "mode" not in old_triage:
+        cfg["triage"].update(mode="autonomous", max_dismiss_severity="critical")
+    if old_inv.get("enabled") and "isolate_min_confidence" not in old_inv:
+        cfg["investigator"]["isolate_min_confidence"] = "low"
+    if "hour_utc" in old_reporter and "hour" not in old_reporter:
+        cfg["reporter"]["hour"] = int(old_reporter["hour_utc"]) % 24
     return cfg
 
 
@@ -89,14 +134,33 @@ def save_config(update: Dict[str, Any]) -> Dict[str, Any]:
     cfg = load_config()
     if update.get("owner"):
         cfg["owner"] = str(update["owner"])
+    if "timezone" in update:
+        tz = str(update["timezone"] or "").strip() or "UTC"
+        try:
+            ZoneInfo(tz)
+        except Exception:
+            raise ValueError(f"unknown timezone {tz!r}")
+        cfg["timezone"] = tz
+    for k, v in (update.get("active_hours") or {}).items():
+        if k == "enabled":
+            cfg["active_hours"][k] = bool(v)
+        elif k in ("start", "end"):
+            cfg["active_hours"][k] = int(v) % 24
+        elif k == "weekend":
+            cfg["active_hours"][k] = sorted({int(d) for d in v if 0 <= int(d) <= 6})
     for a in AGENTS:
         for k, v in (update.get(a) or {}).items():
             if k == "enabled":
                 cfg[a][k] = bool(v)
             elif k == "max_per_run":
                 cfg[a][k] = max(1, min(int(v), 50))
-            elif k == "hour_utc":
+            elif k == "hour":
                 cfg[a][k] = int(v) % 24
+            elif (a, k) in _CHOICES:
+                v = int(v) if k == "every_hours" else v
+                if v not in _CHOICES[(a, k)]:
+                    raise ValueError(f"{a}.{k} must be one of {', '.join(map(str, _CHOICES[(a, k)]))}")
+                cfg[a][k] = v
     # Triage only sees alerts that arrive after it is switched on, never the existing backlog.
     if not cfg["triage"]["enabled"]:
         cfg["triage"]["enabled_at"] = None
@@ -138,6 +202,8 @@ def _confident_fp(verdict: Optional[str], confidence: Optional[str]) -> bool:
 # ── triage ────────────────────────────────────────────────────────────
 def run_triage(cfg: Dict[str, Any]) -> str:
     owner = _owner(cfg)
+    shadow = cfg["triage"]["mode"] == "shadow"
+    limit = cfg["triage"]["max_dismiss_severity"]
     groups: Dict[tuple, List[Dict[str, Any]]] = {}
     for a in alerts_inbox.untriaged(cfg["triage"]["enabled_at"] or _now()):
         groups.setdefault((a["source"], a["title"], a["host"] or "unknown host"), []).append(a)
@@ -160,14 +226,23 @@ def run_triage(cfg: Dict[str, Any]) -> str:
         ids = [a["id"] for a in alerts]
         data = {"alert_ids": ids, "conversation_id": conv, "owner_id": owner["id"]}
         label = f"{len(ids)} × {title} on {host}"
-        if _confident_fp(verdict, conf):
+        severity = max((a["severity"] for a in alerts), key=_SEVERITY_ORDER.index)
+        outcome = f"{verdict or 'no verdict'} ({conf or 'unknown'} confidence)"
+        fp = _confident_fp(verdict, conf)
+        if fp and _SEVERITY_ORDER.index(severity) > _SEVERITY_ORDER.index(limit):
+            fp = False  # the model is trusted to dismiss only up to the configured severity
+            outcome += f", above the auto-dismiss limit ({limit})"
+        if shadow:  # the chat holds the reasoning; the alerts stay 'new' for a human
+            would = "dismiss as false positive" if fp else f"open a case: {outcome}"
+            detail = f"Would dismiss as false positive: {label}" if fp else f"Would open a case: {label}, {outcome}"
+            alerts_inbox.mark_triaged(ids, f"Triage agent (shadow): would {would}")
+            agent_store.log("triage", "shadow", conv, detail, data)
+        elif fp:
             alerts_inbox.set_agent_outcome(ids, "dismissed", "Triage agent: false positive (High confidence)", conv)
             agent_store.log("triage", "dismissed", conv, f"False positive: {label}", data)
         else:
-            outcome = f"{verdict or 'no verdict'} ({conf or 'unknown'} confidence)"
             inc = incident_store.create(
-                user_id=owner["id"], title=f"{title} on {host}"[:120],
-                severity=max((a["severity"] for a in alerts), key=_SEVERITY_ORDER.index),
+                user_id=owner["id"], title=f"{title} on {host}"[:120], severity=severity,
                 notes=f"Opened by the triage agent: {outcome}.",
             )
             incident_store.link_conversation(owner["id"], inc["id"], conv)
@@ -176,7 +251,8 @@ def run_triage(cfg: Dict[str, Any]) -> str:
                             {**data, "case_number": inc["case_number"]})
         done += 1
     waiting = len(groups) - done
-    return f"{done} group(s) triaged" + (f", {waiting} waiting for the next run" if waiting else "")
+    return (f"{done} group(s) {'assessed in shadow' if shadow else 'triaged'}"
+            + (f", {waiting} waiting for the next run" if waiting else ""))
 
 
 # ── investigator ──────────────────────────────────────────────────────
@@ -213,20 +289,39 @@ def run_investigator(cfg: Dict[str, Any]) -> str:
         m = _RECOMMEND_RE.search(reply)
         recommend = m.group(1).lower() if m else None
         outcome = f"{verdict or 'no verdict'} ({conf or 'unknown'} confidence), recommends {recommend or 'nothing'}"
-        notes = f"{case.get('notes') or ''}\nInvestigator agent: {outcome}."
         ids = data.get("alert_ids", [])
-        if conf == "High" and (verdict == "Likely Benign" or (verdict is None and recommend == "close")):
+        opts = cfg["investigator"]
+        fp = conf == "High" and (verdict == "Likely Benign" or (verdict is None and recommend == "close"))
+        if fp and opts["auto_close"] == "off":
+            outcome += ", false positive but auto-close is off"
+        # Isolation needs at least isolate_min_confidence; a missing or unknown confidence counts as low.
+        wants_isolation = verdict == "Malicious" or recommend == "isolate"
+        level = (conf or "").lower()
+        level = _CONFIDENCE_ORDER.index(level) if level in _CONFIDENCE_ORDER else 0
+        if wants_isolation and level < _CONFIDENCE_ORDER.index(opts["isolate_min_confidence"]):
+            wants_isolation = False
+            outcome += (f"; isolation not proposed: {conf or 'unknown'} confidence is below the minimum "
+                        f"({opts['isolate_min_confidence']})")
+        notes = f"{case.get('notes') or ''}\nInvestigator agent: {outcome}."
+        if fp and opts["auto_close"] == "on":
             incident_store.update_for_user(case["user_id"], case["id"], {
                 "status": "closed", "verdict": "False positive", "notes": notes + " Closed as false positive."})
             alerts_inbox.set_agent_outcome(ids, "dismissed", f"Investigator agent: false positive, case {case['case_number']} closed")
             agent_store.log("investigator", "case_closed", case["id"], f"{case['case_number']}: closed as false positive", data)
+        elif fp and opts["auto_close"] == "shadow":
+            # Logged against the case id so the next run treats it as handled; a human closes it.
+            incident_store.update_for_user(case["user_id"], case["id"], {
+                "status": "investigating", "verdict": "Likely Benign",
+                "notes": notes + " Investigator agent (shadow): would close as false positive. Needs human review."})
+            agent_store.log("investigator", "shadow", case["id"], f"{case['case_number']}: would close as false positive", data)
         else:
-            fields = {"status": "investigating", "verdict": verdict or "Inconclusive", "notes": notes + " Needs human review."}
+            fields = {"status": "investigating", "verdict": verdict or ("Likely Benign" if fp else "Inconclusive"),
+                      "notes": notes + " Needs human review."}
             if verdict == "Malicious":
                 fields["severity"] = "critical" if conf == "High" else "high"
             incident_store.update_for_user(case["user_id"], case["id"], fields)
             agent_store.log("investigator", "needs_review", case["id"], f"{case['case_number']}: {outcome}, needs human review", data)
-            if verdict == "Malicious" or recommend == "isolate":
+            if wants_isolation:
                 for sid, host in alerts_inbox.sensors(ids):
                     p = agent_store.propose(case["id"], sid, host, f"{case['case_number']}: {outcome}")
                     if p:
@@ -238,15 +333,18 @@ def run_investigator(cfg: Dict[str, Any]) -> str:
 # ── reporter ──────────────────────────────────────────────────────────
 def run_reporter(cfg: Dict[str, Any]) -> str:
     owner = _owner(cfg)
-    day_ago = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-    s = alerts_inbox.stats(24)
-    acts = Counter(f"{e['agent']}:{e['action']}" for e in agent_store.since(day_ago) if not e["undone_at"])
+    hours = int(cfg["reporter"]["every_hours"])
+    now = datetime.now(timezone.utc)
+    since = (now - timedelta(hours=hours)).isoformat()  # UTC ISO, like the stores' created_at/updated_at
+    s = alerts_inbox.stats(hours)
+    acts = Counter(f"{e['agent']}:{e['action']}" for e in agent_store.since(since) if not e["undone_at"])
     cases = [c for c in incident_store.list_for_user(owner["id"]) if c["status"] != "closed"]
-    stale = [c["case_number"] for c in cases if (c.get("updated_at") or "") < day_ago]
+    stale = [c["case_number"] for c in cases if (c.get("updated_at") or "") < since]
     pending = sum(p["status"] == "proposed" for p in agent_store.proposals(200))
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    local = _local_now(cfg, now)
+    date = local.strftime("%Y-%m-%d" if hours == 24 else "%Y-%m-%d %H:00")
     lines = [
-        f"## Shift report, {date} (last 24h)",
+        f"## Shift report, {date} {cfg.get('timezone') or 'UTC'} (last {hours}h)",
         f"- Alerts received: **{s['total']}**; unacknowledged backlog: **{s['backlog'].get('new', 0)}**; "
         f"being investigated: **{s['backlog'].get('investigating', 0)}**",
         f"- Triage agent: {acts['triage:dismissed']} alert group(s) dismissed as false positives, "
@@ -254,8 +352,11 @@ def run_reporter(cfg: Dict[str, Any]) -> str:
         f"- Investigator agent: {acts['investigator:case_closed']} case(s) closed as false positives, "
         f"{acts['investigator:needs_review']} flagged for human review, "
         f"{acts['investigator:proposed']} isolation proposal(s)",
+        *([f"- Shadow mode (nothing changed): triage assessed {acts['triage:shadow']} alert group(s), "
+           f"the investigator would have closed {acts['investigator:shadow']} case(s)"]
+          if acts["triage:shadow"] or acts["investigator:shadow"] else []),
         f"- Isolation proposals awaiting approval: **{pending}**",
-        f"- Open cases: **{len(cases)}**" + (f"; no update for 24h: {', '.join(stale)}" if stale else ""),
+        f"- Open cases: **{len(cases)}**" + (f"; no update for {hours}h: {', '.join(stale)}" if stale else ""),
     ]
     if s["top_rules"]:
         lines += ["", "### Top detection rules", *[f"- {r['name']}: {r['n']}" for r in s["top_rules"]]]
@@ -265,10 +366,20 @@ def run_reporter(cfg: Dict[str, Any]) -> str:
     return "shift report posted"
 
 
-def _reporter_due(cfg: Dict[str, Any]) -> bool:
-    now = datetime.now(timezone.utc)
+def _reporter_due(cfg: Dict[str, Any], now: Optional[datetime] = None) -> bool:
+    """True inside a report slot (local `hour`, then every `every_hours`) until a report is posted in it."""
+    local = _local_now(cfg, now)
+    hour, every = int(cfg["reporter"]["hour"]) % 24, int(cfg["reporter"]["every_hours"])
+    if local.hour not in {(hour + k) % 24 for k in range(0, 24, every)}:
+        return False
+    slot_start = local.replace(minute=0, second=0, microsecond=0, fold=0)  # fold=0: a DST-repeated hour is one slot
     last = agent_store.last("reporter", "report")
-    return now.hour == int(cfg["reporter"]["hour_utc"]) and (not last or last["created_at"][:10] != now.strftime("%Y-%m-%d"))
+    if not last:
+        return True
+    posted = datetime.fromisoformat(last["created_at"])
+    if posted.tzinfo is None:
+        posted = posted.replace(tzinfo=timezone.utc)
+    return posted < slot_start
 
 
 # ── responder (approval-gated containment) ────────────────────────────
@@ -378,14 +489,29 @@ def run_now(name: str) -> bool:
     return True
 
 
+def _active(cfg: Dict[str, Any], now: Optional[datetime] = None) -> bool:
+    """Whether triage and investigator may run at `now` (default: this moment) under the active hours."""
+    hours = cfg["active_hours"]
+    if not hours["enabled"]:
+        return True
+    local = _local_now(cfg, now)
+    if local.weekday() in hours["weekend"]:
+        return True
+    start, end = hours["start"], hours["end"]
+    if start == end:
+        return True
+    return start <= local.hour < end if start < end else local.hour >= start or local.hour < end
+
+
 def _loop(stop: threading.Event) -> None:
     last: Dict[str, float] = {}
     while not stop.wait(15):
         try:
             cfg = load_config()
+            active = _active(cfg)  # `last` stays put while off-hours, so a due agent runs as soon as the window opens
             for name, every in INTERVAL_S.items():
                 due = time.time() - last.get(name, 0) >= every and time.time() >= _paused_until.get(name, 0)
-                if cfg[name]["enabled"] and due:
+                if cfg[name]["enabled"] and due and active:
                     last[name] = time.time()
                     _run(name, cfg)
             if cfg["reporter"]["enabled"] and _reporter_due(cfg):

@@ -19,3 +19,4 @@ python-multipart
 chromadb>=0.4.22
 google-genai>=1.0.0
 pyyaml>=6.0
+tzdata  # zoneinfo data where the OS has none (Windows, slim images): agent timezones

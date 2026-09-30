@@ -313,7 +313,22 @@
 
     /* ── Agents ─────────────────────────────────────── */
     .agent-desc { margin: 0 0 10px; font-size: 12px; line-height: 1.5; color: var(--text); }
-    .agent-warn { margin: -4px 0 10px; font-size: 11px; color: var(--orange); }
+    .agent-warn { margin: -4px 0 10px; font-size: 12px; color: var(--orange); }
+    .agent-note { margin: -4px 0 10px; font-size: 12px; color: var(--accent); }
+    .agent-wait { margin-top: 6px; font-size: 12px; color: var(--yellow); }
+    .agent-more { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
+    .agent-more > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); list-style: none; }
+    .agent-more > summary::before { content: '▸ '; }
+    .agent-more[open] > summary::before { content: '▾ '; }
+    .agent-more > summary:hover { color: var(--text2); }
+    .agent-opt { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: 12px; color: var(--text2); }
+    .agent-opt .fld { max-width: none; }
+    .agent-opt small { font-size: 11px; line-height: 1.5; color: var(--muted); }
+    .agent-opt-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .agent-opt-row .fld { width: auto; }
+    .weekdays { display: flex; gap: 4px; flex-wrap: wrap; }
+    .weekdays label { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--border2); border-radius: 4px; cursor: pointer; }
+    .weekdays label:has(input:checked) { border-color: var(--accent); color: var(--accent); }
     .agent-ctl { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
     .agent-ctl label { display: inline-flex; align-items: center; gap: 8px; }
     .agent-ctl .fld { width: 96px; }
@@ -3102,7 +3117,7 @@ caseBody.addEventListener('click', async e => {
 function focusSelector(el) {
   if (!el || el === document.body) return null
   for (const a of ['data-move', 'data-hide', 'data-show', 'data-reset', 'data-hours', 'data-alert', 'data-inc', 'data-go', 'data-q', 'data-sev', 'data-run',
-                   'data-stop', 'data-prop', 'data-undo', 'data-open-conv', 'data-open-case', 'data-agent', 'id']) {
+                   'data-stop', 'data-prop', 'data-undo', 'data-open-conv', 'data-open-case', 'data-agent', 'data-weekday', 'data-tz-use', 'id']) {
     if (el.hasAttribute?.(a)) {
       let sel = `[${a}="${CSS.escape(el.getAttribute(a))}"]`
       if (a === 'data-move') sel += `[data-dir="${el.dataset.dir}"]`
@@ -3360,15 +3375,49 @@ dashEl.addEventListener('focusout', () => { dashTip.style.display = 'none' })
 // ─── Agents ───────────────────────────────────────────────────────
 // Autonomous triage, investigator and reporter, plus approval-gated containment (app/agents.py).
 const AGENT_INFO = {
-  triage: ['Triage', 'Every minute: groups new alerts by rule and host, investigates each group, dismisses high-confidence false positives and opens a case for the rest.', 'max_per_run', 'Groups per run'],
+  triage: ['Triage', 'Every minute: groups new alerts by rule and host and investigates each group, then dismisses confident false positives and opens a case for the rest (in shadow mode it only notes what it would do).', 'max_per_run', 'Groups per run'],
   investigator: ['Investigator', 'Every 2 minutes: L2 investigation of the cases triage opened. Closes confirmed false positives, flags the rest for a human, proposes isolation for malicious hosts.', 'max_per_run', 'Cases per run'],
-  reporter: ['Reporter', 'Once a day: posts a shift report (alert volume, agent decisions, open and stale cases) as a new investigation.', 'hour_utc', 'Hour (UTC)'],
+  reporter: ['Reporter', 'On a schedule: posts a shift report (alert volume, agent decisions, open and stale cases) as a new investigation.', null, null],
   responder: ['Containment', 'Isolates a host in LimaCharlie only after an admin or L2 analyst approves the proposal. Needs an LC API key allowed to task sensors.', null, null],
 }
 const AGENT_ACTIONS = {
   dismissed: 'Dismissed FP', case_opened: 'Opened case', case_closed: 'Closed as FP', needs_review: 'Needs review',
   proposed: 'Proposed isolation', isolated: 'Isolated host', released: 'Released host', rejected: 'Rejected isolation',
   report: 'Shift report', undone: 'Undone', skipped: 'Skipped', error: 'Error', stopped: 'Stopped',
+  shadow: 'Shadow (no action)',
+}
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']  // Monday=0, as in the server
+const hh = h => `${String(h).padStart(2, '0')}:00`
+const hourOptions = cur => Array.from({ length: 24 }, (_, h) => `<option value="${h}" ${+cur === h ? 'selected' : ''}>${hh(h)}</option>`).join('')
+const choice = (vals, cur) => vals.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${l}</option>`).join('')
+const openMore = new Set()  // "More options" panels left open survive the live re-render
+
+function activeHoursText(c) {  // e.g. "18:00–08:00 Africa/Cairo; all day Fri, Sat"
+  const a = c.active_hours
+  const days = a.weekend.length ? `; all day ${a.weekend.map(d => WEEKDAYS[d]).join(', ')}` : ''
+  return `${a.start === a.end ? 'all day' : `${hh(a.start)}–${hh(a.end)}`} ${c.timezone}${days}`
+}
+
+// Options under each card's "More options". Everything saves on change, like the rest of the card.
+function agentOptionsHtml(name, d, off) {
+  const cfg = d.config[name]
+  const sel = (key, opts, extra = '') => `<select class="fld" data-agent="${name}" data-key="${key}" ${off} ${extra}>${opts}</select>`
+  if (name === 'triage') return `
+    <label class="agent-opt">Mode ${sel('mode', choice([['shadow', 'Shadow: suggest only, change nothing'], ['autonomous', 'Autonomous: dismiss and open cases']], cfg.mode))}
+      <small>Shadow runs the same investigation and notes on each alert what it would do. Try it before going autonomous.</small></label>
+    <label class="agent-opt">Auto-dismiss alerts up to ${sel('max_dismiss_severity', choice([['low', 'Low severity'], ['medium', 'Medium severity'], ['high', 'High severity'], ['critical', 'Critical severity']], cfg.max_dismiss_severity))}
+      <small>A group above this always gets a case, whatever the model says.</small></label>`
+  if (name === 'investigator') return `
+    <label class="agent-opt">Confirmed false positives ${sel('auto_close', choice([['on', 'Close them automatically'], ['shadow', 'Shadow: note it, a human closes'], ['off', 'Never close: always a human']], cfg.auto_close))}</label>
+    <label class="agent-opt">Propose host isolation at ${sel('isolate_min_confidence', choice([['low', 'Low confidence or higher'], ['medium', 'Medium confidence or higher'], ['high', 'High confidence only']], cfg.isolate_min_confidence))}
+      <small>Proposals still need an admin or L2 approval before a host is isolated.</small></label>`
+  return ''
+}
+
+function reporterSlotsText(c) {
+  const every = +c.reporter.every_hours
+  const slots = Array.from({ length: 24 / every }, (_, k) => hh((+c.reporter.hour + k * every) % 24))
+  return `Reports at ${slots.join(', ')} (${c.timezone}), each covering the hours since the last one.`
 }
 let agentsData = null
 let agentsSig = null
@@ -3381,26 +3430,66 @@ agentsEl.innerHTML = `
     <span class="dash-live" id="agentsLive">Loading…</span>
     <div class="agents-owner" id="agentsOwnerWrap"></div>
   </div>
-  <div class="dash-grid" id="agentsGrid"></div>`
+  <div class="dash-grid" id="agentsGrid"></div>
+  <datalist id="tzList"></datalist>`
 const agentsGrid = agentsEl.querySelector('#agentsGrid')
+agentsEl.querySelector('#tzList').append(...(Intl.supportedValuesOf?.('timeZone') || []).map(z => Object.assign(document.createElement('option'), { value: z })))
+agentsEl.addEventListener('toggle', e => {  // toggle doesn't bubble: listen in the capture phase
+  const m = e.target.dataset?.more
+  if (m) e.target.open ? openMore.add(m) : openMore.delete(m)
+}, true)
 
 function agentCardHtml(name, d) {
   const [title, desc, key, keyLabel] = AGENT_INFO[name]
   const cfg = d.config[name], st = d.status[name] || {}, off = !d.is_admin ? 'disabled' : ''
   const running = d.running.includes(name)
+  const more = agentOptionsHtml(name, d, off)
+  const waiting = cfg.enabled && ['triage', 'investigator'].includes(name) && d.config.active_hours.enabled && d.active_now === false
   return `
     <section class="dash-card" aria-label="${title} agent">
       <header><h2>${title}</h2>${running ? '<span class="case-status st-investigating">running</span>' : ''}</header>
       <p class="agent-desc">${desc}</p>
-      ${name === 'triage' ? '<p class="agent-warn">Full autonomy: dismissals happen without a human. Undo them in Activity.</p>' : ''}
+      ${name !== 'triage' ? '' : cfg.mode === 'autonomous'
+        ? '<p class="agent-warn">Autonomous: dismissals happen without a human. Undo them in Activity.</p>'
+        : '<p class="agent-note">Shadow mode: it notes what it would do and changes nothing.</p>'}
       <div class="agent-ctl">
         <label><input type="checkbox" data-agent="${name}" data-key="enabled" ${cfg.enabled ? 'checked' : ''} ${off}> On<span class="sr-only"> (${title} agent)</span></label>
-        ${key ? `<label>${keyLabel} <input type="number" class="fld" min="${key === 'hour_utc' ? 0 : 1}" max="${key === 'hour_utc' ? 23 : 50}"
+        ${key ? `<label>${keyLabel} <input type="number" class="fld" min="1" max="50"
           value="${esc(cfg[key])}" data-agent="${name}" data-key="${key}" ${off}></label>` : ''}
+        ${name === 'reporter' ? `<label>First at <select class="fld" data-agent="reporter" data-key="hour" ${off}>${hourOptions(cfg.hour)}</select></label>
+          <label>Every <select class="fld" data-agent="reporter" data-key="every_hours" ${off}>${choice([[24, '24h'], [12, '12h'], [8, '8h']], cfg.every_hours)}</select></label>` : ''}
         ${name !== 'responder' && d.is_admin ? `<button type="button" class="btn-mini" data-run="${name}" aria-label="Run ${title} now" ${running ? 'disabled' : ''}>Run now</button>` : ''}
         ${d.is_admin && running ? `<button type="button" class="btn-mini danger" data-stop="${name}" aria-label="Stop the ${title} run and switch it off">Stop run</button>` : ''}
       </div>
       <div class="agent-last">${st.last_run ? `Last run ${esc(fmtAlertTime(st.last_run))}: ${esc(st.result)}` : name === 'responder' ? (cfg.enabled ? 'Approvals execute' : 'Off: approvals are refused') : 'Not run since the server started'}</div>
+      ${name === 'reporter' ? `<div class="agent-last">${esc(reporterSlotsText(d.config))}</div>` : ''}
+      ${waiting ? `<div class="agent-wait">Waiting: outside active hours (${esc(activeHoursText(d.config))})</div>` : ''}
+      ${more ? `<details class="agent-more" data-more="${name}" ${openMore.has(name) ? 'open' : ''}><summary>More options</summary>${more}</details>` : ''}
+    </section>`
+}
+
+// Timezone and active hours: shared by the agents, so one card.
+function scheduleCardHtml(d) {
+  const c = d.config, a = c.active_hours, off = !d.is_admin ? 'disabled' : ''
+  const mine = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return `
+    <section class="dash-card" aria-label="Agent schedule">
+      <header><h2>Schedule</h2></header>
+      <label class="agent-opt">Timezone
+        <input class="fld" id="agentsTz" list="tzList" data-key="timezone" value="${esc(c.timezone)}" spellcheck="false" autocomplete="off" ${off}>
+        <small>The Reporter's times and the active hours below are in this timezone.${mine && mine !== c.timezone && !off
+          ? ` <button type="button" class="btn-mini" data-tz-use="${esc(mine)}">Use ${esc(mine)}</button>` : ''}</small></label>
+      <label class="agent-opt-row" style="margin-top:12px"><input type="checkbox" data-agent="active_hours" data-key="enabled" ${a.enabled ? 'checked' : ''} ${off}>
+        Run Triage and Investigator only during active hours</label>
+      <div class="agent-opt-row" style="margin-top:8px">
+        From <select class="fld" data-agent="active_hours" data-key="start" aria-label="Active hours start" ${off}>${hourOptions(a.start)}</select>
+        to <select class="fld" data-agent="active_hours" data-key="end" aria-label="Active hours end" ${off}>${hourOptions(a.end)}</select>
+      </div>
+      <div class="agent-opt">All day on
+        <div class="weekdays" role="group" aria-label="Active all day on">${WEEKDAYS.map((w, i) =>
+          `<label><input type="checkbox" data-weekday="${i}" ${a.weekend.includes(i) ? 'checked' : ''} ${off}>${w}</label>`).join('')}</div>
+        <small>${a.enabled ? (d.active_now === false ? 'Outside active hours now: they wait.' : 'Inside active hours now.') : 'Off: they run around the clock.'} The Reporter keeps its own times; Run now always works.</small>
+      </div>
     </section>`
 }
 
@@ -3427,7 +3516,8 @@ function activityRowHtml(e, d) {
   const mine = d.me_id != null && data.owner_id != null ? data.owner_id === d.me_id : d.me === d.config.owner
   const btns = [
     conv && mine ? `<button type="button" class="btn-mini" data-open-conv="${esc(conv)}">Open investigation</button>` : '',
-    ['case_opened', 'needs_review', 'case_closed'].includes(e.action) && mine ? `<button type="button" class="btn-mini" data-open-case="${esc(e.target_id)}">Open case</button>` : '',
+    (['case_opened', 'needs_review', 'case_closed'].includes(e.action) || (e.agent === 'investigator' && e.action === 'shadow')) && mine
+      ? `<button type="button" class="btn-mini" data-open-case="${esc(e.target_id)}">Open case</button>` : '',  // an investigator shadow entry names the case a human must close
     ['dismissed', 'case_closed'].includes(e.action) && !e.undone_at ? `<button type="button" class="btn-mini danger" data-undo="${esc(e.id)}">Undo</button>` : '',
   ].join('')
   return `
@@ -3450,7 +3540,7 @@ function renderAgents() {
       : `Agents act as <b>${esc(d.config.owner)}</b> · Only admins can change agent settings.`)
       + (d.is_admin && anyOn ? ' <button type="button" class="btn-mini danger" data-stop="all">Stop all agents</button>' : '')
     const pending = d.proposals.filter(p => p.status === 'proposed').length
-    agentsGrid.innerHTML = Object.keys(AGENT_INFO).map(n => agentCardHtml(n, d)).join('') + `
+    agentsGrid.innerHTML = Object.keys(AGENT_INFO).map(n => agentCardHtml(n, d)).join('') + scheduleCardHtml(d) + `
       <section class="dash-card wide" aria-label="Containment proposals">
         <header><h2>Containment proposals${pending ? ` (${pending} awaiting approval)` : ''}</h2></header>
         ${d.proposals.length ? d.proposals.map(p => proposalRowHtml(p, d)).join('') : '<div class="dash-empty">No isolation proposals yet</div>'}
@@ -3489,36 +3579,54 @@ function enterAgents() {
   loadAgents()
 }
 
-// Switching on an agent that decides without a human asks first; switching anything off never does.
-const AGENT_ON_ASK = {
-  triage: { title: 'Turn on the Triage agent?', yes: 'Turn on Triage',
-    body: 'Every minute it dismisses the alerts it judges high-confidence false positives, with no human review, and opens cases for the rest. Its dismissals can be undone in Activity.' },
-  investigator: { title: 'Turn on the Investigator agent?', yes: 'Turn on Investigator',
-    body: 'Every 2 minutes it investigates the cases Triage opened and closes confirmed false positives without a human. Host isolation it proposes still needs an approval.' },
+// A change that lets an agent decide without a human asks first: switching Triage on in
+// autonomous mode (or to autonomous while on), and the Investigator with auto-close on.
+// Shadow, off and every switch-off never ask.
+function autonomyAsk(agent, key, value) {
+  const c = agentsData.config, t = c.triage, inv = c.investigator
+  const on = key === 'enabled' ? value === true : c[agent].enabled
+  if (agent === 'triage' && on && (key === 'enabled' ? t.mode : key === 'mode' ? value : null) === 'autonomous') return {
+    title: key === 'mode' ? 'Switch Triage to autonomous?' : 'Turn on the Triage agent?', yes: key === 'mode' ? 'Go autonomous' : 'Turn on Triage',
+    body: `Every minute it dismisses the alerts it judges high-confidence false positives, up to ${t.max_dismiss_severity} severity, with no human review, and opens cases for the rest. Its dismissals can be undone in Activity.` }
+  if (agent === 'investigator' && on && (key === 'enabled' ? inv.auto_close : key === 'auto_close' ? value : null) === 'on') return {
+    title: key === 'auto_close' ? 'Let the Investigator close cases?' : 'Turn on the Investigator agent?', yes: key === 'auto_close' ? 'Close automatically' : 'Turn on Investigator',
+    body: 'Every 2 minutes it investigates the cases Triage opened and closes confirmed false positives without a human. Host isolation it proposes still needs an approval.' }
+  return null
+}
+
+function agentsBody(t) {
+  if (t.id === 'agentsOwner') return { owner: t.value }
+  if (t.dataset.key === 'timezone') return { timezone: t.value }
+  if (t.dataset.weekday != null) return { active_hours: { weekend: [...agentsEl.querySelectorAll('[data-weekday]:checked')].map(x => +x.dataset.weekday) } }
+  if (t.dataset.agent) return { [t.dataset.agent]: { [t.dataset.key]: t.type === 'checkbox' ? t.checked : t.type === 'number' ? Number(t.value) : t.value } }
+  return null
+}
+
+async function saveAgents(body) {
+  try { await apiJSON('/api/agents/config', { method: 'PUT', body }) }
+  catch (err) { if (err.status !== 401) notify(`Could not save: ${err.message}`) }
+  agentsSig = null
+  await loadAgents(true)  // the setting just changed: re-render even with focus on it
 }
 
 agentsEl.addEventListener('change', async e => {
-  const t = e.target
-  if (t.dataset.key === 'enabled' && t.checked && AGENT_ON_ASK[t.dataset.agent] && !await ask(AGENT_ON_ASK[t.dataset.agent])) {
-    t.checked = false
+  const t = e.target, body = agentsBody(t)
+  if (!body) return
+  const q = t.dataset.agent && autonomyAsk(t.dataset.agent, t.dataset.key, body[t.dataset.agent][t.dataset.key])
+  if (q && !await ask(q)) {  // put the control back as it was
+    if (t.type === 'checkbox') t.checked = !t.checked
+    else t.value = agentsData.config[t.dataset.agent][t.dataset.key]
     return
   }
-  try {
-    if (t.id === 'agentsOwner') await apiJSON('/api/agents/config', { method: 'PUT', body: { owner: t.value } })
-    else if (t.dataset.agent) {
-      const value = t.type === 'checkbox' ? t.checked : Number(t.value)
-      await apiJSON('/api/agents/config', { method: 'PUT', body: { [t.dataset.agent]: { [t.dataset.key]: value } } })
-    } else return
-  } catch (err) { if (err.status !== 401) notify(`Could not save: ${err.message}`) }
-  agentsSig = null
-  await loadAgents(true)  // the setting just changed: re-render even with focus on it
+  saveAgents(body)
 })
 
 agentsEl.addEventListener('click', async e => {
   const b = e.target.closest('button')
   if (!b) return
-  const { run, stop, prop, decision, undo, openConv, openCase } = b.dataset
+  const { run, stop, prop, decision, undo, openConv, openCase, tzUse } = b.dataset
   if (openConv) { navigate(`#/chat/${enc(openConv)}`); return }
+  if (tzUse) { saveAgents({ timezone: tzUse }); return }
   if (openCase) { navigate(`#/cases/${enc(openCase)}`); return }
   try {
     if (stop) {  // stopping is always safe: no confirm

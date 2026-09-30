@@ -309,6 +309,17 @@ class AlertStore:
             )
             self.conn.commit()
 
+    def mark_triaged(self, ids: List[str], note: str) -> None:
+        """A shadow-mode agent assessed these alerts and changed nothing: keep them out
+        of `untriaged` without touching status or the conversation link."""
+        now = self._now()
+        with self.lock:
+            self.conn.executemany(
+                "UPDATE ingested_alerts SET agent_note=?, triaged_at=?, updated_at=? WHERE id=?",
+                [(note, now, now, i) for i in ids],
+            )
+            self.conn.commit()
+
     def sensors(self, ids: List[str]) -> List[tuple]:
         """Distinct LimaCharlie (sensor id, hostname) pairs behind these alerts."""
         if not ids:

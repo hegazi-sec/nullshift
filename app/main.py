@@ -1890,8 +1890,10 @@ async def _shutdown_agents():
 @app.get('/api/agents')
 def api_agents(current_user: Dict[str, Any] = Depends(get_current_user)):
     is_admin = current_user.get("role") == "admin"
+    cfg = agents.load_config()
     return {
-        "config": agents.load_config(),
+        "config": cfg,
+        "active_now": agents._active(cfg),  # False: the UI says the agents are outside their active hours
         "status": agents.status,
         "running": [a for a in agents.AGENTS if agents._locks[a].locked()],
         "log": agent_store.recent(60),
