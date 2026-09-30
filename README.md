@@ -30,6 +30,9 @@ It works with any major LLM provider — Anthropic Claude, OpenAI GPT, or a full
 - **Structured investigation reports** — SECTION 1 (evidence) → SECTION 2 (reasoning) → SECTION 3 (verdict).
 - **Case management & reports** — group investigations into cases (`INC-0001`…) with severity, status, verdict, and notes; export Markdown or print-ready HTML/PDF.
 - **Webhook alert ingestion** — SIEMs push alerts straight into NullShift's inbox; one click turns an alert into a full investigation.
+- **Autonomous SOC agents** — Triage, Investigator and Reporter work the alert queue on their own. Start them in shadow mode, cap what they may decide by severity and confidence, limit them to after-hours, and keep host isolation behind a human approval.
+- **Built for the queue** — search alerts by host or IP across the raw payload, filter by status and severity, undo a dismissal, stop a running investigation, paste or drop screenshots, and move around with keyboard shortcuts.
+- **Live dashboard** — alert volume, severity, top rules and hosts, open cases; click a count or a severity, rule or host bar to open the matching alerts.
 - **Automatic IOC enrichment** — IPs, domains, and hashes in each message are checked against VirusTotal automatically.
 - **L1 → L2 handoff mode** — generates ticket-ready summaries with one command.
 - **Per-user temperature, conversation search, verdict tracking, debug traces.**
@@ -105,6 +108,25 @@ Almost everything is configured through the **Admin UI** at `/admin` — no rest
 
 Settings are persisted in a SQLite database (`app/data/config.db`). All changes apply immediately thanks to the settings proxy layer in `app/config.py`.
 
+## Using the Console
+
+The left rail switches between **Investigations**, **Alerts**, **Cases**, **Dashboard** and **Agents**. Your name, **Settings** (admins), **Keyboard shortcuts** and **Log out** sit under the account button at the bottom of the rail; on a phone the rail becomes a bottom bar with these under **More**.
+
+- **Investigations keep running when you leave.** Switch views, open another chat or reload: the investigation carries on and its reply lands in its own chat, with a notification if you're elsewhere.
+- **Stop an investigation** with **Stop investigation**, shown above the message box while one runs. The chat frees up at once so you can ask again; a model call already underway finishes in the background and its answer is dropped.
+- **Attachments** — paste a screenshot straight into the message box, drop it anywhere on the chat, or use the paperclip. CSV files (up to 3, 5 MB each) are profiled and analyzed as data.
+- **Options** next to the message box holds the debug trace and the response temperature; a chip shows either one when it isn't at its default.
+- **Deletes and other one-way actions** ask in a dialog that names exactly what is affected. Dismissing an alert doesn't ask, because you can undo it.
+
+| Shortcut | Action |
+|---|---|
+| `⌘K` / `Ctrl+K` | Search the current list |
+| `⌘⇧O` / `Ctrl+Shift+O` | New investigation |
+| `⌘/` / `Ctrl+/` | Go to the message box |
+| `↑` `↓` | Move through the list |
+| `Esc` | Close a menu, dialog or the list drawer |
+| `?` | Show all shortcuts |
+
 ## Case Management & Reports
 
 Turn one-off chats into tracked cases and hand-off-ready reports.
@@ -127,7 +149,9 @@ Reports include case metadata, analyst notes, the **IOC verdict trail** across e
 
 ## Webhook Alert Ingestion
 
-Let your SIEM push alerts directly into NullShift instead of analysts pasting them in. Alerts land in a shared **Alerts** inbox (sidebar tab) with a live unread badge. An analyst clicks **Investigate** to auto-create a chat seeded with the alert and run it through the normal pipeline, or **Dismiss** to clear it.
+Let your SIEM push alerts directly into NullShift instead of analysts pasting them in. Alerts land in a shared **Alerts** inbox (sidebar tab) with a live unread badge. An analyst clicks **Investigate** to auto-create a chat seeded with the alert and run it through the normal pipeline, or **Dismiss** to clear it — **Undo** (or **Restore alert** later) puts it back.
+
+The inbox opens on **New** alerts; switch to **Investigating** or **All**, filter by severity, and search by title, source or anything in the raw payload — a hostname, IP or user finds its alerts even when it isn't in the title.
 
 **1. Enable it**
 
@@ -213,6 +237,35 @@ Use the public URL **without a port** in your SIEM (`https://<machine>.<tailnet>
 
 > A query-param token can appear in the SIEM's own logs — prefer the header where supported, and regenerate the token if it's ever exposed.
 
+## Autonomous SOC Agents
+
+Agents work the alert inbox without an analyst at the keyboard. They investigate through the same pipeline as a chat (SIEM queries, playbooks, VirusTotal), acting as the user chosen under **Agents act as**, and every decision lands in the **Activity** list on the **Agents** view.
+
+| Agent | What it does |
+|---|---|
+| **Triage** | Every minute: groups new alerts by source, rule and host, investigates each group, then dismisses confident false positives and opens a case for the rest. It only sees alerts that arrive after it is switched on. |
+| **Investigator** | Every 2 minutes: an L2 investigation of each case Triage opened. Closes confirmed false positives, flags the rest for a human, raises the severity of malicious findings and proposes host isolation. |
+| **Reporter** | Posts a shift report (alert volume, agent decisions, open and stale cases) as a new investigation, on a schedule. |
+| **Containment** | Isolates a host in LimaCharlie **only after an admin or L2 analyst approves** the proposal. Needs a LimaCharlie API key allowed to task sensors. |
+
+**Options** (each card's **More options**, plus the **Schedule** card)
+
+| Setting | Choices | Default |
+|---|---|---|
+| Triage mode | **Shadow** — investigates and notes on each alert what it would do, changing nothing · **Autonomous** — dismisses and opens cases | Shadow |
+| Triage: auto-dismiss alerts up to | Low · Medium · High · Critical severity; a group above it always gets a case | Medium |
+| Investigator: confirmed false positives | Close automatically · Shadow (note it, a human closes) · Never close | Close automatically |
+| Investigator: propose isolation at | Low · Medium · High confidence or higher | Medium |
+| Reporter | First report at a local hour, then every 24, 12 or 8 hours; each covers the hours since the last one | 06:00, every 24h |
+| Timezone | Any IANA zone (e.g. `Africa/Cairo`); the Reporter's times and active hours use it | UTC |
+| Active hours | Run Triage and the Investigator only inside a local window (e.g. 18:00–08:00) plus whole days (e.g. Fri, Sat); the Reporter and **Run now** ignore it | Off |
+
+**Staying in control**
+
+- Switching an agent on only asks for confirmation when it can act without a human (Triage in autonomous mode, the Investigator closing cases). Shadow mode and switching off never ask.
+- Autonomous dismissals and closures have **Undo** in Activity; **Stop run** ends a run after its current step, and **Stop all agents** switches everything off.
+- A suggested rollout: set the timezone, turn Triage on in **Shadow**, read its notes on the alerts and its reasoning under **Activity → Open investigation** for a few days, then switch to **Autonomous** with a severity limit you're comfortable with.
+
 ## IOC Auto-Enrichment (VirusTotal)
 
 When a VirusTotal key is configured, NullShift automatically extracts IPs, domains, and file hashes from each message and enriches them against VirusTotal **before** the LLM reasons over the evidence — the analyst never has to ask.
@@ -247,6 +300,7 @@ Structured Markdown report (SECTION 1 / 2 / 3 with Verdict + Confidence)
 nullshift/
 ├── app/
 │   ├── main.py              FastAPI routes
+│   ├── agents.py            Autonomous SOC agents (triage, investigator, reporter, containment)
 │   ├── llm.py               LLM provider chain
 │   ├── rag.py               Chroma-based playbook retrieval
 │   ├── reports.py           Incident report builders (Markdown + HTML)
@@ -291,8 +345,10 @@ Each indexed skill includes step-by-step procedures, tool commands, expected out
 - One-line setup for additional SIEMs (CrowdStrike, Microsoft Defender for Endpoint)
 - **Case management** *(shipped)* — group multiple investigations into a single case with severity/status/verdict tracking and exportable reports
 - **Inbound webhook alert ingestion** *(shipped)* — SIEMs push alerts into NullShift's inbox
-- Webhook notifications (Slack / Teams / email) on verdict reached
-- Outbound response actions (block IP, isolate host) from a playbook
+- **Autonomous triage, investigation and shift reports** *(shipped)* — with shadow mode, severity/confidence limits and active hours
+- **Host isolation with human approval** *(shipped, LimaCharlie)*
+- Webhook notifications (Slack / Teams / email) on verdict reached, and shift reports delivered there
+- Outbound response actions for other SIEMs/EDRs (block IP, isolate host)
 - Scheduled hunts (recurring queries with diff-based alerting)
 - Multi-tenant L2 escalation queue
 
