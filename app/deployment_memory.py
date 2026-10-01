@@ -36,26 +36,29 @@ def _llm_section() -> str:
     return "\n".join(lines) if lines else "- _none configured — chat will return errors_"
 
 
-def _siem_section() -> str:
-    siem = (settings.SIEM_PROVIDER or "wazuh").lower().strip()
+def _siem_line(siem: str) -> str:
     if siem == "wazuh":
         if settings.wazuh_indexer_url:
-            return f"- **Wazuh** (active) — indexer: `{settings.wazuh_indexer_url}`"
+            return f"- **Wazuh** (connected) — indexer: `{settings.wazuh_indexer_url}`"
         return "- ⚠️ Wazuh selected but `WAZUH_INDEXER_URL` is not set — queries will fail"
     if siem == "limacharlie":
         oid = (settings.LIMACHARLIE_OID or "").strip()
         if oid and settings.LIMACHARLIE_API_KEY:
             redacted = f"{oid[:8]}…{oid[-4:]}" if len(oid) > 14 else "set"
-            return f"- **LimaCharlie** (active) — OID: `{redacted}` — endpoint: `/v1/insight/<oid>/detections`"
+            return f"- **LimaCharlie** (connected) — OID: `{redacted}` — endpoint: `/v1/insight/<oid>/detections`"
         return "- ⚠️ LimaCharlie selected but `LIMACHARLIE_OID` or `LIMACHARLIE_API_KEY` missing"
     if siem == "splunk":
-        return f"- **Splunk** (active) — URL: `{settings.SPLUNK_URL or 'not set'}` — index: `{settings.SPLUNK_INDEX}`"
+        return f"- **Splunk** (connected) — URL: `{settings.SPLUNK_URL or 'not set'}` — index: `{settings.SPLUNK_INDEX}`"
     if siem == "elastic":
-        return f"- **Elastic** (active) — URL: `{settings.ELASTIC_URL or 'not set'}` — index: `{settings.ELASTIC_INDEX}`"
-    if siem == "sentinel":
-        ws = (settings.SENTINEL_WORKSPACE_ID or "").strip()
-        return f"- **Microsoft Sentinel** (active) — workspace: `{ws[:8]}…` " if ws else "- ⚠️ Sentinel selected but workspace ID missing"
-    return f"- ⚠️ Unknown SIEM_PROVIDER `{siem}`"
+        return f"- **Elastic** (connected) — URL: `{settings.ELASTIC_URL or 'not set'}` — index: `{settings.ELASTIC_INDEX}`"
+    ws = (settings.SENTINEL_WORKSPACE_ID or "").strip()
+    return f"- **Microsoft Sentinel** (connected) — workspace: `{ws[:8]}…` " if ws else "- ⚠️ Sentinel selected but workspace ID missing"
+
+
+def _siem_section() -> str:
+    from app.connectors import connected_siems
+    siems = connected_siems()
+    return "\n".join(_siem_line(s) for s in siems) if siems else "- _no SIEM connected — investigations have no SIEM evidence_"
 
 
 def _aux_section() -> List[str]:
@@ -76,7 +79,7 @@ _Auto-generated at {now}. Regenerated on every server startup; manual edits to t
 ## LLM providers
 {_llm_section()}
 
-## SIEM (primary detection source)
+## SIEM (detection sources; every connected SIEM is queried)
 {_siem_section()}
 
 ## Auxiliary connectors

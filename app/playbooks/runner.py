@@ -3,7 +3,7 @@
 Flow:
 1. retrieve_with_scores() finds the best-matching playbook (threshold ≥ 0.60).
 2. parse_front_matter() extracts SIEM query hints from its YAML front-matter.
-3. Queries are executed via tool_runner for the active SIEM_PROVIDER.
+3. Queries are executed via tool_runner for every connected SIEM.
 4. The caller decides whether to use the playbook evidence alone (≥ SPARSE_THRESHOLD
    events) or merge it with the standard keyword-based investigation.
 """
@@ -91,29 +91,29 @@ class PlaybookRunner:
         bundle["playbook_source"] = source
         bundle["playbook_score"] = best["score"]
 
+        from app.connectors import connected_siems
+        siems = connected_siems()
         logger.info(
-            "Playbook activated: %s (score=%.2f) for provider=%s",
-            source, best["score"], settings.SIEM_PROVIDER,
+            "Playbook activated: %s (score=%.2f) for SIEMs=%s",
+            source, best["score"], ",".join(siems) or "none",
         )
-
-        # --- Step 2: build query list ---
-        primary_queries = get_queries_for_provider(meta, settings.SIEM_PROVIDER)
 
         # Extract IPs from user message for alerts_by_ip queries
         ips = _extract_ips(message)
 
-        # --- Step 3: run primary SIEM queries ---
-        for q in primary_queries:
-            self._run_query(
-                tool_name=settings.SIEM_PROVIDER,
-                query_id=q["query_id"],
-                params=q["params"],
-                ips=ips,
-                time_range=time_range,
-                user=user,
-                tool_runner=tool_runner,
-                bundle=bundle,
-            )
+        # --- Steps 2-3: each connected SIEM's queries from the playbook ---
+        for siem in siems:
+            for q in get_queries_for_provider(meta, siem):
+                self._run_query(
+                    tool_name=siem,
+                    query_id=q["query_id"],
+                    params=q["params"],
+                    ips=ips,
+                    time_range=time_range,
+                    user=user,
+                    tool_runner=tool_runner,
+                    bundle=bundle,
+                )
 
         return bundle
 

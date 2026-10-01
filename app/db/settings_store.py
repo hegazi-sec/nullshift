@@ -84,6 +84,7 @@ ALLOWED_KEYS = frozenset({
     "vision_max_size_mb",      # float, default 5
     # SIEM provider selection
     "siem_provider",
+    "siem_providers",          # comma list of connected SIEMs, primary first ("none" = none)
     # LimaCharlie
     "limacharlie_oid",
     "limacharlie_api_key",

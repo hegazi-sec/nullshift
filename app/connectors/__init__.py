@@ -9,8 +9,34 @@ __all__ = [
     "wazuh", "virustotal",
     "NormalizedAlert", "SIEMConnector",
     "SplunkConnector", "ElasticConnector", "SentinelConnector", "LimaCharlieConnector",
-    "get_siem_connector",
+    "get_siem_connector", "connected_siems", "siem_available", "SIEMS",
 ]
+
+SIEMS = ("limacharlie", "wazuh", "splunk", "elastic", "sentinel")
+
+
+def connected_siems() -> list:
+    """The SIEMs this install queries, primary first: siem_providers (a comma list; "none"
+    means none), else the single siem_provider the setup wizard writes."""
+    from app.config import settings
+    raw = settings.SIEM_PROVIDERS or settings.SIEM_PROVIDER or ""
+    out: list = []
+    for p in str(raw).split(","):
+        p = p.strip().lower()
+        if p in SIEMS and p not in out:
+            out.append(p)
+    return out
+
+
+def siem_available(provider: str) -> bool:
+    """Credentials are set for this SIEM (not a reachability check)."""
+    from app.config import settings
+    if provider == "wazuh":
+        return bool(settings.wazuh_indexer_url)
+    try:
+        return get_siem_connector(provider).is_available()
+    except Exception:
+        return False
 
 # Module-level singletons so connectors reuse HTTP sessions / cached tokens
 # across multiple tool_runner.execute() calls.

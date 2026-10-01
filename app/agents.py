@@ -325,7 +325,8 @@ def run_investigator(cfg: Dict[str, Any]) -> str:
                 fields["severity"] = "critical" if conf == "High" else "high"
             # Isolation runs through LimaCharlie sensors. Alerts from other SIEMs carry none, so the
             # recommendation is recorded for a human to act on in their EDR instead of being dropped.
-            sensors = alerts_inbox.sensors(ids) if wants_isolation else []
+            from app.connectors import connected_siems
+            sensors = alerts_inbox.sensors(ids) if wants_isolation and "limacharlie" in connected_siems() else []
             manual = wants_isolation and not sensors
             if manual:
                 hosts = ", ".join(alerts_inbox.hosts(ids)) or "the affected host"
@@ -398,12 +399,13 @@ def _reporter_due(cfg: Dict[str, Any], now: Optional[datetime] = None) -> bool:
 
 # ── responder (approval-gated containment) ────────────────────────────
 def _lc_isolation(sid: str, isolate: bool) -> Tuple[bool, str]:
+    from app.connectors import connected_siems
     from app.connectors.limacharlie import LimaCharlieConnector
     if not _SID_RE.fullmatch(sid or ""):
         return False, "invalid sensor id"
     lc = LimaCharlieConnector()
-    if not lc.is_available():
-        return False, "LimaCharlie is not configured"
+    if "limacharlie" not in connected_siems() or not lc.is_available():
+        return False, "LimaCharlie is not connected"
     r = lc._request("POST" if isolate else "DELETE", f"/v1/{sid}/isolation")
     if r is None:
         return False, "request failed (auth or network)"

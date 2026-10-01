@@ -25,7 +25,7 @@ It works with any major LLM provider — Anthropic Claude, OpenAI GPT, or a full
 ## Highlights
 
 - **12 LLM providers** — Claude Agent SDK (use your Claude subscription, no API key), cloud APIs, or fully local Ollama (even hosted on another machine over Tailscale).
-- **5 SIEM connectors** — Wazuh, LimaCharlie, Splunk, Elastic, Sentinel.
+- **5 SIEM connectors, several at once** — Wazuh, LimaCharlie, Splunk, Elastic, Sentinel; every investigation queries all the connected ones.
 - **RAG over your own playbooks** — drop markdown files into `data/kb/` and they're indexed automatically.
 - **Structured investigation reports** — SECTION 1 (evidence) → SECTION 2 (reasoning) → SECTION 3 (verdict).
 - **Case management & reports** — group investigations into cases (`INC-0001`…) with severity, status, verdict, and notes; export Markdown or print-ready HTML/PDF.
@@ -104,7 +104,7 @@ Run any Ollama-compatible model locally — `qwen2.5:14b`, `llama3.3:70b`, `deep
 Almost everything is configured through the **Admin UI** at `/admin` — no restart needed for any setting to take effect.
 
 - **LLM Providers** — pin an active provider, drag-and-drop the fallback chain, paste API keys.
-- **Connectors** — SIEM credentials + VirusTotal. Test connection before saving.
+- **Connectors** — connect one or more SIEMs (each with its credentials and a Test connection) + VirusTotal. Every investigation queries every connected SIEM; the first one connected is the primary, whose scale is used for alerts whose shape names no SIEM. The setup wizard connects one; add more here.
 - **RAG** — embedding provider, model, live index status.
 - **Users** — manage analyst accounts (admin, L1, L2 roles).
 

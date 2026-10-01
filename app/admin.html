@@ -609,6 +609,14 @@
       font-size: 12px;
       color: var(--red);
     }
+    /* Connected SIEMs: one checkbox each; every checked SIEM's fields show under its own heading */
+    .siem-checks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; min-height: var(--field-h); }
+    .siem-checks label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text2); cursor: pointer; }
+    .siem-checks input { accent-color: var(--accent); }
+    .siem-fields { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 4px; }
+    .siem-head > .field-label { font-size: 13px; color: var(--text2); }
+    .siem-test { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: var(--field-h); }
+
     /* Alert severity */
     .sev-siem { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; }
     .sev-siem > summary {
@@ -837,21 +845,31 @@
 
     <!-- SIEM -->
     <div class="section-title">SIEM Connector</div>
-    <div class="section-desc">Change your SIEM provider or update credentials at any time without re-running setup.</div>
+    <div class="section-desc">
+      Connect one or more SIEMs; every investigation queries all of them. The first one connected is the
+      primary: an alert whose shape names no SIEM is read on its severity scale. Credentials can change at
+      any time without re-running setup.
+    </div>
     <div class="panel">
       <div class="field">
-        <label for="siemProviderSel">Provider</label>
-        <select id="siemProviderSel">
-          <option value="">— none —</option>
-          <option value="limacharlie">LimaCharlie</option>
-          <option value="wazuh">Wazuh</option>
-          <option value="splunk">Splunk</option>
-          <option value="elastic">Elastic / Elastic SIEM</option>
-          <option value="sentinel">Microsoft Sentinel</option>
-        </select>
+        <span class="field-label" id="siemChecksLabel">Connected SIEMs</span>
+        <div class="siem-checks" role="group" aria-labelledby="siemChecksLabel">
+          <label><input type="checkbox" data-siem-check="limacharlie"/>LimaCharlie <span class="pill green siem-primary" hidden>primary</span></label>
+          <label><input type="checkbox" data-siem-check="wazuh"/>Wazuh <span class="pill green siem-primary" hidden>primary</span></label>
+          <label><input type="checkbox" data-siem-check="splunk"/>Splunk <span class="pill green siem-primary" hidden>primary</span></label>
+          <label><input type="checkbox" data-siem-check="elastic"/>Elastic / Elastic SIEM <span class="pill green siem-primary" hidden>primary</span></label>
+          <label><input type="checkbox" data-siem-check="sentinel"/>Microsoft Sentinel <span class="pill green siem-primary" hidden>primary</span></label>
+        </div>
       </div>
 
       <div id="siem-lc" class="siem-fields" style="display:none;">
+        <div class="field siem-head">
+          <span class="field-label">LimaCharlie</span>
+          <div class="siem-test">
+            <button class="btn btn-ghost btn-sm" type="button" data-test-siem="limacharlie">Test connection</button>
+            <span class="siem-test-status status" data-for="limacharlie" role="status"></span>
+          </div>
+        </div>
         <div class="field">
           <label for="siem_limacharlie_oid">Organisation ID (OID)</label>
           <input id="siem_limacharlie_oid" type="text" data-siem-field="limacharlie_oid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off"/>
@@ -863,6 +881,13 @@
       </div>
 
       <div id="siem-wazuh" class="siem-fields" style="display:none;">
+        <div class="field siem-head">
+          <span class="field-label">Wazuh</span>
+          <div class="siem-test">
+            <button class="btn btn-ghost btn-sm" type="button" data-test-siem="wazuh">Test connection</button>
+            <span class="siem-test-status status" data-for="wazuh" role="status"></span>
+          </div>
+        </div>
         <div class="field">
           <label for="siem_wazuh_api_url">Manager API URL</label>
           <input id="siem_wazuh_api_url" type="text" data-siem-field="wazuh_api_url" placeholder="https://wazuh-manager:55000" autocomplete="off"/>
@@ -882,6 +907,13 @@
       </div>
 
       <div id="siem-splunk" class="siem-fields" style="display:none;">
+        <div class="field siem-head">
+          <span class="field-label">Splunk</span>
+          <div class="siem-test">
+            <button class="btn btn-ghost btn-sm" type="button" data-test-siem="splunk">Test connection</button>
+            <span class="siem-test-status status" data-for="splunk" role="status"></span>
+          </div>
+        </div>
         <div class="field">
           <label for="siem_splunk_url">Splunk URL</label>
           <input id="siem_splunk_url" type="text" data-siem-field="splunk_url" placeholder="https://splunk:8089" autocomplete="off"/>
@@ -897,6 +929,13 @@
       </div>
 
       <div id="siem-elastic" class="siem-fields" style="display:none;">
+        <div class="field siem-head">
+          <span class="field-label">Elastic / Elastic SIEM</span>
+          <div class="siem-test">
+            <button class="btn btn-ghost btn-sm" type="button" data-test-siem="elastic">Test connection</button>
+            <span class="siem-test-status status" data-for="elastic" role="status"></span>
+          </div>
+        </div>
         <div class="field">
           <label for="siem_elastic_url">Elasticsearch URL</label>
           <input id="siem_elastic_url" type="text" data-siem-field="elastic_url" placeholder="https://elastic:9200" autocomplete="off"/>
@@ -912,6 +951,13 @@
       </div>
 
       <div id="siem-sentinel" class="siem-fields" style="display:none;">
+        <div class="field siem-head">
+          <span class="field-label">Microsoft Sentinel</span>
+          <div class="siem-test">
+            <button class="btn btn-ghost btn-sm" type="button" data-test-siem="sentinel">Test connection</button>
+            <span class="siem-test-status status" data-for="sentinel" role="status"></span>
+          </div>
+        </div>
         <div class="field">
           <label for="siem_sentinel_workspace_id">Workspace ID</label>
           <input id="siem_sentinel_workspace_id" type="text" data-siem-field="sentinel_workspace_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off"/>
@@ -930,20 +976,9 @@
         </div>
       </div>
 
-      <!-- Only the selected provider's Test button and result are shown -->
       <div class="actions">
         <button class="btn btn-primary" id="saveSiemBtn">Save SIEM</button>
-        <button class="btn btn-ghost" data-test-siem="limacharlie" hidden>Test connection</button>
-        <button class="btn btn-ghost" data-test-siem="wazuh" hidden>Test connection</button>
-        <button class="btn btn-ghost" data-test-siem="splunk" hidden>Test connection</button>
-        <button class="btn btn-ghost" data-test-siem="elastic" hidden>Test connection</button>
-        <button class="btn btn-ghost" data-test-siem="sentinel" hidden>Test connection</button>
         <span id="siemSaveStatus" class="status" role="status"></span>
-        <span class="siem-test-status status" data-for="limacharlie" role="status" hidden></span>
-        <span class="siem-test-status status" data-for="wazuh" role="status" hidden></span>
-        <span class="siem-test-status status" data-for="splunk" role="status" hidden></span>
-        <span class="siem-test-status status" data-for="elastic" role="status" hidden></span>
-        <span class="siem-test-status status" data-for="sentinel" role="status" hidden></span>
       </div>
     </div>
 
@@ -999,7 +1034,7 @@
     <div class="section-desc">
       NullShift reads each SIEM's own severity field and maps it onto low, medium, high and critical.
       A rule override wins over everything; an alert whose shape isn't recognised is read on the
-      connected SIEM's scale. Saving re-scores every alert already in the inbox, which also changes
+      primary SIEM's scale. Saving re-scores every alert already in the inbox, which also changes
       what the Triage agent's auto-dismiss limit applies to.
     </div>
     <div class="panel" id="sevPanel">
@@ -2123,38 +2158,31 @@
     if (_webhookUnsaved || _chainDirty || [..._dirty].some(sec => sec.isConnected)) { e.preventDefault(); e.returnValue = ''; }
   });
 
-  function _showSiemFields(provider) {
-    Object.values(_siemFields).forEach(id => {
+  // Connected SIEMs in connection order; the first is the primary. A newly checked SIEM is
+  // appended, so connecting a second one never changes the primary.
+  let _siemOrder = [];
+  function _showSiemFields() {
+    Object.entries(_siemFields).forEach(([p, id]) => {
       const el = document.getElementById(id);
-      if (el) el.style.display = 'none';
+      if (el) el.style.display = _siemOrder.includes(p) ? '' : 'none';
     });
-    if (provider && _siemFields[provider]) {
-      const el = document.getElementById(_siemFields[provider]);
-      if (el) el.style.display = '';
-    }
-    document.querySelectorAll('[data-test-siem]').forEach(b => { b.hidden = b.dataset.testSiem !== provider; });
-    document.querySelectorAll('.siem-test-status').forEach(s => { s.hidden = s.dataset.for !== provider; });
+    document.querySelectorAll('[data-siem-check]').forEach(cb => {
+      cb.checked = _siemOrder.includes(cb.dataset.siemCheck);
+      cb.parentElement.querySelector('.siem-primary').hidden = cb.dataset.siemCheck !== _siemOrder[0];
+    });
   }
 
-  document.getElementById('siemProviderSel').addEventListener('change', function() {
-    _showSiemFields(this.value);
-  });
+  document.querySelectorAll('[data-siem-check]').forEach(cb => cb.addEventListener('change', () => {
+    _siemOrder = _siemOrder.filter(p => p !== cb.dataset.siemCheck);
+    if (cb.checked) _siemOrder.push(cb.dataset.siemCheck);
+    _showSiemFields();
+  }));
 
-  async function loadConnectors() {
-    let st;
-    try {
-      st = await api('/api/admin/settings');
-    } catch(e) {
-      _loaded.delete('connectors');
-      setStatus(document.getElementById('siemSaveStatus'), 'Could not load connector settings: ' + e.message, 'err');
-      return;
-    }
+  // The SIEM part of GET /api/admin/settings: the effective connected list and each SIEM's fields.
+  function _applySiem(st) {
     const s = st.settings || st;
-
-    // SIEM
-    const provider = s.siem_provider || '';
-    document.getElementById('siemProviderSel').value = provider;
-    _showSiemFields(provider);
+    _siemOrder = (st.connected_siems || []).filter(p => _siemFields[p]);
+    _showSiemFields();
     // Populate fields — secrets come back as {present, suffix} stubs (not strings)
     document.querySelectorAll('[data-siem-field]').forEach(el => {
       const key = el.dataset.siemField;
@@ -2174,6 +2202,19 @@
         el.value = v;
       }
     });
+  }
+
+  async function loadConnectors() {
+    let st;
+    try {
+      st = await api('/api/admin/settings');
+    } catch(e) {
+      _loaded.delete('connectors');
+      setStatus(document.getElementById('siemSaveStatus'), 'Could not load connector settings: ' + e.message, 'err');
+      return;
+    }
+    const s = st.settings || st;
+    _applySiem(st);
 
     // VT — secret stub from API
     const vtVal = s.vt_api_key;
@@ -2198,14 +2239,18 @@
   document.getElementById('saveSiemBtn').onclick = async () => {
     const st = document.getElementById('siemSaveStatus');
     setStatus(st, 'Saving…');
-    const updates = { siem_provider: document.getElementById('siemProviderSel').value };
-    document.querySelectorAll('[data-siem-field]').forEach(el => {
+    // "none", not "": an empty list would delete the key and fall back to the .env default (Wazuh)
+    const updates = { siem_providers: _siemOrder.join(',') || 'none' };
+    if (_siemOrder.length) updates.siem_provider = _siemOrder[0];  // the setup wizard and older code read it
+    _siemOrder.forEach(p => document.getElementById(_siemFields[p]).querySelectorAll('[data-siem-field]').forEach(el => {
       if (el.value.trim()) updates[el.dataset.siemField] = el.value.trim();
-    });
+    }));
     try {
       await putSettings(updates);
       setStatus(st, 'Saved ✓', 'ok');
       setTimeout(() => setStatus(st, ''), 3000);
+      api('/api/admin/settings').then(_applySiem).catch(() => {});  // show what the server now has
+      if (!_dirty.has(sevPanel)) loadSeverity();  // its connected / primary badges
     } catch(e) {
       setStatus(st, 'Error: ' + e.message, 'err');
     }
@@ -2338,7 +2383,8 @@
     _sev = d;
     document.getElementById('sevSiems').innerHTML = d.siems.map(s => `
       <details class="sev-siem" data-siem="${esc(s.id)}"${open.includes(s.id) ? ' open' : ''}>
-        <summary>${esc(s.label)}${s.id === d.configured_siem ? ' <span class="pill green">connected</span>' : ''}
+        <summary>${esc(s.label)}${(d.connected_siems || [d.configured_siem]).includes(s.id) ? ' <span class="pill green">connected</span>' : ''}${
+          s.id === d.configured_siem ? ' <span class="pill gray">primary</span>' : ''}
           <span class="sev-meta">${esc(Number(s.alerts || 0).toLocaleString())} alert${s.alerts === 1 ? '' : 's'}</span></summary>
         <div class="sev-body">${sevBodyHtml(s, s.thresholds, s.words)}</div>
       </details>`).join('');

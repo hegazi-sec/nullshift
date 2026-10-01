@@ -830,20 +830,23 @@ def health():
 
 @app.get('/debug/siem')
 def debug_siem():
-    """Unauthenticated diagnostic: probe the configured SIEM provider with a
-    small `recent_alerts` query so we can confirm the connector is reachable
-    and authenticated, without sending a chat."""
+    """Unauthenticated diagnostic: probe each connected SIEM with a small
+    `recent_alerts` query so we can confirm the connectors are reachable and
+    authenticated, without sending a chat."""
+    from app.connectors import connected_siems, get_siem_connector
+    out: Dict[str, Any] = {"connected": connected_siems()}
+    for provider in out["connected"]:
+        out[provider] = _probe_siem(provider, get_siem_connector)
+    return out
+
+
+def _probe_siem(provider: str, get_siem_connector) -> Dict[str, Any]:
     import time
-    provider = (settings.SIEM_PROVIDER or "wazuh").lower().strip()
-    out: Dict[str, Any] = {"SIEM_PROVIDER": provider}
-    if provider not in ("splunk", "elastic", "sentinel", "limacharlie"):
-        out["note"] = (
-            f"Provider '{provider}' uses its own legacy code path (not the SIEMConnector "
-            "ABC). This endpoint only probes Splunk/Elastic/Sentinel/LimaCharlie."
-        )
+    out: Dict[str, Any] = {}
+    if provider == "wazuh":
+        out["note"] = "Wazuh uses its own code path (not the SIEMConnector ABC); this endpoint doesn't probe it."
         return out
     try:
-        from app.connectors import get_siem_connector
         conn = get_siem_connector(provider)
     except Exception as e:
         out["error"] = f"Failed to load connector: {type(e).__name__}: {e}"
@@ -1225,10 +1228,12 @@ def api_admin_get_settings(_: Dict[str, Any] = Depends(require_admin)):
     """Return current settings with API keys masked. The `env_defaults` block
     shows what would be used if the DB override is cleared, so the admin can
     tell whether an empty UI field means 'no key' or 'falling back to .env'."""
+    from app.connectors import connected_siems
     raw = settings_store.get_all()
     return {
         "settings": mask_for_api(raw),
         "allowed_keys": sorted(ALLOWED_KEYS),
+        "connected_siems": connected_siems(),  # effective, primary first (an unset list falls back to .env)
         "env_defaults": {
             "anthropic_api_key_set":   bool(settings.ANTHROPIC_API_KEY),
             "openai_api_key_set":      bool(settings.OPENAI_API_KEY),
@@ -1307,6 +1312,10 @@ def api_admin_put_settings(
     if cleaned.keys() & rag_keys:
         from app.rag import reload_rag
         reload_rag()
+    try:
+        write_memory_file()  # the deployment memory the LLM reads lists the connectors: keep it current
+    except Exception:
+        log.exception("Failed to refresh deployment memory")
 
     return {
         "ok": True,
@@ -1962,7 +1971,7 @@ def _severity_view() -> Dict[str, Any]:
         siems.append({"id": sid, "label": base["label"], "fields": base["fields"], "scale": base["scale"],
                       "thresholds": prof["thresholds"], "default_thresholds": base["thresholds"],
                       "words": prof["words"], "default_words": base["words"], "alerts": counts.get(sid, 0)})
-    return {"configured_siem": cfg.get("configured") or "", "siems": siems,
+    return {"configured_siem": cfg.get("configured") or "", "connected_siems": cfg.get("connected") or [], "siems": siems,
             "rules": cfg.get("rules") or {}, "seen_rules": alerts_inbox.rule_counts()}
 
 
@@ -2110,9 +2119,9 @@ def api_sync_alerts(current_user: Dict[str, Any] = Depends(get_current_user)):
     webhook missed (NullShift or the tunnel down) still lands. Ingest dedupes
     on detect_id, so re-pulling what the webhook already delivered is a no-op."""
     # ponytail: LimaCharlie only, fixed 24h window; add a since-last-sync cursor if outages outlast a day
-    if (settings.SIEM_PROVIDER or "").lower().strip() != "limacharlie":
+    from app.connectors import connected_siems, get_siem_connector
+    if "limacharlie" not in connected_siems():
         return {"added": 0, "pulled": 0, "note": "Pull refresh is only available for LimaCharlie"}
-    from app.connectors import get_siem_connector
     conn = get_siem_connector("limacharlie")
     if not conn.is_available():
         raise HTTPException(status_code=503, detail="LimaCharlie credentials are not configured")

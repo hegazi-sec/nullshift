@@ -27,9 +27,10 @@ class Settings(BaseSettings):
 
     VT_API_KEY: Optional[str] = None
 
-    # Active SIEM provider: wazuh | splunk | elastic | sentinel | limacharlie
-    # When multiple SIEMs are configured, this selects which one the
-    # investigation and tool_runner use for primary queries.
+    # Connected SIEMs, primary first, as a comma list (e.g. "limacharlie,wazuh"; "none" for none).
+    # Unset: the single SIEM_PROVIDER (wazuh | splunk | elastic | sentinel | limacharlie),
+    # which the setup wizard writes. Read through app.connectors.connected_siems().
+    SIEM_PROVIDERS: str = ""
     SIEM_PROVIDER: str = "wazuh"
 
     # Splunk Enterprise / Cloud (port 8089 REST API)

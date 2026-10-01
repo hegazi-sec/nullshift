@@ -24,18 +24,8 @@ def _compute_available_sources() -> List[str]:
     """Which connectors this deployment can actually reach. The LLM is told to
     enumerate only these in SECTION 1 so the report doesn't claim sources are
     'Not retrieved' for connectors this install isn't configured to use."""
-    out: List[str] = []
-    siem = (settings.SIEM_PROVIDER or "wazuh").lower().strip()
-    if siem == "wazuh":
-        if settings.wazuh_indexer_url:
-            out.append("wazuh")
-    elif siem in ("limacharlie", "splunk", "elastic", "sentinel"):
-        try:
-            from app.connectors import get_siem_connector
-            if get_siem_connector(siem).is_available():
-                out.append(siem)
-        except Exception:
-            pass
+    from app.connectors import connected_siems, siem_available
+    out: List[str] = [s for s in connected_siems() if siem_available(s)]
     if settings.VT_API_KEY:
         out.append("virustotal")
     return out
@@ -389,9 +379,9 @@ def run_investigation(intent: str, message: str, time_hint: Optional[str], curre
             evidence["sources_queried"].append("wazuh")
             evidence["executed_calls"].append({"tool_name": "wazuh", "query_id": "summary_sample", "params": {}, "result_count": len(waz_rows), "samples": waz_rows[:3]})
 
-    # Secondary SIEM auto-query: when SIEM_PROVIDER points at one of the
-    # SIEMConnector-backed providers (splunk/elastic/sentinel/limacharlie),
-    # pull its detections so the LLM gets cross-source evidence on every turn.
+    # Every other connected SIEM (splunk/elastic/sentinel/limacharlie, through the
+    # SIEMConnector ABC): pull its detections so the LLM gets cross-source evidence
+    # on every turn. Wazuh has its own path above.
     #
     # Query selection — we only use specific queries when the message contains
     # a real IOC or an explicit threat tool name. For all other natural-language
@@ -399,8 +389,9 @@ def run_investigation(intent: str, message: str, time_hint: Optional[str], curre
     # most recent 200 events broadly and let the LLM analyse them. Sending the
     # user's generic English words as keyword filters to the SIEM is worse than
     # useless: it returns 0 results and causes false "Likely Benign" responses.
-    secondary_siem = (settings.SIEM_PROVIDER or "wazuh").lower().strip()
-    if secondary_siem in ("splunk", "elastic", "sentinel", "limacharlie"):
+    from app.connectors import connected_siems
+    # ponytail: one SIEM after another; run them in a thread pool if a 3+ SIEM install feels slow
+    for secondary_siem in [s for s in connected_siems() if s != "wazuh"]:
         ip_re_2 = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")
         ips_in_msg = ip_re_2.findall(message or "")
 
