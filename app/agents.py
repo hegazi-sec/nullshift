@@ -323,13 +323,22 @@ def run_investigator(cfg: Dict[str, Any]) -> str:
                       "notes": notes + " Needs human review."}
             if verdict == "Malicious":
                 fields["severity"] = "critical" if conf == "High" else "high"
+            # Isolation runs through LimaCharlie sensors. Alerts from other SIEMs carry none, so the
+            # recommendation is recorded for a human to act on in their EDR instead of being dropped.
+            sensors = alerts_inbox.sensors(ids) if wants_isolation else []
+            manual = wants_isolation and not sensors
+            if manual:
+                hosts = ", ".join(alerts_inbox.hosts(ids)) or "the affected host"
+                fields["notes"] += f" Isolate {hosts} in your EDR: automatic isolation needs LimaCharlie sensors."
             incident_store.update_for_user(case["user_id"], case["id"], fields)
             agent_store.log("investigator", "needs_review", case["id"], f"{case['case_number']}: {outcome}, needs human review", data)
-            if wants_isolation:
-                for sid, host in alerts_inbox.sensors(ids):
-                    p = agent_store.propose(case["id"], sid, host, f"{case['case_number']}: {outcome}")
-                    if p:
-                        agent_store.log("investigator", "proposed", p["id"], f"Isolate {host or sid} for {case['case_number']}")
+            for sid, host in sensors:
+                p = agent_store.propose(case["id"], sid, host, f"{case['case_number']}: {outcome}")
+                if p:
+                    agent_store.log("investigator", "proposed", p["id"], f"Isolate {host or sid} for {case['case_number']}")
+            if manual:
+                agent_store.log("investigator", "isolate_manually", case["id"],
+                                f"{case['case_number']}: isolate {hosts} in your EDR (automatic isolation needs LimaCharlie)", data)
         done += 1
     return f"{done} case(s) investigated"
 
@@ -355,7 +364,8 @@ def run_reporter(cfg: Dict[str, Any]) -> str:
         f"{acts['triage:case_opened']} case(s) opened",
         f"- Investigator agent: {acts['investigator:case_closed']} case(s) closed as false positives, "
         f"{acts['investigator:needs_review']} flagged for human review, "
-        f"{acts['investigator:proposed']} isolation proposal(s)",
+        f"{acts['investigator:proposed']} isolation proposal(s)"
+        + (f", {acts['investigator:isolate_manually']} host isolation(s) to do manually in the EDR" if acts['investigator:isolate_manually'] else ""),
         *([f"- Shadow mode (nothing changed): triage assessed {acts['triage:shadow']} alert group(s), "
            f"the investigator would have closed {acts['investigator:shadow']} case(s)"]
           if acts["triage:shadow"] or acts["investigator:shadow"] else []),

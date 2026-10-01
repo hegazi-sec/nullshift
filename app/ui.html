@@ -4502,13 +4502,13 @@ const AGENT_INFO = {
   triage: ['Triage', 'Every minute: groups new alerts by rule and host and investigates each group, then dismisses confident false positives and opens a case for the rest (in shadow mode it only notes what it would do).', 'max_per_run', 'Groups per run'],
   investigator: ['Investigator', 'Every 2 minutes: L2 investigation of the cases triage opened. Closes confirmed false positives, flags the rest for a human, proposes isolation for malicious hosts.', 'max_per_run', 'Cases per run'],
   reporter: ['Reporter', 'On a schedule: posts a shift report (alert volume, agent decisions, open and stale cases) as a new investigation.', null, null],
-  responder: ['Containment', 'Isolates a host in LimaCharlie only after an admin or L2 analyst approves the proposal. Needs an LC API key allowed to task sensors.', null, null],
+  responder: ['Containment', 'Isolates a host in LimaCharlie only after an admin or L2 analyst approves the proposal. Needs an LC API key allowed to task sensors. With other SIEMs the Investigator lists hosts to isolate in your EDR instead (Activity: Isolate manually).', null, null],
 }
 const AGENT_ACTIONS = {
   dismissed: 'Dismissed FP', case_opened: 'Opened case', case_closed: 'Closed as FP', needs_review: 'Needs review',
   proposed: 'Proposed isolation', isolated: 'Isolated host', released: 'Released host', rejected: 'Rejected isolation',
   report: 'Shift report', undone: 'Undone', skipped: 'Skipped', error: 'Error', stopped: 'Stopped',
-  shadow: 'Shadow (no action)',
+  shadow: 'Shadow (no action)', isolate_manually: 'Isolate manually',
 }
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']  // Monday=0, as in the server
 const hh = h => `${String(h).padStart(2, '0')}:00`
@@ -4640,7 +4640,7 @@ function activityRowHtml(e, d) {
   const mine = d.me_id != null && data.owner_id != null ? data.owner_id === d.me_id : d.me === d.config.owner
   const btns = [
     conv && mine ? `<button type="button" class="btn-mini" data-open-conv="${esc(conv)}">Open investigation</button>` : '',
-    (['case_opened', 'needs_review', 'case_closed'].includes(e.action) || (e.agent === 'investigator' && e.action === 'shadow')) && mine
+    (['case_opened', 'needs_review', 'case_closed', 'isolate_manually'].includes(e.action) || (e.agent === 'investigator' && e.action === 'shadow')) && mine
       ? `<button type="button" class="btn-mini" data-open-case="${esc(e.target_id)}">Open case</button>` : '',  // an investigator shadow entry names the case a human must close
     ['dismissed', 'case_closed'].includes(e.action) && !e.undone_at ? `<button type="button" class="btn-mini danger" data-undo="${esc(e.id)}">Undo</button>` : '',
   ].join('')

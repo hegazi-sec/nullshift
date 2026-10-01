@@ -28,9 +28,14 @@ from app.db.incident_store import case_number
 DB_PATH = Path(__file__).resolve().parent.parent / 'data' / 'chat.db'
 
 # Host name across the webhook shapes we ingest.
+# The alert's host, for every SIEM shape NullShift ingests. Triage groups alerts by it, so a
+# shape missing here lumps different machines into one "unknown host" investigation.
 HOST_EXPR = ("COALESCE(json_extract(payload_json, '$.routing.hostname'),"  # LimaCharlie
              " json_extract(payload_json, '$.agent.name'),"                # Wazuh
-             " json_extract(payload_json, '$.host.name'))")                # Elastic ECS
+             " json_extract(payload_json, '$.host.name'),"                 # Elastic ECS
+             " json_extract(payload_json, '$.result.host'),"               # Splunk webhook alert action
+             " json_extract(payload_json, '$.CompromisedEntity'),"         # Sentinel
+             " json_extract(payload_json, '$.hostname'))")                 # generic
 
 ALERT_STATUSES = ("new", "investigating", "dismissed")
 
@@ -351,6 +356,15 @@ class AlertStore:
                 [(note, now, now, i) for i in ids],
             )
             self.conn.commit()
+
+    def hosts(self, ids: List[str]) -> List[str]:
+        """Distinct host names behind these alerts, whatever SIEM sent them."""
+        if not ids:
+            return []
+        with self.lock:
+            cur = self.conn.execute(
+                f"SELECT DISTINCT {HOST_EXPR} FROM ingested_alerts WHERE id IN ({','.join('?' * len(ids))})", ids)
+            return sorted(r[0] for r in cur.fetchall() if r[0])
 
     def sensors(self, ids: List[str]) -> List[tuple]:
         """Distinct LimaCharlie (sensor id, hostname) pairs behind these alerts."""
