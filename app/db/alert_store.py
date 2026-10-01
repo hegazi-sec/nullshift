@@ -22,6 +22,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app import alert_severity
+from app.alert_severity import normalize_severity  # noqa: F401 (imported from here elsewhere)
 from app.db.incident_store import case_number
 
 
@@ -39,71 +41,39 @@ HOST_EXPR = ("COALESCE(json_extract(payload_json, '$.routing.hostname'),"  # Lim
 
 ALERT_STATUSES = ("new", "investigating", "dismissed")
 
-_SEVERITY_MAP = {
-    # numeric levels (Wazuh 0-15, generic 1-10)
-    **{str(n): "low" for n in range(0, 6)},
-    **{str(n): "medium" for n in range(6, 10)},
-    **{str(n): "high" for n in range(10, 13)},
-    **{str(n): "critical" for n in range(13, 16)},
-    # common words
-    "info": "low", "informational": "low", "low": "low",
-    "medium": "medium", "moderate": "medium",
-    "high": "high", "important": "high",
-    "critical": "critical", "severe": "critical",
-}
 
-
-def normalize_severity(raw: Any) -> str:
-    if raw is None:
-        return "medium"
-    return _SEVERITY_MAP.get(str(raw).strip().lower(), "medium")
-
-
-def extract_alert_fields(payload: Dict[str, Any]) -> Dict[str, str]:
+def extract_alert_fields(payload: Dict[str, Any], source_hint: Optional[str] = None,
+                         cfg: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
     """Best-effort title/severity/source from common SIEM webhook shapes.
 
     Recognizes Wazuh ({rule:{description,level}}), LimaCharlie ({cat,detect}),
-    Splunk ({search_name,result}), Elastic ({rule:{name,severity}} or
-    {alert:{...}}), and generic {title|name|message, severity|level} bodies.
+    Splunk ({search_name,result}), Elastic ({rule:{name,severity}}), Sentinel
+    ({AlertDisplayName,AlertSeverity} or an incident's {properties:{title,severity}})
+    and generic {title|name|message, severity|level} bodies. The severity is read
+    on the sending SIEM's own scale (app/alert_severity.py).
     """
     title = None
-    severity = None
-    source = None
-
     rule = payload.get("rule")
     if isinstance(rule, dict):
         title = rule.get("description") or rule.get("name")
-        severity = rule.get("level") or rule.get("severity")
-        if rule.get("description") and payload.get("agent"):
-            source = "wazuh"
-        elif rule.get("name"):
-            source = "elastic"
-
     if not title and payload.get("cat"):
         title = str(payload["cat"])
-        source = source or "limacharlie"
-        meta = payload.get("detect_mtd")  # the D&R rule's report metadata
-        if severity is None and isinstance(meta, dict):
-            severity = meta.get("severity")
     if not title and payload.get("search_name"):
         title = str(payload["search_name"])
-        source = source or "splunk"
-
+    props = payload.get("properties")
+    if not title and isinstance(props, dict) and props.get("title"):
+        title = str(props["title"])
     if not title:
-        for key in ("title", "name", "alert_name", "message", "description"):
+        for key in ("title", "name", "alert_name", "AlertDisplayName", "DisplayName", "AlertName",
+                    "message", "description"):
             if payload.get(key):
                 title = str(payload[key])
                 break
-    if severity is None:
-        for key in ("severity", "level", "priority", "risk_score"):
-            if payload.get(key) is not None:
-                severity = payload[key]
-                break
-
+    title = (title or "Untitled alert")[:200]
     return {
-        "title": (title or "Untitled alert")[:200],
-        "severity": normalize_severity(severity),
-        "source": (source or str(payload.get("source") or "unknown"))[:40],
+        "title": title,
+        "severity": alert_severity.classify(payload, source_hint, title, cfg),
+        "source": (alert_severity.shape(payload) or str(payload.get("source") or "unknown"))[:40],
     }
 
 
@@ -177,14 +147,6 @@ class AlertStore:
                 "CREATE INDEX IF NOT EXISTS idx_alerts_detect_id "
                 "ON ingested_alerts(json_extract(payload_json, '$.detect_id'))"
             )
-            # ponytail: startup backfill for LimaCharlie alerts ingested before detect_mtd.severity
-            # was read (they defaulted to 'medium'); a no-op once fixed, delete after every install has run it
-            cur.execute(
-                "SELECT id, json_extract(payload_json, '$.detect_mtd.severity') FROM ingested_alerts "
-                "WHERE severity = 'medium' AND json_extract(payload_json, '$.detect_mtd.severity') IS NOT NULL"
-            )
-            fixes = [(normalize_severity(s), i) for i, s in cur.fetchall() if normalize_severity(s) != "medium"]
-            cur.executemany("UPDATE ingested_alerts SET severity = ? WHERE id = ?", fixes)
             self.conn.commit()
 
     @staticmethod
@@ -192,7 +154,7 @@ class AlertStore:
         return datetime.now(timezone.utc).isoformat()
 
     def ingest(self, payload: Dict[str, Any], source_hint: Optional[str] = None) -> Dict[str, Any]:
-        fields = extract_alert_fields(payload if isinstance(payload, dict) else {})
+        fields = extract_alert_fields(payload if isinstance(payload, dict) else {}, source_hint)
         if source_hint:
             fields["source"] = source_hint[:40]
         alert_id = uuid.uuid4().hex
@@ -371,6 +333,39 @@ class AlertStore:
             " FROM ingested_alerts WHERE created_at >= ? GROUP BY title"
             " HAVING fp > 0 AND decided >= ? ORDER BY fp DESC, n DESC LIMIT 6", (since, min_decided)).fetchall()
         return [{**dict(r), "rate": r["fp"] / r["decided"], "tune": r["fp"] / r["decided"] >= 0.8} for r in rows]
+
+    def rescore(self, cfg: Optional[Dict[str, Any]] = None) -> int:
+        """Re-read every alert's severity (the severity settings changed, or the app started
+        with newer rules). Only severity changes: updated_at is the resolve-time clock."""
+        # ponytail: parses every stored payload; fine at tens of thousands, batch it past that
+        cfg = alert_severity.load() if cfg is None else cfg
+        with self.lock:
+            rows = self.conn.execute("SELECT id, source, title, severity, payload_json FROM ingested_alerts").fetchall()
+            changes = []
+            for r in rows:
+                try:
+                    payload = json.loads(r["payload_json"])
+                except ValueError:
+                    continue
+                sev = alert_severity.classify(payload if isinstance(payload, dict) else {}, r["source"], r["title"], cfg)
+                if sev != r["severity"]:
+                    changes.append((sev, r["id"]))
+            self.conn.executemany("UPDATE ingested_alerts SET severity=? WHERE id=?", changes)
+            self.conn.commit()
+        return len(changes)
+
+    def rule_counts(self, limit: int = 300) -> List[Dict[str, Any]]:
+        """Alert titles (rules) by how often they fire, with their source and the severities they got."""
+        with self.lock:
+            rows = self.conn.execute(
+                "SELECT title AS name, source, COUNT(*) AS n, GROUP_CONCAT(DISTINCT severity) AS severities "
+                "FROM ingested_alerts GROUP BY title ORDER BY n DESC LIMIT ?", (limit,)).fetchall()
+        return [{**dict(r), "severities": sorted(r["severities"].split(","), key=alert_severity.SEVERITIES.index)}
+                for r in rows]
+
+    def source_counts(self) -> Dict[str, int]:
+        with self.lock:
+            return {r[0]: r[1] for r in self.conn.execute("SELECT source, COUNT(*) FROM ingested_alerts GROUP BY source")}
 
     def any_investigated(self) -> bool:
         """Has any alert ever been opened as an investigation (first-run checklist)."""

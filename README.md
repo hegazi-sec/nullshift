@@ -179,7 +179,27 @@ Authenticate with the token in **either**:
 - the `X-Webhook-Token: <token>` header *(preferred — kept out of logs)*, or
 - a `?token=<token>` query param *(for SIEMs that can't set custom headers)*
 
-The body is any JSON (≤ 128 KB). NullShift auto-extracts a title / severity / source from Wazuh, LimaCharlie, Splunk, Elastic, and generic payload shapes; anything unrecognized still ingests with the full raw payload preserved.
+The body is any JSON (≤ 128 KB). NullShift auto-extracts a title / severity / source from Wazuh, LimaCharlie, Splunk, Elastic, Sentinel and generic payload shapes; anything unrecognized still ingests with the full raw payload preserved.
+
+**Alert severity**
+
+Each SIEM's own severity is read on that SIEM's scale. The sending SIEM is the `?source=` value, else the payload's shape, else the SIEM NullShift is connected to.
+
+| SIEM | Field read (first present wins) | Default mapping to low · medium · high · critical |
+|---|---|---|
+| **LimaCharlie** | `priority` (the D&R report action's), then `detect_mtd.severity` | 0–2 · 3–4 · 5–7 · 8–10 (LimaCharlie's own Cases mapping) |
+| **Wazuh** | `rule.level` | 0–6 · 7–9 · 10–12 · 13–15 |
+| **Splunk** | `result.urgency` / `result.severity` (words or the 1–6 scale) | words as-is (informational → low); 1–3 · 4 · 5 · 6 |
+| **Elastic** | `rule.severity`, then the risk score | words as-is; 0–21 · 22–47 · 48–73 · 74–100 |
+| **Sentinel** | `properties.severity` / `AlertSeverity` | Informational and Low → low, Medium, High (Sentinel has no Critical) |
+
+Admins can change each SIEM's thresholds and words, and pin a severity per rule (rule overrides win), under **Settings → Connectors → Alert severity**. Saving re-scores every alert already in the inbox. For LimaCharlie, the cleanest fix is a `priority` in each rule's report action:
+
+```yaml
+- action: report
+  name: T1555.001 - Keychain Credential Access
+  priority: 6   # 0-2 low, 3-4 medium, 5-7 high, 8-10 critical
+```
 
 **Quick test**
 

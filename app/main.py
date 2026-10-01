@@ -25,6 +25,7 @@ from app.db.investigation_state import inv_state
 from app.db.verdict_store import verdicts as verdict_store, parse_decision
 from app.db.incident_store import incidents as incident_store
 from app.db.alert_store import alerts_inbox
+from app import alert_severity
 from app.db.agent_store import agent_store
 from app.alert_facts import alert_facts
 from app.scorecard import triage_scorecard
@@ -1932,6 +1933,55 @@ def api_attention(current_user: Dict[str, Any] = Depends(get_current_user)):
         "approvals": [{k: p[k] for k in ("id", "hostname", "reason")}
                       for p in agent_store.proposals(30) if p["status"] == "proposed"] if can_decide else [],
     }
+
+
+@app.on_event("startup")
+def _startup_rescore_alerts():
+    """Alerts keep the severity rules they were ingested under until re-read: pick up a
+    newer mapping (or settings changed while the app was down) once at start."""
+    try:
+        n = alerts_inbox.rescore()
+        if n:
+            log.info("Re-scored the severity of %d alert(s)", n)
+    except Exception:
+        log.exception("Alert severity rescore failed")
+
+
+def _severity_view() -> Dict[str, Any]:
+    """Settings › Connectors › Alert severity: each SIEM's mapping, the rule overrides, and the
+    rules seen in the inbox to pick overrides from."""
+    cfg = alert_severity.load()
+    counts: Dict[str, int] = {}
+    for src, n in alerts_inbox.source_counts().items():
+        sid = alert_severity.siem_id(src)
+        if sid:
+            counts[sid] = counts.get(sid, 0) + n
+    siems = []
+    for sid, base in alert_severity.PROFILES.items():
+        prof = alert_severity.profile(sid, cfg)
+        siems.append({"id": sid, "label": base["label"], "fields": base["fields"], "scale": base["scale"],
+                      "thresholds": prof["thresholds"], "default_thresholds": base["thresholds"],
+                      "words": prof["words"], "default_words": base["words"], "alerts": counts.get(sid, 0)})
+    return {"configured_siem": cfg.get("configured") or "", "siems": siems,
+            "rules": cfg.get("rules") or {}, "seen_rules": alerts_inbox.rule_counts()}
+
+
+@app.get('/api/admin/alert-severity')
+def api_admin_alert_severity(current_user: Dict[str, Any] = Depends(require_admin)):
+    return _severity_view()
+
+
+@app.put('/api/admin/alert-severity')
+def api_admin_put_alert_severity(payload: Dict[str, Any], current_user: Dict[str, Any] = Depends(_require_admin_csrf)):
+    """Save the severity mapping and re-score every alert in the inbox under it."""
+    try:
+        custom = alert_severity.validate(payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    alert_severity.save(custom)
+    rescored = alerts_inbox.rescore()
+    log.info("Alert severity settings saved by %s; %d alert(s) re-scored", current_user["username"], rescored)
+    return {**_severity_view(), "rescored": rescored}
 
 
 @app.get('/api/onboarding')

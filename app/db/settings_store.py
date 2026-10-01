@@ -119,6 +119,8 @@ ALLOWED_KEYS = frozenset({
     "webhook_token",           # shared secret for POST /api/alerts/ingest
     # Autonomous agents (JSON: owner + per-agent switches and limits)
     "agents_config",
+    # Alert severity per SIEM (JSON: thresholds, words, rule overrides; see app/alert_severity.py)
+    "alert_severity",
     # Setup / Auth
     "setup_complete",
     "jwt_secret",

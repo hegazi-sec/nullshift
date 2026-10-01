@@ -609,6 +609,35 @@
       font-size: 12px;
       color: var(--red);
     }
+    /* Alert severity */
+    .sev-siem { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; }
+    .sev-siem > summary {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 10px 12px;
+      cursor: pointer; list-style: none; font-size: 13px; font-weight: 600; color: var(--text2);
+    }
+    .sev-siem > summary::-webkit-details-marker { display: none; }
+    .sev-siem > summary::before { content: '▸'; color: var(--muted); }
+    .sev-siem[open] > summary::before { content: '▾'; }
+    .sev-meta { font-family: var(--font-mono); font-size: 11px; font-weight: 400; color: var(--muted); }
+    .sev-body { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 0 12px 12px; }
+    .sev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px 12px; width: 100%; }
+    .sev-grid label { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+    .sev-sub {
+      margin: 18px 0 6px; font-family: var(--font-hd); font-size: 11px; font-weight: 700;
+      letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    }
+    .sev-rule { display: grid; grid-template-columns: minmax(0, 1fr) 130px auto; gap: 8px; align-items: center; margin: 6px 0; }
+    .sev-rule input { max-width: none; }
+    #sevRules:empty { display: none; }
+    #sevAddRule { margin-top: 8px; }
+    .sev-seen { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--border); font-size: 13px; color: var(--text); }
+    .sev-seen > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .sev-seen .sev-meta { display: block; margin-top: 2px; }
+    .sev-actions { margin-left: 0; margin-top: 18px; }
+    @media (max-width: 639px) {
+      .sev-rule { grid-template-columns: minmax(0, 1fr) auto; }
+      .sev-rule input { grid-column: 1 / -1; }
+    }
     .plain-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
     .plain-fieldset:disabled { opacity: .4; }
     .info-card {
@@ -965,6 +994,29 @@
       -H "X-Webhook-Token: &lt;token&gt;" -H "Content-Type: application/json" -d @alert.json</code>
     </div>
 
+    <!-- Alert severity: each SIEM's own scale, mapped onto NullShift's four levels -->
+    <div class="section-title" style="margin-top:28px;">Alert severity</div>
+    <div class="section-desc">
+      NullShift reads each SIEM's own severity field and maps it onto low, medium, high and critical.
+      A rule override wins over everything; an alert whose shape isn't recognised is read on the
+      connected SIEM's scale. Saving re-scores every alert already in the inbox, which also changes
+      what the Triage agent's auto-dismiss limit applies to.
+    </div>
+    <div class="panel" id="sevPanel">
+      <div id="sevSiems"><div class="hint">Loading…</div></div>
+      <div class="sev-sub">Rule overrides</div>
+      <div class="hint">The name must match the alert title exactly, so pick it from the list.</div>
+      <datalist id="sevRuleList"></datalist>
+      <div id="sevRules"></div>
+      <button class="btn btn-ghost btn-sm" type="button" id="sevAddRule">Add override</button>
+      <div class="sev-sub">Most frequent rules</div>
+      <div id="sevSeen"></div>
+      <div class="actions sev-actions">
+        <button class="btn btn-primary" id="saveSeverityBtn">Save</button>
+        <span id="severityStatus" class="status" role="status"></span>
+      </div>
+    </div>
+
   </div>
 
   <!-- ─ RAG / Knowledge Base ──────────────────────────────────── -->
@@ -1199,7 +1251,7 @@
   const _loaded  = new Set();
   const _loaders = {
     providers:  () => loadProviders(),
-    connectors: () => loadConnectors(),
+    connectors: () => { loadConnectors(); loadSeverity(); },
     rag:        () => loadRagSettings(),
     vision:     () => loadVisionSettings(),
   };
@@ -2250,6 +2302,134 @@
       }
     };
   });
+
+  // ─── Alert severity ──────────────────────────────────────────
+  // Each SIEM's own severity field mapped onto low/medium/high/critical, plus per-rule
+  // overrides. One Save sends the whole state and the server re-scores every alert.
+  const SEVS = ['low', 'medium', 'high', 'critical'];
+  const SEV_TH = [['critical_min', 'Critical from'], ['high_min', 'High from'], ['medium_min', 'Medium from']];
+  const sevPanel = document.getElementById('sevPanel');
+  let _sev = null;  // the last GET/PUT body: labels, scales and defaults for validation and Reset
+  const sevSelect = (attr, val) =>
+    `<select ${attr}>${SEVS.map(s => `<option${s === val ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
+
+  function sevBodyHtml(s, th, words) {
+    const out = [`<div class="hint">Reads ${s.fields.map(f => `<code>${esc(f)}</code>`).join(' → ')}; the first one present decides.</div>`];
+    if (s.scale && th) {
+      out.push(`<div class="sev-grid">${SEV_TH.map(([k, l]) => `<label>${l}
+        <input type="number" step="1" min="${esc(s.scale.min)}" max="${esc(s.scale.max)}" data-th="${k}" value="${esc(th[k])}"/></label>`).join('')}</div>
+        <div class="hint">Below Medium is Low. Range ${esc(s.scale.min)}–${esc(s.scale.max)} on <code>${esc(s.scale.field)}</code>.${
+          s.id === 'limacharlie' ? ' The defaults match LimaCharlie’s own Cases mapping.' : ''}</div>`);
+    }
+    const ws = Object.keys(words || {});
+    if (ws.length) out.push(`<div class="sev-grid">${ws.map(w => `<label><code>${esc(w)}</code>${sevSelect(`data-word="${esc(w)}"`, words[w])}</label>`).join('')}</div>`);
+    out.push(`<button class="btn btn-ghost btn-sm" type="button" data-sev-reset="${esc(s.id)}">Reset to defaults</button>`);
+    return out.join('');
+  }
+
+  const sevRuleRow = (name = '', sev = 'low') => `<div class="sev-rule">
+      <input type="text" list="sevRuleList" maxlength="200" placeholder="Rule name (alert title)" aria-label="Rule name" value="${esc(name)}"/>
+      ${sevSelect('aria-label="Severity"', sev)}
+      <button class="btn btn-ghost btn-sm" type="button" data-sev-remove>Remove</button>
+    </div>`;
+
+  function renderSeverity(d) {
+    const open = _sev ? [...sevPanel.querySelectorAll('.sev-siem[open]')].map(b => b.dataset.siem) : [d.configured_siem];
+    _sev = d;
+    document.getElementById('sevSiems').innerHTML = d.siems.map(s => `
+      <details class="sev-siem" data-siem="${esc(s.id)}"${open.includes(s.id) ? ' open' : ''}>
+        <summary>${esc(s.label)}${s.id === d.configured_siem ? ' <span class="pill green">connected</span>' : ''}
+          <span class="sev-meta">${esc(Number(s.alerts || 0).toLocaleString())} alert${s.alerts === 1 ? '' : 's'}</span></summary>
+        <div class="sev-body">${sevBodyHtml(s, s.thresholds, s.words)}</div>
+      </details>`).join('');
+    document.getElementById('sevRuleList').innerHTML = d.seen_rules.map(r =>
+      `<option value="${esc(r.name)}">${esc(r.n)} alerts, ${esc(r.source)}</option>`).join('');
+    document.getElementById('sevRules').innerHTML = Object.entries(d.rules || {}).map(([n, s]) => sevRuleRow(n, s)).join('');
+    const top = d.seen_rules.slice(0, 10);
+    document.getElementById('sevSeen').innerHTML = top.map((r, i) => `<div class="sev-seen">
+        <span>${esc(r.name)}<span class="sev-meta">${esc(r.source)} · ${esc(Number(r.n).toLocaleString())} alert${r.n === 1 ? '' : 's'} · now ${esc((r.severities || []).join(', '))}</span></span>
+        <button class="btn btn-ghost btn-sm" type="button" data-sev-override="${i}">Override</button>
+      </div>`).join('') || '<div class="hint">No alerts yet.</div>';
+  }
+
+  async function loadSeverity() {
+    try { renderSeverity(await api('/api/admin/alert-severity')); }
+    catch (e) {
+      document.getElementById('sevSiems').innerHTML = `<div class="load-error">Could not load severity settings: ${esc(e.message)}
+        <button class="btn btn-ghost btn-sm" type="button" data-sev-retry>Retry</button></div>`;
+    }
+  }
+
+  // The whole section as the PUT body, or a message saying what to fix.
+  function sevState() {
+    const body = { thresholds: {}, words: {}, rules: {} };
+    for (const blk of sevPanel.querySelectorAll('.sev-siem')) {
+      const s = _sev.siems.find(x => x.id === blk.dataset.siem);
+      const th = {};
+      for (const i of blk.querySelectorAll('[data-th]')) {
+        const v = Number(i.value);
+        if (i.value.trim() === '' || !Number.isInteger(v) || v < s.scale.min || v > s.scale.max)
+          return { error: `${s.label}: ${SEV_TH.find(t => t[0] === i.dataset.th)[1]} must be a whole number from ${s.scale.min} to ${s.scale.max}.` };
+        th[i.dataset.th] = v;
+      }
+      if (Object.keys(th).length) {
+        if (th.medium_min > th.high_min) return { error: `${s.label}: Medium from (${th.medium_min}) can’t be above High from (${th.high_min}).` };
+        if (th.high_min > th.critical_min) return { error: `${s.label}: High from (${th.high_min}) can’t be above Critical from (${th.critical_min}).` };
+        body.thresholds[s.id] = th;
+      }
+      const w = {};
+      blk.querySelectorAll('[data-word]').forEach(sel => { w[sel.dataset.word] = sel.value; });
+      if (Object.keys(w).length) body.words[s.id] = w;
+    }
+    for (const row of sevPanel.querySelectorAll('.sev-rule')) {
+      const name = row.querySelector('input').value.trim();
+      if (!name) continue;
+      if (name in body.rules) return { error: `“${name}” has two overrides; keep one.` };
+      body.rules[name] = row.querySelector('select').value;
+    }
+    return { body };
+  }
+
+  sevPanel.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || !_sev && !('sevRetry' in b.dataset)) return;
+    if ('sevRetry' in b.dataset) { loadSeverity(); return; }
+    const rules = document.getElementById('sevRules');
+    if (b.dataset.sevReset) {
+      const s = _sev.siems.find(x => x.id === b.dataset.sevReset), body = b.closest('.sev-body');
+      body.innerHTML = sevBodyHtml(s, s.default_thresholds, s.default_words);
+      body.querySelector('input, select, button').focus();
+    } else if (b.id === 'sevAddRule') {
+      rules.insertAdjacentHTML('beforeend', sevRuleRow());
+      rules.lastElementChild.querySelector('input').focus();
+    } else if ('sevRemove' in b.dataset) {
+      b.closest('.sev-rule').remove();
+    } else if (b.dataset.sevOverride) {
+      const r = _sev.seen_rules[+b.dataset.sevOverride];
+      let row = [...rules.querySelectorAll('.sev-rule')].find(x => x.querySelector('input').value.trim() === r.name);
+      if (!row) {
+        rules.insertAdjacentHTML('beforeend', sevRuleRow(r.name, (r.severities || [])[0]));
+        row = rules.lastElementChild;
+      }
+      row.querySelector('select').focus();
+    } else return;
+    _dirty.add(sevPanel);  // these change the section without an input event
+  });
+
+  document.getElementById('saveSeverityBtn').onclick = async () => {
+    const st = document.getElementById('severityStatus');
+    if (!_sev) { setStatus(st, 'Severity settings haven’t loaded yet', 'err'); return; }
+    const { body, error } = sevState();
+    if (error) { setStatus(st, error, 'err'); return; }
+    setStatus(st, 'Saving and re-scoring alerts…');
+    try {
+      const d = await api('/api/admin/alert-severity', send('PUT', body));
+      renderSeverity(d);
+      setStatus(st, `Saved. ${d.rescored} existing alert${d.rescored === 1 ? '' : 's'} re-scored.`, 'ok');
+    } catch(e) {
+      setStatus(st, 'Could not save: ' + e.message, 'err');
+    }
+  };
 
   // ─── Init ────────────────────────────────────────────────────
   loadUsers();
