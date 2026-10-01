@@ -44,9 +44,9 @@ from urllib.parse import urlsplit
 from app.utils import csv_context as csv_ctx
 
 class _AccessLogFilter(logging.Filter):
-    # UI polling (ping every 60s, alert inbox + dashboard every 1s, agents every 3s) would flood the access log,
+    # UI polling (ping every 60s, attention + alert inbox + dashboard every 1s, agents every 3s) would flood the access log,
     # and SIEM webhooks that can't send headers put the shared secret in ?token=.
-    _POLLS = re.compile(r'"GET /api/(?:ping|alerts|dashboard|agents|inflight)(?:\?\S*)? HTTP')
+    _POLLS = re.compile(r'"GET /api/(?:ping|alerts|attention|dashboard|agents|inflight)(?:\?\S*)? HTTP')
     _TOKEN = re.compile(r'(token=)[^&\s]+')
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -1917,6 +1917,20 @@ def api_dashboard(hours: int = 24, current_user: Dict[str, Any] = Depends(get_cu
         "verdicts": verdict_store.counts_since(current_user["id"], alerts["since"]),
         "cases_open": len(open_cases),
         "cases": open_cases[:8],
+    }
+
+
+@app.get('/api/attention')
+def api_attention(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """What the tab title and browser notifications report: the new-alert count, the
+    newest critical alerts still new, and isolation proposals this analyst may decide on."""
+    can_decide = current_user.get("role") in ("admin", "l2")
+    return {
+        "new_count": alerts_inbox.count_new(),
+        "critical": [{k: a[k] for k in ("id", "title", "host")}
+                     for a in alerts_inbox.list(status="new", severity="critical", limit=10)],
+        "approvals": [{k: p[k] for k in ("id", "hostname", "reason")}
+                      for p in agent_store.proposals(30) if p["status"] == "proposed"] if can_decide else [],
     }
 
 

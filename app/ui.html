@@ -1442,6 +1442,7 @@
   <a class="narrow-only" href="#/agents">Agents</a>
   <a id="adminLink" href="/admin" hidden>Settings</a>
   <button type="button" id="keysBtn">Keyboard shortcuts <kbd>?</kbd></button>
+  <button type="button" id="notifyBtn" aria-pressed="false">Notifications: off</button>
   <a id="logoutLink" href="/logout">Log out</a>
 </div>
 
@@ -1712,6 +1713,7 @@ const api = {
   prefs: () => apiJSON('/api/me/prefs'),
   savePrefs: prefs => apiJSON('/api/me/prefs', { method: 'PUT', body: { prefs } }),
   dashboard: hours => apiJSON(`/api/dashboard?hours=${hours}`),
+  attention: () => apiJSON('/api/attention'),
   agents: () => apiJSON('/api/agents'),
   scorecard: days => apiJSON(`/api/agents/scorecard?days=${days}`),
 }
@@ -2172,7 +2174,10 @@ const convList    = $('convList')
 
 function setViewTitle(text) {
   viewTitleEl.textContent = text
-  document.title = `${text} · NullShift`
+  renderDocTitle()
+}
+function renderDocTitle() {
+  document.title = `${attnCount ? `(${attnCount}) ` : ''}${viewTitleEl.textContent} · NullShift`
 }
 
 // ─── Chat sessions ───────────────────────────────────────────────
@@ -2483,6 +2488,7 @@ async function pollSession(s) {
     renderTranscript(s, d)
     if (grew && !visible) markUnread(s, false)
     else if (visible) announce('Reply received')
+    if (grew) replyNotify(s, false)
     refreshList('chat')
   } catch (e) {
     if (e.status === 404) { goneIds.add(s.id); stopPoll(s); clearInflight(s) }
@@ -2519,6 +2525,7 @@ function finishReply(s, text, trace, failed = false, meta = null) {
   if (text) { appendMessage(s, 'assistant', text, { debugTrace: trace, meta }); s.count++ }
   if (isVisible(s)) announce(failed ? 'The investigation failed' : 'Reply received')
   else markUnread(s, failed)
+  replyNotify(s, failed)
   refreshList('chat')
 }
 
@@ -3247,9 +3254,81 @@ async function deleteIncident(id) {
   }
 }
 
-async function pollAlertBadge() {
-  try { updateAlertBadge((await api.listAlerts('new', 1)).new_count || 0) } catch {}
+// ─── Attention: tab title count and opt-in browser notifications ──
+// The title counts new alerts plus isolation proposals awaiting this analyst. Notifications
+// (critical alerts, approvals, finished investigations) fire only while NullShift is not the
+// focused window. Opt-in is per browser: a phone and a desk machine choose separately.
+const NOTIFY_KEY = 'ns.notify'
+let attnCount = 0
+let attnSeen = null  // keys already reported; the first poll only records them, so login doesn't flood
+
+function notifyOn() {
+  try { return localStorage.getItem(NOTIFY_KEY) === '1' && window.Notification?.permission === 'granted' } catch { return false }
 }
+
+async function desktopNotify({ key, title, body = '', url, sticky = false }) {
+  if (!notifyOn() || document.hasFocus()) return
+  const opts = { body, tag: key, data: { url }, icon: '/static/favicon.svg', requireInteraction: sticky }
+  try {
+    // Android Chrome only shows notifications through a service worker
+    const reg = await navigator.serviceWorker?.getRegistration('/static/')
+    if (reg?.active) { await reg.showNotification(title, opts); return }
+    const n = new Notification(title, opts)
+    n.addEventListener('click', () => { window.focus(); navigate(url); n.close() })
+  } catch {}
+}
+
+function replyNotify(s, failed) {
+  desktopNotify({ key: `chat:${s.id}`, title: failed ? 'Investigation failed' : 'Investigation finished',
+                  body: s.title || 'Investigation', url: `#/chat/${enc(s.id)}` })
+}
+
+async function pollAttention() {
+  let d
+  try { d = await api.attention() } catch { return }
+  updateAlertBadge(d.new_count)
+  attnCount = d.new_count + d.approvals.length
+  renderDocTitle()
+  const items = [
+    ...d.approvals.map(p => ({ key: `prop:${p.id}`, title: `Isolation awaiting approval: ${p.hostname || 'host'}`,
+                               body: p.reason || '', url: '#/agents/proposals', sticky: true })),
+    ...d.critical.map(a => ({ key: `alert:${a.id}`, title: `Critical alert: ${a.title}`,
+                              body: a.host ? `Host ${a.host}` : '', url: `#/alerts/${enc(a.id)}` })),
+  ]
+  const first = !attnSeen
+  attnSeen ??= new Set()
+  for (const it of items) {
+    if (attnSeen.has(it.key)) continue
+    attnSeen.add(it.key)
+    if (!first) desktopNotify(it)
+  }
+}
+
+const notifyBtn = $('notifyBtn')
+function renderNotifyBtn() {
+  const why = !window.isSecureContext ? 'need HTTPS' : !window.Notification ? 'not supported here' : ''
+  notifyBtn.disabled = !!why
+  notifyBtn.textContent = `Notifications: ${why || (notifyOn() ? 'on' : 'off')}`
+  notifyBtn.setAttribute('aria-pressed', String(notifyOn()))
+  notifyBtn.title = why === 'need HTTPS' ? 'Browsers only allow notifications over HTTPS or on localhost'
+    : why ? 'On iPhone and iPad, add NullShift to the Home Screen first'
+    : 'Critical alerts, isolation approvals and finished investigations, while NullShift is in the background'
+}
+notifyBtn.addEventListener('click', async () => {
+  if (notifyOn()) { try { localStorage.removeItem(NOTIFY_KEY) } catch {} }
+  else if (await Notification.requestPermission() === 'granted') {
+    try { localStorage.setItem(NOTIFY_KEY, '1') } catch {}
+    navigator.serviceWorker?.register('/static/sw.js').catch(() => {})
+  } else notify('Notifications are blocked for this site: allow them in the browser\'s site settings.', null, { error: true })
+  renderNotifyBtn()
+})
+// A notification clicked while this tab is open: the service worker focuses it and sends the route.
+navigator.serviceWorker?.addEventListener('message', e => {
+  if (typeof e.data?.go === 'string' && e.data.go.startsWith('#/')) navigate(e.data.go)
+})
+navigator.serviceWorker?.startMessages()
+if (notifyOn()) navigator.serviceWorker?.register('/static/sw.js').catch(() => {})
+renderNotifyBtn()
 
 // ─── Mobile drawer for the list pane ─────────────────────────────
 function openDrawer() {
@@ -4706,6 +4785,7 @@ async function loadAgents(force = false) {
     // Don't re-render under someone typing in a setting.
     const editing = agentsEl.contains(document.activeElement) && document.activeElement.matches('input, select')
     if (sig !== agentsSig && (force || !editing)) { agentsSig = sig; agentsData = d; renderAgents() }
+    if (agentsJump) { agentsJump = false; agentsEl.querySelector('[aria-label="Containment proposals"]')?.scrollIntoView({ block: 'start' }) }
   } catch {
     live.textContent = 'Offline, retrying…'
     live.classList.add('off')
@@ -4714,8 +4794,10 @@ async function loadAgents(force = false) {
   }
 }
 
-function enterAgents() {
+let agentsJump = false  // #/agents/proposals (a notification): scroll to the proposals once loaded
+function enterAgents(id) {
   setViewTitle('Agents')
+  agentsJump = id === 'proposals'
   agentsSig = null
   loadAgents()
   loadScorecard()
@@ -5077,7 +5159,7 @@ try { sessionStorage.removeItem('ns.returnTo') } catch {}
 render()
 ping()
 if (listSection !== 'chat') refreshList('chat')  // pending chats and titles are known from the start
-pollAlertBadge()
+pollAttention()
 renderStatus()
 let loggingOut = false
 $('logoutLink').addEventListener('click', () => {
@@ -5102,21 +5184,29 @@ document.addEventListener('visibilitychange', () => {
 })
 
 every(60_000, ping)
-// Live refresh every 1s: alert badge, the Alerts list, the dashboard and the running-investigation
-// clock. Skipped while the tab is hidden or the previous tick is still in flight.
-let _tickBusy = false, _tick = 0
+// Live refresh every 1s: attention (badge, tab title, notifications), the Alerts list, the dashboard
+// and the running-investigation clock. Skipped while the previous tick is still in flight.
+let _tickBusy = false, _tick = 0, _hiddenTick = 0
 every(1000, async () => {
   // No snapshot or ping for a while: the connection is dead (sleep, network change). Drop it and fall back.
   if (live.ctl && Date.now() - live.lastData > LIVE_SILENT_MS) live.ctl.abort()
   const cur = route.view === 'chat' && route.id ? sessions.get(route.id) : null
   if (cur?.inflight) updateIndicator(cur)
-  if (document.hidden || _tickBusy) return
+  if (_tickBusy) return
+  if (document.hidden) {
+    // Hidden: only the attention poll (tab title, notifications), every 15 s.
+    // ponytail: Chrome slows hidden-tab timers to once a minute after 5 minutes; Web Push if that's too slow
+    if (++_hiddenTick % 15) return
+    _tickBusy = true
+    try { await pollAttention() } finally { _tickBusy = false }
+    return
+  }
   _tickBusy = true
   _tick++
   try {
     const listShown = !!LISTS[route.view]
-    if (route.view === 'dashboard') await loadDashboard()  // also updates the badge
-    else if (!(listShown && listSection === 'alerts')) await pollAlertBadge()
+    await pollAttention()
+    if (route.view === 'dashboard') await loadDashboard()
     if (listShown && listSection === 'alerts') await refreshList('alerts')
     if (route.view === 'agents' && _tick % 3 === 0) await loadAgents()
     if (_tick % 10 === 0) await refreshList('chat')  // new chats from agents, running investigations
