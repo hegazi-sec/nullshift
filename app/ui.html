@@ -664,6 +664,24 @@
       text-align: left;
       transition: border-color .12s, background .12s;
     }
+    .onboard {
+      width: 100%; max-width: 520px; margin-top: var(--sp-3); padding: var(--sp-3) var(--sp-4);
+      background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px; text-align: left;
+    }
+    .onboard header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+    .onboard h3 { font-family: var(--font-hd); font-size: var(--fs-4); font-weight: 600; color: var(--text2); }
+    .onboard ol { list-style: none; display: flex; flex-direction: column; }
+    .onboard li { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; border-top: 1px solid var(--border); }
+    .onboard-check {
+      flex: none; width: 20px; height: 20px; border: 1px solid var(--field-border); border-radius: 50%;
+      display: grid; place-items: center; font-size: var(--fs-2); color: var(--bg);
+    }
+    .onboard li.done .onboard-check { background: var(--green); border-color: var(--green); }
+    .onboard li.done b { color: var(--muted); text-decoration: line-through; }
+    .onboard-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .onboard-text b { font-size: var(--fs-3); font-weight: 600; color: var(--text2); }
+    .onboard-text small { font-size: var(--fs-2); line-height: 1.5; color: var(--muted); }
+    .onboard li > .btn-mini { flex: none; text-decoration: none; }
     .hint-chip:hover { border-color: var(--accent); background: rgba(0,180,216,.05); }
 
     /* Messages */
@@ -1512,6 +1530,13 @@
         <div class="welcome-icon" aria-hidden="true">⬡</div>
         <h2>L1 SOC Analyst Console</h2>
         <p>Describe what you're investigating below, or pick a starting point.</p>
+        <section class="onboard" id="onboard" hidden aria-labelledby="onboardTitle">
+          <header>
+            <h3 id="onboardTitle">Get NullShift running</h3>
+            <button type="button" class="btn-mini" id="onboardHide">Hide</button>
+          </header>
+          <ol id="onboardSteps"></ol>
+        </section>
         <div class="welcome-hints">
           <button type="button" class="hint-chip" data-hint="Find new detections and give me details">Find new detections and give me details</button>
           <button type="button" class="hint-chip" data-hint="Any suspicious activity in the last 24h?">Any suspicious activity in the last 24h?</button>
@@ -1732,6 +1757,8 @@ const api = {
   savePrefs: prefs => apiJSON('/api/me/prefs', { method: 'PUT', body: { prefs } }),
   dashboard: hours => apiJSON(`/api/dashboard?hours=${hours}`),
   attention: () => apiJSON('/api/attention'),
+  onboarding: () => apiJSON('/api/onboarding'),
+  testAlert: () => apiJSON('/api/alerts/test', { method: 'POST' }),
   agents: () => apiJSON('/api/agents'),
   scorecard: days => apiJSON(`/api/agents/scorecard?days=${days}`),
 }
@@ -3378,6 +3405,54 @@ function closeDrawer() {
 $('menuBtn').onclick = () => document.body.classList.contains('drawer-open') ? closeDrawer() : openDrawer()
 $('drawerBackdrop').onclick = closeDrawer
 
+// ─── First-run checklist ──────────────────────────────────────────
+// Admins only (connecting a SIEM and switching Triage on are admin actions), on the empty
+// console. Hides itself once every step is done or the admin hides it (a per-user pref).
+const ONBOARD_STEPS = [
+  ['siem', 'Connect a SIEM', 'Set the webhook token in Settings › Connectors and point your SIEM at it.',
+   '<a class="btn-mini" href="/admin#connectors">Open Connectors</a>'],
+  ['alert', 'Receive an alert', 'Let the SIEM send one, or send a sample alert to try the flow now.',
+   '<button type="button" class="btn-mini" id="onboardTestBtn">Send a test alert</button>'],
+  ['investigated', 'Investigate it', 'Open the alert and start an investigation.',
+   '<a class="btn-mini" href="#/alerts">Open Alerts</a>'],
+  ['triage', 'Try Triage in shadow mode', 'It assesses new alerts and changes nothing; its scorecard compares its calls with yours.',
+   '<a class="btn-mini" href="#/agents">Open Agents</a>'],
+]
+const onboardEl = $('onboard')
+
+async function loadOnboarding() {
+  if (conn.role !== 'admin' || welcomeEl.hidden) { onboardEl.hidden = true; return }
+  let d, prefs
+  try { [d, { prefs }] = await Promise.all([api.onboarding(), api.prefs()]) } catch { return }
+  const done = ONBOARD_STEPS.filter(([k]) => d[k]).length
+  onboardEl.hidden = !!prefs.ui_onboarding_dismissed || done === ONBOARD_STEPS.length
+  if (onboardEl.hidden) return
+  $('onboardTitle').textContent = `Get NullShift running · ${done} of ${ONBOARD_STEPS.length} done`
+  withFocus(onboardEl, () => {
+    $('onboardSteps').innerHTML = ONBOARD_STEPS.map(([k, title, how, action]) => `
+      <li class="${d[k] ? 'done' : ''}">
+        <span class="onboard-check" aria-hidden="true">${d[k] ? '✓' : ''}</span>
+        <span class="onboard-text"><b>${title}</b><small>${how}</small></span>
+        ${d[k] ? '<span class="sr-only">Done</span>' : action}
+      </li>`).join('')
+  })
+}
+
+onboardEl.addEventListener('click', async e => {
+  if (e.target.id === 'onboardHide') {
+    onboardEl.hidden = true
+    api.savePrefs({ ui_onboarding_dismissed: true }).catch(err => notify(`Could not save that: ${err.message}`))
+  } else if (e.target.id === 'onboardTestBtn') {
+    e.target.disabled = true
+    try {
+      const a = await api.testAlert()
+      notify('Test alert sent to the queue.', { label: 'Open it', href: `#/alerts/${enc(a.id)}` }, { error: false })
+      pollAttention()
+      loadOnboarding()
+    } catch (err) { e.target.disabled = false; notify(`Could not send a test alert: ${err.message}`) }
+  }
+})
+
 // ─── Chat view ───────────────────────────────────────────────────
 async function enterChat(id) {
   $('newReplyBtn').hidden = true
@@ -3386,6 +3461,7 @@ async function enterChat(id) {
     welcomeEl.hidden = false
     useComposer(NEW)
     setViewTitle('New investigation')
+    loadOnboarding()
     return
   }
   lastChatId = id
@@ -5167,6 +5243,7 @@ async function ping() {
     $('acctLabel').textContent = conn.user || 'Account'
     updateComposer()
     if (j.vision) applyVisionHint(j.vision)
+    loadOnboarding()  // the role is known from here; on the welcome screen this also keeps it current
   } catch (e) {
     if (e.status !== 401) conn.ok = false
   }

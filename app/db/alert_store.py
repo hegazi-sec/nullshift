@@ -372,6 +372,12 @@ class AlertStore:
             " HAVING fp > 0 AND decided >= ? ORDER BY fp DESC, n DESC LIMIT 6", (since, min_decided)).fetchall()
         return [{**dict(r), "rate": r["fp"] / r["decided"], "tune": r["fp"] / r["decided"] >= 0.8} for r in rows]
 
+    def any_investigated(self) -> bool:
+        """Has any alert ever been opened as an investigation (first-run checklist)."""
+        with self.lock:
+            return self.conn.execute(
+                "SELECT 1 FROM ingested_alerts WHERE conversation_id IS NOT NULL LIMIT 1").fetchone() is not None
+
     def untriaged(self, since: str, limit: int = 500) -> List[Dict[str, Any]]:
         """New alerts received since `since` that no agent has looked at, oldest first."""
         with self.lock:
