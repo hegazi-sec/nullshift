@@ -223,9 +223,17 @@
       line-height: 1.4;
     }
 
-    /* ── Collapsible SIEM fields ── */
-    .siem-fields { display: none; }
+    /* ── SIEM picks: tick one or more; each ticked SIEM's fields show below ── */
+    .siem-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+    .siem-picks .radio-card { padding: 10px 12px; align-items: center; }
+    .siem-picks input[type="checkbox"] { accent-color: var(--cyan); flex-shrink: 0; }
+    .primary-tag {
+      margin-left: 6px; padding: 1px 6px; border: 1px solid var(--cyan); border-radius: 8px;
+      font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--cyan);
+    }
+    .siem-fields { display: none; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--border); }
     .siem-fields.show { display: block; }
+    .siem-fields > h3 { font-size: 0.9rem; font-weight: 600; color: var(--text); }
 
     /* ── Buttons ── */
     .btn-row {
@@ -399,23 +407,20 @@
 
   <!-- ── Step 4: SIEM connector ── -->
   <div class="step" id="step-4">
-    <h2>SIEM Connector</h2>
-    <p class="sub">Connect to your Security Information and Event Management system. You can skip this and configure connectors later in <code>.env</code> or Admin Settings.</p>
+    <h2>SIEM Connectors</h2>
+    <p class="sub">Tick every SIEM you use: each investigation queries all of them. The first one you tick is the primary, whose severity scale is used for alerts whose shape names no SIEM. Leave them all unticked to skip; you can connect SIEMs later in Admin &rarr; Settings &rarr; Connectors.</p>
 
-    <div class="field">
-      <label for="siem_provider">SIEM / Data source</label>
-      <select id="siem_provider">
-        <option value="skip">Skip — configure later</option>
-        <option value="limacharlie">LimaCharlie</option>
-        <option value="wazuh">Wazuh</option>
-        <option value="splunk">Splunk</option>
-        <option value="elastic">Elasticsearch / Elastic SIEM</option>
-        <option value="sentinel">Microsoft Sentinel</option>
-      </select>
+    <div class="siem-picks" role="group" aria-label="SIEMs to connect">
+      <label class="radio-card"><input type="checkbox" name="siem" value="limacharlie" /><div class="rc-body"><div class="rc-title">LimaCharlie<span class="primary-tag" hidden>primary</span></div><div class="rc-desc">Cloud SecOps platform</div></div></label>
+      <label class="radio-card"><input type="checkbox" name="siem" value="wazuh" /><div class="rc-body"><div class="rc-title">Wazuh<span class="primary-tag" hidden>primary</span></div><div class="rc-desc">Open-source SIEM + XDR</div></div></label>
+      <label class="radio-card"><input type="checkbox" name="siem" value="splunk" /><div class="rc-body"><div class="rc-title">Splunk<span class="primary-tag" hidden>primary</span></div><div class="rc-desc">Enterprise SIEM</div></div></label>
+      <label class="radio-card"><input type="checkbox" name="siem" value="elastic" /><div class="rc-body"><div class="rc-title">Elastic<span class="primary-tag" hidden>primary</span></div><div class="rc-desc">Self-hosted or Elastic Cloud</div></div></label>
+      <label class="radio-card"><input type="checkbox" name="siem" value="sentinel" /><div class="rc-body"><div class="rc-title">Microsoft Sentinel<span class="primary-tag" hidden>primary</span></div><div class="rc-desc">Azure cloud-native SIEM</div></div></label>
     </div>
 
     <!-- LimaCharlie -->
     <div class="siem-fields" id="fields-limacharlie">
+      <h3>LimaCharlie</h3>
       <div class="field">
         <label for="lc_oid">Organisation ID (OID)</label>
         <input type="text" id="lc_oid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
@@ -428,6 +433,7 @@
 
     <!-- Wazuh -->
     <div class="siem-fields" id="fields-wazuh">
+      <h3>Wazuh</h3>
       <div class="field">
         <label for="wazuh_api_url">Wazuh Manager URL</label>
         <input type="url" id="wazuh_api_url" placeholder="https://wazuh-manager.local:55000" />
@@ -453,6 +459,7 @@
 
     <!-- Splunk -->
     <div class="siem-fields" id="fields-splunk">
+      <h3>Splunk</h3>
       <div class="field">
         <label for="splunk_url">Splunk URL</label>
         <input type="url" id="splunk_url" placeholder="https://splunk.corp.local:8089" />
@@ -471,6 +478,7 @@
 
     <!-- Elastic -->
     <div class="siem-fields" id="fields-elastic">
+      <h3>Elastic</h3>
       <div class="field">
         <label for="elastic_url">Elasticsearch URL</label>
         <input type="url" id="elastic_url" placeholder="https://elastic.corp.local:9200" />
@@ -488,6 +496,7 @@
 
     <!-- Sentinel -->
     <div class="siem-fields" id="fields-sentinel">
+      <h3>Microsoft Sentinel</h3>
       <div class="field">
         <label for="sentinel_workspace_id">Log Analytics Workspace ID</label>
         <input type="text" id="sentinel_workspace_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
@@ -574,12 +583,17 @@ function selectLlm(val) {
   });
 }
 
-// ── SIEM field toggle ────────────────────────────────────────────────────────
-function showSiemFields() {
-  const providers = ['limacharlie','wazuh','splunk','elastic','sentinel'];
-  const sel = document.getElementById('siem_provider').value;
-  providers.forEach(p => {
-    document.getElementById('fields-' + p).classList.toggle('show', p === sel);
+// ── SIEM picks ───────────────────────────────────────────────────────────────
+// In the order they were ticked: the first is the primary.
+let _siemOrder = [];
+function pickSiem(box) {
+  _siemOrder = _siemOrder.filter(s => s !== box.value);
+  if (box.checked) _siemOrder.push(box.value);
+  document.querySelectorAll('input[name="siem"]').forEach(b => {
+    const card = b.closest('.radio-card');
+    card.classList.toggle('selected', b.checked);
+    card.querySelector('.primary-tag').hidden = b.value !== _siemOrder[0];
+    document.getElementById('fields-' + b.value).classList.toggle('show', b.checked);
   });
 }
 
@@ -618,38 +632,24 @@ async function completeSetup() {
   btn.disabled = true;
   btn.textContent = 'Saving…';
 
-  const provider = document.getElementById('siem_provider').value;
   const payload = {
     admin_username: document.getElementById('admin_username').value.trim(),
     admin_password: document.getElementById('admin_password').value,
     sdk_enabled: _llmChoice === 'sdk',
-    siem_provider: provider === 'skip' ? null : provider,
+    siem_providers: _siemOrder,
   };
-
-  // Collect SIEM-specific fields
-  if (provider === 'limacharlie') {
-    payload.limacharlie_oid     = document.getElementById('lc_oid').value.trim();
-    payload.limacharlie_api_key = document.getElementById('lc_api_key').value.trim();
-  } else if (provider === 'wazuh') {
-    payload.wazuh_api_url       = document.getElementById('wazuh_api_url').value.trim();
-    payload.wazuh_indexer_url   = document.getElementById('wazuh_indexer_url').value.trim();
-    payload.wazuh_indexer_user  = document.getElementById('wazuh_indexer_user').value.trim();
-    payload.wazuh_indexer_pass  = document.getElementById('wazuh_indexer_pass').value;
-    payload.wazuh_api_token     = document.getElementById('wazuh_api_token').value;
-  } else if (provider === 'splunk') {
-    payload.splunk_url   = document.getElementById('splunk_url').value.trim();
-    payload.splunk_token = document.getElementById('splunk_token').value;
-    payload.splunk_index = document.getElementById('splunk_index').value.trim() || '*';
-  } else if (provider === 'elastic') {
-    payload.elastic_url     = document.getElementById('elastic_url').value.trim();
-    payload.elastic_api_key = document.getElementById('elastic_api_key').value;
-    payload.elastic_index   = document.getElementById('elastic_index').value.trim();
-  } else if (provider === 'sentinel') {
-    payload.sentinel_workspace_id  = document.getElementById('sentinel_workspace_id').value.trim();
-    payload.sentinel_tenant_id     = document.getElementById('sentinel_tenant_id').value.trim();
-    payload.sentinel_client_id     = document.getElementById('sentinel_client_id').value.trim();
-    payload.sentinel_client_secret = document.getElementById('sentinel_client_secret').value;
-  }
+  const val = id => document.getElementById(id).value;
+  const fields = {
+    limacharlie: { limacharlie_oid: val('lc_oid').trim(), limacharlie_api_key: val('lc_api_key').trim() },
+    wazuh: { wazuh_api_url: val('wazuh_api_url').trim(), wazuh_indexer_url: val('wazuh_indexer_url').trim(),
+             wazuh_indexer_user: val('wazuh_indexer_user').trim(), wazuh_indexer_pass: val('wazuh_indexer_pass'),
+             wazuh_api_token: val('wazuh_api_token') },
+    splunk: { splunk_url: val('splunk_url').trim(), splunk_token: val('splunk_token'), splunk_index: val('splunk_index').trim() || '*' },
+    elastic: { elastic_url: val('elastic_url').trim(), elastic_api_key: val('elastic_api_key'), elastic_index: val('elastic_index').trim() },
+    sentinel: { sentinel_workspace_id: val('sentinel_workspace_id').trim(), sentinel_tenant_id: val('sentinel_tenant_id').trim(),
+                sentinel_client_id: val('sentinel_client_id').trim(), sentinel_client_secret: val('sentinel_client_secret') },
+  };
+  _siemOrder.forEach(s => Object.assign(payload, fields[s]));  // only the ticked SIEMs' fields
 
   try {
     const resp = await fetch('/api/setup/complete', {
@@ -677,7 +677,7 @@ document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click'
 document.getElementById('btn-admin-next').addEventListener('click', validateAdmin);
 document.getElementById('btn-llm-next').addEventListener('click', validateLlm);
 document.getElementById('btn-complete').addEventListener('click', completeSetup);
-document.getElementById('siem_provider').addEventListener('change', showSiemFields);
+document.querySelectorAll('input[name="siem"]').forEach(b => b.addEventListener('change', () => pickSiem(b)));
 document.querySelectorAll('input[name="llm_choice"]').forEach(r => r.addEventListener('change', () => selectLlm(r.value)));
 </script>
 </body>

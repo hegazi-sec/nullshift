@@ -753,7 +753,14 @@ async def api_setup_complete(payload: Dict[str, Any]):
     admin_username = str(payload.get("admin_username") or "").strip()
     admin_password = str(payload.get("admin_password") or "")
     sdk_enabled    = bool(payload.get("sdk_enabled", False))
-    siem_provider  = payload.get("siem_provider")
+    # siem_providers: the SIEMs to connect, primary first; siem_provider is the older one-SIEM form
+    from app.connectors import SIEMS
+    siems = payload.get("siem_providers")
+    if siems is None:
+        siems = [payload.get("siem_provider")] if payload.get("siem_provider") not in (None, "", "skip") else []
+    if not isinstance(siems, list) or any(s not in SIEMS for s in siems):
+        raise HTTPException(status_code=400, detail=f"siem_providers must be a list of: {', '.join(SIEMS)}")
+    siems = list(dict.fromkeys(siems))
 
     # Validate
     if not admin_username:
@@ -783,32 +790,15 @@ async def api_setup_complete(payload: Dict[str, Any]):
     elif not settings_store.get("claude_agent_sdk_enabled"):
         updates["claude_agent_sdk_enabled"] = "false"
 
-    # Persist SIEM settings
-    if siem_provider and siem_provider != "skip":
-        updates["siem_provider"] = siem_provider
-        if siem_provider == "limacharlie":
-            if payload.get("limacharlie_oid"):
-                updates["limacharlie_oid"] = payload["limacharlie_oid"]
-            if payload.get("limacharlie_api_key"):
-                updates["limacharlie_api_key"] = payload["limacharlie_api_key"]
-        elif siem_provider == "wazuh":
-            for k in ("wazuh_api_url", "wazuh_indexer_url", "wazuh_indexer_user",
-                      "wazuh_indexer_pass", "wazuh_api_token"):
-                if payload.get(k):
-                    updates[k] = payload[k]
-        elif siem_provider == "splunk":
-            for k in ("splunk_url", "splunk_token", "splunk_index"):
-                if payload.get(k):
-                    updates[k] = payload[k]
-        elif siem_provider == "elastic":
-            for k in ("elastic_url", "elastic_api_key", "elastic_index"):
-                if payload.get(k):
-                    updates[k] = payload[k]
-        elif siem_provider == "sentinel":
-            for k in ("sentinel_workspace_id", "sentinel_tenant_id",
-                      "sentinel_client_id", "sentinel_client_secret"):
-                if payload.get(k):
-                    updates[k] = payload[k]
+    # Persist SIEM settings: the list ("none" when skipped, so an empty choice doesn't fall
+    # back to the Wazuh default) and each chosen SIEM's credentials
+    updates["siem_providers"] = ",".join(siems) or "none"
+    if siems:
+        updates["siem_provider"] = siems[0]
+    for siem in siems:
+        for k in _SETUP_SIEM_FIELDS[siem]:
+            if payload.get(k):
+                updates[k] = payload[k]
 
     settings_store.set_many(updates)
 
@@ -821,6 +811,15 @@ async def api_setup_complete(payload: Dict[str, Any]):
     log.info("[setup] Setup marked complete.")
 
     return {"ok": True, "message": "Setup complete. Start uvicorn and open the app."}
+
+
+_SETUP_SIEM_FIELDS = {
+    "limacharlie": ("limacharlie_oid", "limacharlie_api_key"),
+    "wazuh":       ("wazuh_api_url", "wazuh_indexer_url", "wazuh_indexer_user", "wazuh_indexer_pass", "wazuh_api_token"),
+    "splunk":      ("splunk_url", "splunk_token", "splunk_index"),
+    "elastic":     ("elastic_url", "elastic_api_key", "elastic_index"),
+    "sentinel":    ("sentinel_workspace_id", "sentinel_tenant_id", "sentinel_client_id", "sentinel_client_secret"),
+}
 
 
 @app.get('/health')

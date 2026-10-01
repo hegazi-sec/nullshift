@@ -11,7 +11,7 @@ The wizard will:
   3. Generate a secure JWT secret → write to data/config.db
   4. Create the admin account → write to data/config.db (password hashed)
   5. Ask: use Claude Agent SDK? → check `claude` CLI, write to config.db
-  6. Ask: configure a SIEM now? → collect credentials, write to config.db
+  6. Ask: which SIEMs? → one or more, primary first; collect credentials, write to config.db
   7. Set RAG to disabled by default in config.db
   8. Print final "run uvicorn" instructions
 
@@ -41,136 +41,150 @@ def _bootstrap_venv() -> None:
     venv_dir = base / ".venv"
     venv_python = venv_dir / ("Scripts" if sys.platform == "win32" else "bin") / "python"
 
-    # Raw ANSI — color helpers not defined yet at this point
-    _tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+    # Raw ANSI — the look helpers further down aren't defined yet at this point
+    _tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty() and not os.environ.get("NO_COLOR")
     def _B(t):  return f"\033[1m{t}\033[0m"   if _tty else t   # bold
     def _C(t):  return f"\033[96m{t}\033[0m"  if _tty else t   # bright cyan
     def _Y(t):  return f"\033[93m{t}\033[0m"  if _tty else t   # yellow
     def _G(t):  return f"\033[92m{t}\033[0m"  if _tty else t   # green
     def _D(t):  return f"\033[2m{t}\033[0m"   if _tty else t   # dim
-    W = 62
+    rail = lambda t="": print(f"  {_D('│')}  {t}" if t else f"  {_D('│')}")
 
     print()
-    print("  " + _C("╔" + "═" * W + "╗"))
-    print("  " + _C("║") + " " * W + _C("║"))
-    print("  " + _C("║") + "  " + _B(_C("NULLSHIFT")) + " " * (W - 11) + _C("║"))
-    print("  " + _C("║") + "  " + _D("AI-Powered Security Operations Center") + " " * (W - 40) + _C("║"))
-    print("  " + _C("║") + " " * W + _C("║"))
-    print("  " + _C("║") + "  " + _D("Created by ") + _Y("Ahmed Hegazi") + " " * (W - 25) + _C("║"))
-    print("  " + _C("╚" + "═" * W + "╝"))
+    print(f"  {_C('⬡')}  {_B('NullShift')}  {_D('setup')}")
+    print(f"     {_D('AI-powered SOC triage · created by')} {_Y('Ahmed Hegazi')}")
     print()
-    print(f"  {_C('→')}  Welcome! Preparing your environment before setup begins.")
-    print()
-    print("  " + _D("─" * (W + 2)))
-    print(f"  {_B('Step 1 / 7')} {_D('—')} {_C('Environment')}")
-    print("  " + _D("─" * (W + 2)))
-    print()
+    print(f"  {_D('┌')}  Preparing a Python environment first (one time)")
 
     if not venv_python.exists():
-        print(f"  {_C('○')}  Creating virtual environment (.venv)…")
+        rail(f"{_C('○')}  Creating virtual environment (.venv)…")
         subprocess.check_call([sys.executable, "-m", "venv", str(venv_dir)])
-        print(f"  {_G('✓')}  Virtual environment created.")
+        rail(f"{_G('✓')}  Virtual environment created.")
 
     req_file = base / "requirements.txt"
     if req_file.exists():
-        print(f"  {_C('○')}  Installing dependencies (this may take a minute)…")
+        rail(f"{_C('○')}  Installing dependencies (this may take a minute)…")
         subprocess.check_call([str(venv_python), "-m", "pip", "install", "-q", "-r", str(req_file)])
-        print(f"  {_G('✓')}  Dependencies installed.")
+        rail(f"{_G('✓')}  Dependencies installed.")
 
-    print()
-    print(f"  {_C('→')}  Restarting inside virtual environment…")
-    print()
+    rail(f"{_C('→')}  Restarting inside the virtual environment…")
+    rail()
+    os.environ["NULLSHIFT_SETUP_BOOTSTRAPPED"] = "1"
     os.execv(str(venv_python), [str(venv_python)] + sys.argv)
 
 _bootstrap_venv()
 
 # ---------------------------------------------------------------------------
-# Terminal colours — graceful fallback on Windows cmd / non-TTY
+# Terminal look — one left rail, ◆ step headers, ? prompts, rounded cards.
+# Plain text on a non-TTY or with NO_COLOR set.
 # ---------------------------------------------------------------------------
 def _supports_color() -> bool:
-    if not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
+    if os.environ.get("NO_COLOR") or not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
         return False
     if sys.platform == "win32":
-        return bool(os.environ.get("WT_SESSION") or os.environ.get("COLORTERM"))
+        return bool(os.environ.get("WT_SESSION") or os.environ.get("COLORTERM") or os.environ.get("TERM_PROGRAM"))
     return True
 
 _COLOR = _supports_color()
+STEPS = 7
+# NullShift's accent (#00b4d8) where the terminal does 24-bit colour, else bright cyan
+_ACCENT = "38;2;0;180;216" if os.environ.get("COLORTERM") in ("truecolor", "24bit") else "96"
 
 def _c(code: str, text: str) -> str:
     return f"\033[{code}m{text}\033[0m" if _COLOR else text
 
-def cyan(t: str)   -> str: return _c("96", t)
+def cyan(t: str)   -> str: return _c(_ACCENT, t)
 def green(t: str)  -> str: return _c("92", t)
 def yellow(t: str) -> str: return _c("93", t)
 def red(t: str)    -> str: return _c("91", t)
 def bold(t: str)   -> str: return _c("1",  t)
 def dim(t: str)    -> str: return _c("2",  t)
 
-def hr(char: str = "─", width: int = 60) -> None:
-    print(dim(char * width))
+def _visible(t: str) -> int:
+    import re
+    return len(re.sub(r"\033\[[0-9;]*m", "", t))
+
+def line(text: str = "") -> None:
+    """One line on the wizard's left rail."""
+    print(f"  {dim('│')}  {text}" if text else f"  {dim('│')}")
+
+def cmd(text: str) -> None:
+    """A command to copy, set off on the rail."""
+    line(f"   {cyan(text)}")
 
 def banner() -> None:
-    W = 62
-    print()
-    print("  " + cyan("╔" + "═" * W + "╗"))
-    print("  " + cyan("║") + " " * W + cyan("║"))
-    print("  " + cyan("║") + "  " + bold(cyan("NULLSHIFT")) + " " * (W - 11) + cyan("║"))
-    print("  " + cyan("║") + "  " + dim("AI-Powered Security Operations Center") + " " * (W - 40) + cyan("║"))
-    print("  " + cyan("║") + " " * W + cyan("║"))
-    print("  " + cyan("║") + "  " + dim("Created by ") + yellow("Ahmed Hegazi") + " " * (W - 25) + cyan("║"))
-    print("  " + cyan("╚" + "═" * W + "╝"))
-    print()
-    print(f"  {cyan('→')}  Welcome! This wizard configures NullShift in 7 steps.")
-    print(f"  {dim('   Admin account · SIEM connector · AI providers · RAG')}")
-    print()
+    if not os.environ.pop("NULLSHIFT_SETUP_BOOTSTRAPPED", None):  # the bootstrap already showed it
+        print()
+        print(f"  {cyan('⬡')}  {bold('NullShift')}  {dim('setup')}")
+        print(f"     {dim('AI-powered SOC triage · created by')} {yellow('Ahmed Hegazi')}")
+        print()
+    print(f"  {dim('┌')}  {STEPS} steps · admin account · SIEMs · AI · knowledge base")
+    line(dim("Re-run any time to change a setting; Enter keeps the value in [brackets]."))
 
 def step_header(n: int, total: int, title: str) -> None:
-    print()
-    hr()
-    print(bold(f"  Step {n} / {total} — {title}"))
-    hr()
+    done = round(20 * n / total)
+    progress = cyan("━" * done) + dim("─" * (20 - done))
+    line()
+    head = f"{cyan('◆')}  {bold(title)}"
+    gap = max(2, 34 - _visible(head))
+    print(f"  {head}{' ' * gap}{progress}  {dim(f'{n}/{total}')}")
+    line()
+
+def finish(msg: str) -> None:
+    line()
+    print(f"  {dim('└')}  {msg}")
     print()
 
-def ok(msg: str)   -> None: print(f"  {green('✓')} {msg}")
-def warn(msg: str) -> None: print(f"  {yellow('⚠')}  {msg}")
-def info(msg: str) -> None: print(f"  {cyan('ℹ')}  {msg}")
-def err(msg: str)  -> None: print(f"  {red('✗')} {msg}")
+def card(title: str, rows: list) -> None:
+    """A rounded box of label / value rows on the rail."""
+    kw = max([_visible(k) for k, _ in rows] or [0])
+    inner = max([_visible(title) + 4] + [kw + 2 + _visible(v) + 2 for _, v in rows])
+    line(dim("╭─ ") + bold(title) + " " + dim("─" * (inner - _visible(title) - 3) + "╮"))
+    for k, v in rows:
+        body = f"{dim(k.ljust(kw))}  {v}"
+        line(dim("│ ") + body + " " * (inner - 1 - _visible(body)) + dim("│"))
+    line(dim("╰" + "─" * inner + "╯"))
+
+def ok(msg: str)   -> None: line(f"{green('✓')}  {msg}")
+def warn(msg: str) -> None: line(f"{yellow('!')}  {msg}")
+def info(msg: str) -> None: line(dim(msg) if _COLOR else msg)
+def err(msg: str)  -> None: line(f"{red('✗')}  {msg}")
 
 # ---------------------------------------------------------------------------
 # Input helpers
 # ---------------------------------------------------------------------------
 def ask(prompt: str, default: str = "", secret: bool = False) -> str:
-    hint = f" [{dim(default)}]" if default and not secret else ""
+    hint = f" {dim('[' + default + ']')}" if default and not secret else ""
+    label = f"  {dim('│')}  {cyan('?')} {prompt}{hint} {dim('›')} "
     try:
-        if secret:
-            val = getpass.getpass(f"  {prompt}: ")
-        else:
-            val = input(f"  {prompt}{hint}: ").strip()
+        val = getpass.getpass(label) if secret else input(label).strip()
     except (KeyboardInterrupt, EOFError):
         print()
-        print(yellow("\nSetup cancelled."))
+        finish(yellow("Setup cancelled. Nothing after this point was saved."))
         sys.exit(0)
     return val if val else default
 
 
 def ask_yn(prompt: str, default: bool = True) -> bool:
-    yn = "Y/n" if default else "y/N"
-    raw = ask(f"{prompt} ({yn})").lower()
+    raw = ask(f"{prompt} {dim('(Y/n)' if default else '(y/N)')}").lower()
     if not raw:
         return default
     return raw.startswith("y")
 
 
+def _menu(choices: list, default: int = 0) -> None:
+    w = max(_visible(label) for label, _ in choices)
+    for i, (label, desc) in enumerate(choices, 1):
+        mark = cyan("●") if i == default else dim("○")
+        line(f"{mark} {cyan(str(i))}  {label}{' ' * (w - _visible(label))}  {dim(desc)}")
+    line()
+
+
 def ask_choice(prompt: str, choices: list, default: int = 1) -> int:
     """Show a numbered menu, return the 1-based index of the selection."""
-    for i, (label, desc) in enumerate(choices, 1):
-        marker = green("→") if i == default else " "
-        print(f"  {marker} {bold(str(i))})  {label}")
-        if desc:
-            print(f"         {dim(desc)}")
-    print()
+    _menu(choices, default)
     while True:
-        raw = ask(f"{prompt} [1-{len(choices)}]", str(default))
+        raw = ask(f"{prompt} {dim(f'1-{len(choices)}')}", str(default))
         try:
             n = int(raw)
             if 1 <= n <= len(choices):
@@ -178,6 +192,21 @@ def ask_choice(prompt: str, choices: list, default: int = 1) -> int:
         except ValueError:
             pass
         warn(f"Enter a number between 1 and {len(choices)}.")
+
+
+def ask_multi(prompt: str, choices: list) -> list:
+    """Show a numbered menu and return the 1-based indexes picked, in the order typed
+    (numbers separated by spaces or commas; Enter picks none)."""
+    _menu(choices)
+    while True:
+        raw = ask(f"{prompt} {dim('e.g. 1 3 · Enter for none')}").replace(",", " ").split()
+        try:
+            picks = [int(x) for x in raw]
+        except ValueError:
+            picks = [0]
+        if all(1 <= n <= len(choices) for n in picks):
+            return list(dict.fromkeys(picks))  # a repeated number counts once
+        warn(f"Use numbers from 1 to {len(choices)}, separated by spaces.")
 
 
 # ---------------------------------------------------------------------------
@@ -321,15 +350,13 @@ def _auto_add_to_path(user_bin: Path) -> None:
                 f.write(f"\n# Added by NullShift setup\n{export_line}\n")
             ok(f"Added {user_bin} to PATH in {dim(str(profile))}")
 
-        print()
         info("To use nullshift in this terminal session, run:")
-        print(f"    {bold(cyan(f'source {profile}'))}")
+        cmd(f"source {profile}")
         info("(New terminals will pick it up automatically.)")
-        print()
     except Exception as e:
         warn(f"Could not update {profile}: {e}")
-        print(f"  Manually add this line to your shell profile:")
-        print(f"    {bold(cyan(export_line))}")
+        line("Manually add this line to your shell profile:")
+        cmd(export_line)
 
 
 # ---------------------------------------------------------------------------
@@ -414,13 +441,13 @@ def _config_get(key: str) -> Optional[str]:
 def step_jwt() -> None:
     existing = _config_get("jwt_secret")
     if existing and len(existing) >= 32:
-        ok(f"jwt_secret already set in config.db (…{existing[-4:]})")
+        ok(f"Session signing key already set (…{existing[-4:]})")
         if not ask_yn("Regenerate a new secret?", default=False):
             return
 
     secret = secrets.token_urlsafe(32)
     _config_set({"jwt_secret": secret})
-    ok(f"jwt_secret generated and written to config.db (…{secret[-4:]})")
+    ok(f"Session signing key generated (…{secret[-4:]})")
 
 
 # ---------------------------------------------------------------------------
@@ -428,7 +455,7 @@ def step_jwt() -> None:
 # ---------------------------------------------------------------------------
 def step_admin() -> None:
     info("These credentials are used to log into the NullShift web UI.")
-    print()
+    line()
 
     # Check if an admin already exists
     import sqlite3 as _sq
@@ -449,17 +476,15 @@ def step_admin() -> None:
         if not ask_yn("Update admin credentials?", default=False):
             info("Keeping existing admin account.")
             return
-        print()
+        line()
 
     username = ask("Admin username", default=_existing_admin or "admin")
 
     # Auto-generate a strong password; allow override
     generated = secrets.token_urlsafe(16)
-    info(f"A secure password has been generated for you.")
-    info(f"You can press Enter to accept it or type your own (min 16 chars).")
-    print()
-    print(f"  Generated password: {bold(cyan(generated))}")
-    print()
+    info("A strong password was generated: press Enter to use it, or type your own (16+ characters).")
+    line(f"Generated password  {bold(cyan(generated))}")
+    line()
 
     while True:
         pw = ask("Admin password (Enter to use generated)", default=generated, secret=False)
@@ -468,8 +493,6 @@ def step_admin() -> None:
             continue
         break
 
-    if pw == generated:
-        ok(f"Using generated password — save it now: {bold(cyan(pw))}")
 
     # Hash the password using passlib (same scheme as auth.py)
     try:
@@ -521,18 +544,12 @@ def step_admin() -> None:
         conn.close()
         ok(f"Admin account created: {bold(username)}")
 
-    print()
-    print(dim("  ┌─────────────────────────────────────────┐"))
-    print(dim("  │") + f"  Login credentials — save these now!    " + dim("│"))
-    print(dim("  │") + f"  Username: {bold(cyan(username)):<30}" + dim("│"))
-    print(dim("  │") + f"  Password: {bold(cyan(pw)):<30}" + dim("│"))
-    print(dim("  └─────────────────────────────────────────┘"))
-    print()
+    line()
+    card("Your login · save it now", [("Username", bold(cyan(username))), ("Password", bold(cyan(pw)))])
 
     # Mark setup complete immediately after admin account exists so the web
     # wizard never triggers if the browser opens before step 8 finishes.
     _config_set({"setup_complete": "true"})
-    ok("setup_complete written to config.db.")
 
 
 # ---------------------------------------------------------------------------
@@ -540,10 +557,10 @@ def step_admin() -> None:
 # ---------------------------------------------------------------------------
 def step_sdk() -> None:
     info("To use Claude Agent SDK, make sure you have run:")
-    print(f"    {bold(cyan('claude login'))}")
+    cmd("claude login")
     info("with a Claude.ai Pro or Max subscription.")
     info("If not, skip this — you can configure any LLM provider in the Admin panel after startup.")
-    print()
+    line()
 
     if not ask_yn("Use Claude Agent SDK?", default=False):
         info("Skipped. Configure any LLM provider in Admin → LLM Providers after startup.")
@@ -555,7 +572,7 @@ def step_sdk() -> None:
         warn("`claude` CLI not found in PATH.")
         info("Install it from: https://claude.ai/download  (Claude Desktop → CLI)")
         info("Then run: claude login")
-        print()
+        line()
         if not ask_yn("Have you installed and authenticated `claude` already?", default=False):
             warn("Claude Agent SDK not enabled. Re-run setup after installing the CLI.")
             return
@@ -581,19 +598,19 @@ def step_sdk() -> None:
             return False
 
     if not _is_authenticated():
-        print()
+        line()
         warn("Claude is not authenticated yet.")
         info("Your browser will open for Claude.ai authentication.")
         info("Sign in with your Pro or Max account and return here when done.")
-        print()
+        line()
         # `claude auth login` is the OAuth flow; bare `claude login` starts
         # an interactive chat with "login" as the prompt instead.
         os.system(f'"{claude_bin}" auth login')
         # Re-check after login attempt
         if not _is_authenticated():
-            print()
+            line()
             warn("Authentication not detected. Try running in a plain terminal:")
-            print(f"    {bold(cyan('claude auth login'))}")
+            cmd("claude auth login")
             warn("Claude Agent SDK not enabled. Re-run setup after authenticating.")
             return
 
@@ -605,81 +622,86 @@ def step_sdk() -> None:
 # ---------------------------------------------------------------------------
 # Step 6 — SIEM connector
 # ---------------------------------------------------------------------------
+# (id, label, what it is, a key that is set once its credentials are)
+SIEMS = [
+    ("limacharlie", "LimaCharlie",        "Cloud SecOps platform",                "limacharlie_oid"),
+    ("wazuh",       "Wazuh",              "Open-source SIEM + XDR",               "wazuh_indexer_url"),
+    ("splunk",      "Splunk",             "Enterprise SIEM",                      "splunk_url"),
+    ("elastic",     "Elastic",            "Self-hosted or Elastic Cloud",         "elastic_url"),
+    ("sentinel",    "Microsoft Sentinel", "Azure cloud-native SIEM",              "sentinel_workspace_id"),
+]
+_SIEM_LABEL = {sid: label for sid, label, _, _ in SIEMS}
+
+
+def _connected_siems() -> list:
+    """Same rule as app.connectors.connected_siems: the siem_providers list ("none" = none),
+    else the single siem_provider older setups wrote."""
+    raw = _config_get("siem_providers") or _config_get("siem_provider") or ""
+    out: list = []
+    for p in raw.split(","):
+        p = p.strip().lower()
+        if p in _SIEM_LABEL and p not in out:
+            out.append(p)
+    return out
+
+
+def _siem_credentials(sid: str) -> Dict[str, Any]:
+    if sid == "wazuh":
+        u = {"wazuh_api_url":      ask("Wazuh Manager URL", default="https://wazuh-manager.local:55000"),
+             "wazuh_indexer_url":  ask("Wazuh Indexer (OpenSearch) URL", default="https://wazuh-indexer.local:9200"),
+             "wazuh_indexer_user": ask("Indexer username", default="admin"),
+             "wazuh_indexer_pass": ask("Indexer password", secret=True),
+             "wazuh_api_token":    ask("Wazuh API token (blank if using user/pass)", secret=True) or None}
+        u["wazuh_verify_ssl"] = "false" if ask_yn("Skip SSL verification? (self-signed certs)", default=True) else "true"
+        return u
+    if sid == "splunk":
+        return {"splunk_url":   ask("Splunk URL", default="https://splunk.corp.local:8089"),
+                "splunk_token": ask("Splunk bearer token", secret=True),
+                "splunk_index": ask("Splunk index", default="*")}
+    if sid == "elastic":
+        return {"elastic_url":     ask("Elasticsearch URL", default="https://elastic.corp.local:9200"),
+                "elastic_api_key": ask("Elastic API key (base64 id:key)", secret=True),
+                "elastic_index":   ask("Index pattern", default="logs-*,.alerts-security.alerts-*")}
+    if sid == "sentinel":
+        return {"sentinel_workspace_id":  ask("Log Analytics workspace ID"),
+                "sentinel_tenant_id":     ask("Azure tenant ID"),
+                "sentinel_client_id":     ask("App registration client ID"),
+                "sentinel_client_secret": ask("App registration client secret", secret=True)}
+    return {"limacharlie_oid":     ask("Organisation ID (OID)"),
+            "limacharlie_api_key": ask("Secret API key", secret=True)}
+
+
 def step_siem() -> None:
-    info("NullShift can connect to your SIEM to pull live alerts and logs.")
-    print()
+    info("Connect one or more SIEMs: every investigation queries all of them.")
+    info("The first one you pick is the primary (it sets the severity scale for unrecognised alerts).")
+    line()
 
-    existing_siem = _config_get("siem_provider") or ""
-    if existing_siem:
-        ok(f"SIEM already configured: {bold(existing_siem)}")
-        if not ask_yn("Reconfigure SIEM?", default=False):
-            info("Keeping existing SIEM configuration.")
+    current = _connected_siems()
+    if current:
+        ok("Connected: " + ", ".join(bold(_SIEM_LABEL[s]) for s in current) + dim("  (primary first)"))
+        if not ask_yn("Change the connected SIEMs?", default=False):
+            info("Keeping them.")
             return
-        print()
+        line()
 
-    siem_choices = [
-        ("Wazuh",                 "Open-source SIEM + XDR — most common for home/SMB SOCs"),
-        ("Splunk",                "Enterprise SIEM"),
-        ("Elastic / Elastic SIEM","Self-hosted or Elastic Cloud"),
-        ("Microsoft Sentinel",    "Azure cloud-native SIEM"),
-        ("LimaCharlie",           "Cloud SecOps platform"),
-        ("Skip — no SIEM yet",   "Configure connectors later in Admin Settings"),
-    ]
-    idx = ask_choice("Which SIEM / data source do you use?", siem_choices, default=6)
-
-    updates: Dict[str, Any] = {}
-
-    if idx == 1:   # Wazuh
-        updates["siem_provider"]    = "wazuh"
-        print()
-        updates["wazuh_api_url"]      = ask("Wazuh Manager URL", default="https://wazuh-manager.local:55000")
-        updates["wazuh_indexer_url"]  = ask("Wazuh Indexer (OpenSearch) URL", default="https://wazuh-indexer.local:9200")
-        updates["wazuh_indexer_user"] = ask("Indexer username", default="admin")
-        updates["wazuh_indexer_pass"] = ask("Indexer password", secret=True)
-        updates["wazuh_api_token"]    = ask("Wazuh API token (leave blank if using user/pass)", secret=True) or None
-        ssl = ask_yn("Disable SSL verification? (self-signed certs)", default=True)
-        updates["wazuh_verify_ssl"]   = "false" if ssl else "true"
-        if updates["wazuh_api_token"] is None:
-            del updates["wazuh_api_token"]
-        ok("Wazuh settings written to config.db.")
-
-    elif idx == 2:  # Splunk
-        updates["siem_provider"] = "splunk"
-        print()
-        updates["splunk_url"]   = ask("Splunk URL", default="https://splunk.corp.local:8089")
-        updates["splunk_token"] = ask("Splunk bearer token", secret=True)
-        updates["splunk_index"] = ask("Splunk index", default="*")
-        ok("Splunk settings written to config.db.")
-
-    elif idx == 3:  # Elastic
-        updates["siem_provider"]  = "elastic"
-        print()
-        updates["elastic_url"]     = ask("Elasticsearch URL", default="https://elastic.corp.local:9200")
-        updates["elastic_api_key"] = ask("Elastic API key (base64 id:key)", secret=True)
-        updates["elastic_index"]   = ask("Index pattern", default="logs-*,.alerts-security.alerts-*")
-        ok("Elastic settings written to config.db.")
-
-    elif idx == 4:  # Sentinel
-        updates["siem_provider"]         = "sentinel"
-        print()
-        updates["sentinel_workspace_id"] = ask("Log Analytics workspace ID")
-        updates["sentinel_tenant_id"]    = ask("Azure tenant ID")
-        updates["sentinel_client_id"]    = ask("App registration client ID")
-        updates["sentinel_client_secret"]= ask("App registration client secret", secret=True)
-        ok("Sentinel settings written to config.db.")
-
-    elif idx == 5:  # LimaCharlie
-        updates["siem_provider"]     = "limacharlie"
-        print()
-        updates["limacharlie_oid"]    = ask("Organisation ID (OID)")
-        updates["limacharlie_api_key"]= ask("Secret API key", secret=True)
-        ok("LimaCharlie settings written to config.db.")
-
+    picks = ask_multi("Which SIEMs do you use?", [(label, desc) for _, label, desc, _ in SIEMS])
+    chosen = [SIEMS[i - 1][0] for i in picks]
+    updates: Dict[str, Any] = {"siem_providers": ",".join(chosen) or "none"}
+    if chosen:
+        updates["siem_provider"] = chosen[0]
+    for sid in chosen:
+        marker = dict((s, k) for s, _, _, k in SIEMS)[sid]
+        line()
+        line(bold(_SIEM_LABEL[sid]) + (dim("  primary") if sid == chosen[0] else ""))
+        if _config_get(marker) and ask_yn(f"Keep the saved {_SIEM_LABEL[sid]} credentials?", default=True):
+            continue
+        updates.update(_siem_credentials(sid))
+    _config_set(updates)
+    line()
+    if chosen:
+        ok("Connected: " + ", ".join(_SIEM_LABEL[s] for s in chosen) + dim("  (saved to config.db)"))
     else:
-        info("SIEM setup skipped.")
-
-    if updates:
-        _config_set(updates)
+        info("No SIEM connected. Add them any time in Settings → Connectors.")
 
 
 # ---------------------------------------------------------------------------
@@ -689,7 +711,7 @@ def step_rag() -> None:
     info("RAG indexes your local playbooks (data/kb/) so the AI answers from your")
     info("knowledge base. It needs an embedding provider with an API key.")
     info("Providers: OpenAI, Gemini (free tier), or Ollama (fully local).")
-    print()
+    line()
 
     existing_rag = _config_get("rag_enabled") or ""
     if existing_rag:
@@ -698,7 +720,7 @@ def step_rag() -> None:
         if not ask_yn("Change RAG setting?", default=False):
             info("Keeping existing RAG configuration.")
             return
-        print()
+        line()
 
     if not ask_yn("Enable RAG / Knowledge Base?", default=False):
         _config_set({"rag_enabled": "false"})
@@ -707,7 +729,7 @@ def step_rag() -> None:
 
     _config_set({"rag_enabled": "true"})
     ok("RAG enabled.")
-    print()
+    line()
 
     info("Which embedding provider do you want to use?")
     providers = [
@@ -754,50 +776,28 @@ def step_defaults_and_summary() -> None:
     # Ensure RAG key is written if not already set by step_rag
     if not _config_get("rag_enabled"):
         _config_set({"rag_enabled": "false"})
-    ok(f"RAG: {green(_config_get('rag_enabled') or 'false')}")
-    print()
-
-    print()
-    hr("═")
-    print(bold(cyan("  Configuration Summary")))
-    hr("═")
-    print()
-
-    def check_db(key: str, label: str, sensitive: bool = False) -> None:
-        val = _config_get(key) or ""
-        if val:
-            display = f"…{val[-4:]}" if sensitive and len(val) >= 4 else green("set")
-            ok(f"{label}: {green(display)}")
-        else:
-            warn(f"{label}: {yellow('not set')}")
-
-    check_db("jwt_secret", "JWT secret", sensitive=True)
 
     import sqlite3
+    admin = None
     users_db = DATA_DIR / "users.db"
     if users_db.exists():
         conn = sqlite3.connect(str(users_db))
         row = conn.execute("SELECT username FROM users WHERE role='admin' LIMIT 1").fetchone()
         conn.close()
-        if row:
-            ok(f"Admin user: {green(row[0])}")
-        else:
-            warn("Admin user: not found in users.db")
-
-    sdk = _config_get("claude_agent_sdk_enabled") or "false"
-    if sdk == "true":
-        ok(f"LLM provider: {green('Claude Agent SDK')}")
-    else:
-        info("LLM provider: configure API keys in Admin → Settings after startup.")
-
-    siem = _config_get("siem_provider") or ""
-    if siem:
-        ok(f"SIEM: {green(siem)}")
-    else:
-        info("SIEM: not configured (add later via Admin → Settings or .env)")
-
-    print()
-    ok(f"Config written → {bold(str(DATA_DIR / 'config.db'))}")
+        admin = row[0] if row else None
+    jwt = _config_get("jwt_secret") or ""
+    siems = _connected_siems()
+    card("Configuration", [
+        ("Admin",      green(admin) if admin else yellow("not found in users.db")),
+        ("Session key", green(f"set …{jwt[-4:]}") if len(jwt) >= 32 else yellow("not set")),
+        ("AI",         green("Claude Agent SDK") if _config_get("claude_agent_sdk_enabled") == "true"
+                       else dim("add a provider in Settings after start")),
+        ("SIEMs",      green(", ".join(_SIEM_LABEL[s] for s in siems)) + dim("  (first is primary)")
+                       if siems else dim("none · add in Settings → Connectors")),
+        ("RAG",        green("on") if _config_get("rag_enabled") == "true" else dim("off")),
+    ])
+    line()
+    ok(f"Saved to {dim(str(DATA_DIR / 'config.db'))}")
 
 
 # ---------------------------------------------------------------------------
@@ -855,11 +855,9 @@ def _pid_on_port(port: int) -> Optional[int]:
 # Final instructions
 # ---------------------------------------------------------------------------
 def step_instructions() -> None:
-    print()
-    hr()
-    print(bold("  Ready to launch!"))
-    hr()
-    print()
+    line()
+    line(bold("Ready to launch"))
+    line()
 
     # Resolve uvicorn inside the venv so we don't need activation
     venv_dir = BASE / ".venv"
@@ -922,9 +920,9 @@ def step_instructions() -> None:
         _print_manual_start(port)
         return
 
-    print()
+    line()
     info(f"Starting NullShift on port {bold(cyan(str(port)))} in the background …")
-    print()
+    line()
 
     # Use the CLI's start command — handles PID file, log file, daemonization
     cli_py = BASE / "cli.py"
@@ -935,12 +933,11 @@ def step_instructions() -> None:
     if result.returncode == 0:
         # Open the browser shortly after startup
         _open_browser_when_ready(port)
-        print()
-        info("Manage the server anytime with:")
-        print(f"    {bold(cyan('nullshift status'))}   — check status & URL")
-        print(f"    {bold(cyan('nullshift logs'))}     — stream live logs")
-        print(f"    {bold(cyan('nullshift stop'))}     — stop the server")
-        print()
+        line()
+        info("Manage the server any time with:")
+        line(f"   {cyan('nullshift status')}   {dim('check status & URL')}")
+        line(f"   {cyan('nullshift logs')}     {dim('stream live logs')}")
+        line(f"   {cyan('nullshift stop')}     {dim('stop the server')}")
 
 
 def _open_browser_when_ready(port: int) -> None:
@@ -962,43 +959,34 @@ def _open_browser_when_ready(port: int) -> None:
 
 def _print_manual_start(port: int) -> None:
     """Show CLI usage after setup or Ctrl+C."""
-    print()
-    print(f"  {bold('To manage the server, use the CLI:')}")
-    print()
-    if sys.platform == "win32":
-        prefix = "nullshift.bat"
-    else:
-        prefix = "./nullshift"
-    print(f"    {bold(cyan(f'{prefix} start'))}    — start in background")
-    print(f"    {bold(cyan(f'{prefix} stop'))}     — stop the server")
-    print(f"    {bold(cyan(f'{prefix} status'))}   — check if running")
-    print(f"    {bold(cyan(f'{prefix} logs'))}     — stream live logs")
-    print(f"    {bold(cyan(f'{prefix} setup'))}    — re-run this wizard")
-    print()
-    info("URL: " + bold(cyan(f"http://localhost:{port}")))
-    print()
+    line()
+    line(bold("To manage the server, use the CLI:"))
+    prefix = "nullshift.bat" if sys.platform == "win32" else "./nullshift"
+    for verb, what in (("start", "start in background"), ("stop", "stop the server"), ("status", "check if running"),
+                       ("logs", "stream live logs"), ("setup", "re-run this wizard")):
+        line(f"   {cyan(f'{prefix} {verb}'.ljust(len(prefix) + 7))}  {dim(what)}")
+    line()
+    line("URL  " + bold(cyan(f"http://localhost:{port}")))
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main() -> None:
-    TOTAL = 7
+    TOTAL = STEPS
 
     banner()
-    print(dim("  Re-run this wizard at any time to reconfigure or reinstall."))
-    print()
 
     # Step 1: Venv + dependencies (bootstrap already created the venv and re-exec'd)
     step_header(1, TOTAL, "Environment")
     step_environment()
 
     # Step 2: JWT secret → config.db
-    step_header(2, TOTAL, "JWT Secret")
+    step_header(2, TOTAL, "Session key")
     step_jwt()
 
     # Step 3: Admin account → users.db
-    step_header(3, TOTAL, "Admin Account")
+    step_header(3, TOTAL, "Admin account")
     step_admin()
 
     # Step 4: Claude Agent SDK
@@ -1006,11 +994,11 @@ def main() -> None:
     step_sdk()
 
     # Step 5: SIEM connector → config.db
-    step_header(5, TOTAL, "SIEM Connector")
+    step_header(5, TOTAL, "SIEM connectors")
     step_siem()
 
     # Step 6: RAG / Knowledge Base
-    step_header(6, TOTAL, "RAG / Knowledge Base")
+    step_header(6, TOTAL, "Knowledge base (RAG)")
     step_rag()
 
     # Step 7: Defaults + summary + launch
@@ -1018,11 +1006,7 @@ def main() -> None:
     step_defaults_and_summary()
     step_instructions()
 
-    print()
-    hr("═")
-    print(bold(cyan("  Setup complete. Welcome to NullShift!")))
-    hr("═")
-    print()
+    finish(f"{green('Setup complete.')} Welcome to NullShift!")
 
 
 if __name__ == "__main__":
