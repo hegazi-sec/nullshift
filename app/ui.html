@@ -49,6 +49,28 @@
     html[data-density="compact"] { --row-y: var(--sp-1); --row-h: 28px; }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     [hidden] { display: none !important; }
+    /* Checkboxes and radios in the theme: the browser's own are white on this dark UI */
+    input[type="checkbox"], input[type="radio"] {
+      appearance: none; -webkit-appearance: none; flex: none;
+      width: 16px; height: 16px; margin: 0; vertical-align: middle;
+      display: inline-grid; place-content: center; cursor: pointer;
+      background: var(--bg3); border: 1px solid var(--field-border); border-radius: 4px;
+      transition: background .12s, border-color .12s;
+    }
+    input[type="radio"] { border-radius: 50%; }
+    input[type="checkbox"]::before, input[type="radio"]::before {
+      content: ""; width: 10px; height: 10px; background: var(--bg); transform: scale(0); transition: transform .12s;
+    }
+    input[type="checkbox"]::before { clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); }
+    input[type="radio"]::before { width: 8px; height: 8px; border-radius: 50%; }
+    input[type="checkbox"]:checked, input[type="checkbox"]:indeterminate,
+    input[type="radio"]:checked { background: var(--accent); border-color: var(--accent); }
+    input[type="checkbox"]:checked::before, input[type="radio"]:checked::before { transform: scale(1); }
+    input[type="checkbox"]:indeterminate::before { clip-path: none; height: 2px; transform: scale(1); }
+    input[type="checkbox"]:hover:not(:disabled), input[type="radio"]:hover:not(:disabled) { border-color: var(--accent); }
+    input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    input[type="checkbox"]:disabled, input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
+    @media (forced-colors: active) { input[type="checkbox"], input[type="radio"] { appearance: auto; } }
 
     body {
       font-family: var(--font-ui);
