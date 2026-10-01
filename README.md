@@ -112,8 +112,9 @@ Settings are persisted in a SQLite database (`app/data/config.db`). All changes 
 
 ## Using the Console
 
-The left rail switches between **Investigations**, **Alerts**, **Cases**, **Dashboard** and **Agents**. Your name, **Settings** (admins), **Keyboard shortcuts**, **Notifications** and **Log out** sit under the account button at the bottom of the rail; on a phone the rail becomes a bottom bar with these under **More**.
+The left rail switches between **Investigations**, **Alerts**, **Cases**, **Dashboard** and **Agents**. Your name, **Settings** (admins), **Keyboard shortcuts**, **Notifications**, **Density** and **Log out** sit under the account button at the bottom of the rail; on a phone the rail becomes a bottom bar with these under **More**.
 
+- **Density.** **Compact** fits more rows in the alert queue, lists, dashboard and agent activity; the choice is per device, so a big monitor and a laptop can differ.
 - **Get pinged when NullShift is in the background.** The tab title counts new alerts plus isolation proposals awaiting you. Turn on **Notifications** under the account button to get a browser notification for critical alerts, isolation approvals (they open the proposal) and finished investigations. Browsers allow this only over HTTPS or on localhost, and it is per browser, so your phone and desk machine choose separately. A phone only gets them while NullShift is open in its browser.
 - **Investigations keep running when you leave.** Switch views, open another chat or reload: the investigation carries on and its reply lands in its own chat, with a notification if you're elsewhere.
 - **Stop an investigation** with **Stop investigation**, shown above the message box while one runs. The chat frees up at once so you can ask again; a model call already underway finishes in the background and its answer is dropped.
