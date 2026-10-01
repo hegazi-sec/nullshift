@@ -141,9 +141,32 @@ class AlertStore:
             # agent_note/triaged_at: written by the triage/investigator agents;
             # resolution/resolution_note: why an analyst dismissed the alert;
             # incident_id: the case the alert was escalated or added to.
-            for col in ("agent_note", "triaged_at", "resolution", "resolution_note", "incident_id"):
+            # acked_at/acked_by: when the alert first left 'new' and who took it (NULL: an agent).
+            for col in ("agent_note", "triaged_at", "resolution", "resolution_note", "incident_id", "acked_at"):
                 if col not in cols:
                     cur.execute(f"ALTER TABLE ingested_alerts ADD COLUMN {col} TEXT")
+            if "acked_by" not in cols:
+                cur.execute("ALTER TABLE ingested_alerts ADD COLUMN acked_by INTEGER")
+                # ponytail: one-off backfill, the last status change stands in for the first
+                cur.execute("UPDATE ingested_alerts SET acked_at = updated_at, acked_by = claimed_by WHERE status != 'new'")
+                cur.execute("UPDATE ingested_alerts SET resolution = 'false_positive' "
+                            "WHERE status = 'dismissed' AND claimed_by IS NULL AND resolution IS NULL "
+                            "AND agent_note LIKE '%false positive%'")
+            # Every status write goes through here, whichever method made it. claimed_by is
+            # NULL exactly when an agent acted (agents never set it), so acked_by tells the two
+            # apart. Back to 'new' (chat deleted, agent decision undone) is unacknowledged again.
+            cur.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS alerts_ack AFTER UPDATE OF status ON ingested_alerts
+                WHEN (OLD.status = 'new') != (NEW.status = 'new')
+                BEGIN
+                    UPDATE ingested_alerts
+                    SET acked_at = CASE WHEN NEW.status = 'new' THEN NULL ELSE NEW.updated_at END,
+                        acked_by = CASE WHEN NEW.status = 'new' THEN NULL ELSE NEW.claimed_by END
+                    WHERE id = NEW.id;
+                END
+                """
+            )
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_alerts_status ON ingested_alerts(status, created_at)"
             )
@@ -284,7 +307,8 @@ class AlertStore:
 
     def stats(self, hours: int, buckets: int = 24) -> Dict[str, Any]:
         """Dashboard aggregates for alerts received in the last `hours`, plus the
-        all-time backlog (new / investigating) that the inbox badge counts."""
+        all-time backlog (new / investigating) that the inbox badge counts and the
+        arrival time of its oldest unacknowledged alert."""
         # ponytail: recomputed on every call and the UI polls each second; fine at
         # thousands of rows, pre-aggregate per hour if the inbox reaches millions
         since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
@@ -313,12 +337,40 @@ class AlertStore:
                 "recent": [dict(r) for r in q(
                     f"SELECT id, source, title, severity, status, created_at {win} "
                     f"ORDER BY created_at DESC LIMIT 8", since)],
-                # Arrival -> last status change (investigate or dismiss).
-                "triage_s": q(f"SELECT AVG((julianday(updated_at) - julianday(created_at)) * 86400) {win} "
-                              f"AND status != 'new'", since)[0][0],
+                "ack_s": q(f"SELECT AVG((julianday(acked_at) - julianday(created_at)) * 86400) {win} "
+                           f"AND acked_at IS NOT NULL", since)[0][0],
+                "resolve_s": self._resolve_s(since),
+                # Alerts taken off the queue in this window, and how many an agent took.
+                "handled": dict(zip(("total", "agents"), q(
+                    f"SELECT COUNT(*), COUNT(*) - COUNT(acked_by) {win} AND acked_at IS NOT NULL", since)[0])),
+                "noisy_rules": self._noisy_rules(since),
                 "backlog": {s: n for s, n in q(
                     "SELECT status, COUNT(*) FROM ingested_alerts WHERE status != 'dismissed' GROUP BY status")},
+                "oldest_new": q("SELECT MIN(created_at) FROM ingested_alerts WHERE status = 'new'")[0][0],
             }
+
+    def _resolve_s(self, since: str) -> Optional[float]:
+        """Mean arrival -> resolution for alerts received since `since`: a dismissal, or
+        for an escalated alert its case closing. Caller holds the lock."""
+        sql = ("SELECT AVG((julianday(done) - julianday(created_at)) * 86400) FROM ("
+               " SELECT created_at, CASE WHEN status = 'dismissed' THEN updated_at ELSE {closed} END AS done"
+               " FROM ingested_alerts WHERE created_at >= ?) WHERE done IS NOT NULL")
+        try:
+            return self.conn.execute(sql.format(
+                closed="(SELECT closed_at FROM incidents WHERE id = ingested_alerts.incident_id)"), (since,)).fetchone()[0]
+        except sqlite3.OperationalError:  # no incidents table yet: dismissals only
+            return self.conn.execute(sql.format(closed="NULL"), (since,)).fetchone()[0]
+
+    def _noisy_rules(self, since: str, min_decided: int = 3) -> List[Dict[str, Any]]:
+        """Rules with the most false positives since `since`, out of the alerts worked
+        (dismissed or under investigation); `tune` marks the ones mostly wrong. An alert still
+        being investigated counts as not false, so the rate errs low. Caller holds the lock."""
+        rows = self.conn.execute(
+            "SELECT title AS name, SUM(resolution = 'false_positive') AS fp,"
+            " SUM(status != 'new') AS decided, COUNT(*) AS n"
+            " FROM ingested_alerts WHERE created_at >= ? GROUP BY title"
+            " HAVING fp > 0 AND decided >= ? ORDER BY fp DESC, n DESC LIMIT 6", (since, min_decided)).fetchall()
+        return [{**dict(r), "rate": r["fp"] / r["decided"], "tune": r["fp"] / r["decided"] >= 0.8} for r in rows]
 
     def untriaged(self, since: str, limit: int = 500) -> List[Dict[str, Any]]:
         """New alerts received since `since` that no agent has looked at, oldest first."""
@@ -336,13 +388,15 @@ class AlertStore:
 
     def set_agent_outcome(self, ids: List[str], status: str, note: str,
                           conversation_id: Optional[str] = None) -> None:
-        """Record an agent decision (or its undo) on a group of alerts."""
+        """Record an agent decision (or its undo) on a group of alerts. Agents only
+        dismiss false positives, so a dismissal records that resolution."""
         now = self._now()
+        resolution = "false_positive" if status == "dismissed" else None
         with self.lock:
             self.conn.executemany(
-                "UPDATE ingested_alerts SET status=?, agent_note=?, triaged_at=?, updated_at=?, "
+                "UPDATE ingested_alerts SET status=?, agent_note=?, triaged_at=?, updated_at=?, resolution=?, "
                 "conversation_id=COALESCE(?, conversation_id) WHERE id=?",
-                [(status, note, now, now, conversation_id, i) for i in ids],
+                [(status, note, now, now, resolution, conversation_id, i) for i in ids],
             )
             self.conn.commit()
 
@@ -525,7 +579,7 @@ class AlertStore:
 
     def set_incident(self, ids: List[str], incident_id: str) -> int:
         """Attach alerts to a case. Dismissed alerts are left out; updated_at is not
-        touched because it marks the last status change (see stats.triage_s)."""
+        touched because it marks the last status change (see stats._resolve_s)."""
         if not ids:
             return 0
         with self.lock:

@@ -34,7 +34,7 @@ It works with any major LLM provider — Anthropic Claude, OpenAI GPT, or a full
 - **Alert queue** — a dense table of the inbox with age against severity targets, a "Mine" filter, oldest-first sorting, bulk close / dismiss / add to case, one investigation for several related alerts, and keyboard triage.
 - **Alert workbench** — each alert shows its key facts, the investigation's verdict and summary, and the next decision (close as false positive, escalate to case, ask a follow-up) on one page.
 - **Built for the queue** — search alerts by host or IP across the raw payload, filter by status and severity, undo a dismissal, stop a running investigation, paste or drop screenshots, and move around with keyboard shortcuts.
-- **Live dashboard** — alert volume, severity, top rules and hosts, open cases; click a count or a severity, rule or host bar to open the matching alerts.
+- **Live dashboard** — the numbers a SOC lead runs on: the oldest unacknowledged alert, mean time to acknowledge and to resolve, how much of the queue the agents picked up, and the rules to tune (most false positives, flagged at 80% or more); plus alert volume, severity, hosts and open cases. Click a count or a bar to open the matching alerts.
 - **Automatic IOC enrichment** — IPs, domains, and hashes in each message are checked against VirusTotal automatically.
 - **L1 → L2 handoff mode** — generates ticket-ready summaries with one command.
 - **Per-user temperature, conversation search, verdict tracking, debug traces.**

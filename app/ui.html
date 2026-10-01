@@ -354,7 +354,7 @@
     .dash-edit button:hover { border-color: var(--accent); color: var(--accent); }
     .dash-empty { padding: 12px 0; font-size: 12px; color: var(--muted); }
     .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px 0; }
-    .kpi { padding: 2px 12px; border: none; border-left: 1px solid var(--border); background: none; color: inherit; font: inherit; text-align: left; }
+    .kpi { display: flex; flex-direction: column; justify-content: flex-start; padding: 2px 12px; border: none; border-left: 1px solid var(--border); background: none; color: inherit; font: inherit; text-align: left; }
     button.kpi { cursor: pointer; border-radius: 0 4px 4px 0; }
     button.kpi:hover .kpi-value, button.kpi:hover .kpi-label { color: var(--accent); }
     button.hbar-row { display: block; width: 100%; background: none; border: none; color: inherit; font: inherit; font-size: 12px; text-align: left; cursor: pointer; border-radius: 4px; }
@@ -365,6 +365,7 @@
     @container (max-width: 611px) { .dash-edit .h { display: none; } .dash-edit .v { display: inline; } }  /* one column: order runs up/down */
     .kpi-label { font-size: 12px; color: var(--muted); }
     .kpi-value { margin-top: 2px; font-size: 24px; font-weight: 600; color: var(--text2); }
+    .kpi-sub { font-size: 11px; color: var(--muted); }
     .vchart { display: flex; align-items: flex-end; gap: 2px; height: 120px; border-bottom: 1px solid var(--border2); }
     .vcol {
       flex: 1; height: 100%; display: flex; flex-direction: column;
@@ -3125,8 +3126,8 @@ $('alertFilters').addEventListener('click', e => {
   refilterAlerts()
 })
 // Open the Alerts list with these filters (a dashboard drill-down).
-function openAlerts({ status = '', severity = '', q = '' }) {
-  Object.assign(alertsMeta, { status, severity, mine: false })
+function openAlerts({ status = '', severity = '', q = '', sort = 'newest' }) {
+  Object.assign(alertsMeta, { status, severity, mine: false, sort })
   listQuery.alerts = q
   if (listSection === 'alerts') listSearch.value = q
   syncAlertFilters()
@@ -4264,7 +4265,7 @@ const DASH_WIDGETS = {
   kpis:     { title: 'Overview', wide: true },
   volume:   { title: 'Alert volume', wide: true },
   severity: { title: 'Alerts by severity' },
-  rules:    { title: 'Top detection rules' },
+  noisy:    { title: 'Rules to tune' },
   hosts:    { title: 'Top hosts' },
   recent:   { title: 'Recent alerts' },
   cases:    { title: 'My open cases' },
@@ -4327,16 +4328,22 @@ function dashItem(attr, id, tag, title, meta, badge) {
 
 const DASH_RENDER = {
   kpis: d => {
-    const a = d.alerts, r = DASH_RANGES[d.hours]
+    const a = d.alerts, r = DASH_RANGES[d.hours], h = a.handled
     return `<div class="kpi-row">${[
-      [`Alerts (${r})`, fmtCount(a.total), 'alerts:'],
       ['Unacknowledged', fmtCount(a.backlog.new || 0), 'alerts:new'],
+      // the age ticks every second (see loadDashboard) without a re-render
+      ['Oldest unacknowledged', a.oldest_new ? `<span data-age="${esc(a.oldest_new)}">${fmtAge(a.oldest_new)}</span>` : '—', 'alerts:new:oldest'],
+      // windowed: alerts received in the selected range; the counts around them are the live queue
+      ['Time to acknowledge', fmtDur(a.ack_s), null, `mean · ${r}`],
+      ['Time to resolve', fmtDur(a.resolve_s), null, `mean · ${r} · to dismissal or case closed`],
+      ['Handled by agents', h.total ? `${Math.round(h.agents / h.total * 100)}%` : '—', null,
+       `${fmtCount(h.agents)} of ${fmtCount(h.total)} picked up · ${r}`],
       ['Investigating', fmtCount(a.backlog.investigating || 0), 'alerts:investigating'],
       ['My open cases', fmtCount(d.cases_open), 'cases'],
-      [`Avg time to triage (${r})`, fmtDur(a.triage_s)],
-    ].map(([l, v, go]) => go
-      ? `<button type="button" class="kpi" data-go="${go}"><div class="kpi-label">${l}</div><div class="kpi-value">${v}</div></button>`
-      : `<div class="kpi"><div class="kpi-label">${l}</div><div class="kpi-value">${v}</div></div>`).join('')}</div>`
+    ].map(([l, v, go, sub]) => {
+      const inner = `<div class="kpi-label">${l}</div><div class="kpi-value">${v}</div>${sub ? `<div class="kpi-sub">${sub}</div>` : ''}`
+      return go ? `<button type="button" class="kpi" data-go="${go}">${inner}</button>` : `<div class="kpi">${inner}</div>`
+    }).join('')}</div>`
   },
   volume: d => {
     const v = d.alerts.volume, max = Math.max(...v)
@@ -4357,7 +4364,15 @@ const DASH_RENDER = {
     <div class="vaxis"><span>${esc(fmt(t0))}</span><span>${esc(fmt(t0 + 12 * step))}</span><span>now</span></div>`
   },
   severity: d => dashBars(Object.keys(SEV_COLOR).map(s => ({ name: s, n: d.alerts.by_severity[s] || 0, color: SEV_COLOR[s] })), 'No alerts in this window', true, 'sev'),
-  rules:    d => dashBars(d.alerts.top_rules, 'No alerts in this window', false, 'q'),
+  // False positives out of the alerts worked (dismissed or under investigation); 80% or more is flagged to tune.
+  noisy:    d => d.alerts.noisy_rules.map(r => `
+    <button type="button" class="hbar-row" data-q="${esc(r.name)}" title="Show these alerts">
+      <span class="hbar-label">${r.tune ? '<span class="tag tag-high">tune</span> ' : ''}${esc(r.name)}</span>
+      <span class="hbar-track">
+        <span class="hbar" style="width:${Math.max(r.rate * 60, 1)}%;background:var(--${r.tune ? 'orange' : 'accent'})"></span>
+        <span class="hbar-val" title="False positives out of the alerts worked (dismissed or under investigation)">${Math.round(r.rate * 100)}% FP · ${fmtCount(r.fp)}/${fmtCount(r.decided)}</span>
+      </span>
+    </button>`).join('') || '<div class="dash-empty">No rule has 3 or more worked alerts with false positives in this window</div>',
   hosts:    d => dashBars(d.alerts.top_hosts, 'No host names in these alerts', false, 'q'),
   verdicts: d => dashBars(d.verdicts, 'No verdicts in this window'),
   recent:   d => d.alerts.recent.map(a => dashItem('data-alert', a.id, sevTag(a.severity), a.title,
@@ -4422,6 +4437,7 @@ async function loadDashboard() {
     // `since` moves every second; only re-render when the numbers change.
     const sig = JSON.stringify({ ...data, alerts: { ...data.alerts, since: null } })
     if (sig !== dashSig) { dashSig = sig; dashData = data; renderDashGrid() }
+    dashGrid.querySelectorAll('[data-age]').forEach(el => { el.textContent = fmtAge(el.dataset.age) })
     dashGrid.style.opacity = ''
   } catch {
     live.textContent = 'Offline, retrying…'
@@ -4458,7 +4474,7 @@ dashEl.addEventListener('click', e => {
   const { hours, show, hide, move, dir, reset, alert: alertId, inc, go, q, sev } = b.dataset
   if (alertId) { navigate(`#/alerts/${enc(alertId)}`); return }
   if (go === 'cases') { navigate('#/cases'); return }
-  if (go != null) { openAlerts({ status: go.slice('alerts:'.length) }); return }
+  if (go != null) { const [, status, sort] = go.split(':'); openAlerts({ status, sort }); return }
   if (q != null) { openAlerts({ q }); return }
   if (sev != null) { openAlerts({ severity: sev }); return }
   if (inc) { navigate(`#/cases/${enc(inc)}`); return }
