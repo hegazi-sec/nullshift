@@ -22,6 +22,9 @@ nullshift-license-server/CONTRACT.md (protocol v2):
   unsigned answer or a revocation for anything else never turns Pro off.
 - license_clock: the latest time seen. A clock more than 24h behind it is a rollback
   (state `clock`): Pro off until the clock is fixed.
+- The Pro code itself (app/pro/) is a signed package the server serves to a license with a
+  Pro feature, built for this core's PRO_API: app/pro_package.py downloads, verifies and
+  installs it after an activation and on every check-in tick (never over a source tree).
 
 An expired license keeps working for GRACE_DAYS, then the install drops back to Community.
 Nothing here gates logins or alert ingestion: only adding users and the Pro features.
@@ -70,7 +73,12 @@ FEATURES = ("multi_siem", "agents", "metrics", "reports")
 PRO_FEATURES = ("agents", "metrics", "reports")  # code in app/pro/; multi_siem and seats are core limits
 COMMUNITY_SEATS = 3
 GRACE_DAYS = 14
-PRO_INSTALLED = importlib.util.find_spec("app.pro") is not None
+PRO_INSTALLED = importlib.util.find_spec("app.pro") is not None  # app.main clears it when the package fails to import
+PRO_LOAD_ERROR: Optional[str] = None  # why it failed, for status() and Settings › License
+# The package interface this core offers app/pro: the license server keeps one package per
+# PRO_API and an install only ever receives the one built for its own. Bump it whenever core
+# changes anything app/pro relies on (a store signature, a route it hooks, a helper it calls).
+PRO_API = 1
 
 # Product keys: 20 Crockford base32 characters (no I, L, O, U), shown as NS-XXXXX-XXXXX-XXXXX-XXXXX
 KEY_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -518,8 +526,8 @@ UNREACHABLE = ("The license server ({server}) could not be reached. If this netw
                "use offline activation: get a request code below and send it to Cyber-Pillar.")
 
 
-def _post(path: str, body: Dict[str, Any]) -> requests.Response:
-    return requests.post(f"{license_server()}{path}", json=body, timeout=TIMEOUT,
+def _post(path: str, body: Dict[str, Any], timeout: Optional[float] = None) -> requests.Response:
+    return requests.post(f"{license_server()}{path}", json=body, timeout=timeout or TIMEOUT,
                          headers={"User-Agent": "NullShift"})
 
 
@@ -681,7 +689,9 @@ _stop = threading.Event()
 
 
 def tick() -> None:
-    """One pass of the daemon: move the clock, check in. Never raises."""
+    """One pass of the daemon: move the clock, check in, then fetch or update the Pro
+    package while the license has a Pro feature (app/pro_package.py; it skips a source
+    tree and an offline license by itself). Never raises."""
     try:
         touch_clock()
     except Exception:
@@ -690,6 +700,11 @@ def tick() -> None:
         checkin()
     except Exception:
         log.exception("License check-in failed")
+    try:
+        from app import pro_package
+        pro_package.sync()
+    except Exception:
+        log.exception("Pro package sync failed")
 
 
 def start_checkin_loop() -> Optional[threading.Thread]:
@@ -715,6 +730,12 @@ def status() -> Dict[str, Any]:
     lic = current()  # once: seats and features below derive from it, not from fresh reads
     state = lic["state"] if lic else "invalid" if store.get("license") else "none"
     live = lic if lic and state not in OFF_STATES else None
+    try:
+        from app import pro_package
+        pkg = pro_package.state()
+    except Exception:  # the marker on disk can never break the status
+        log.exception("The Pro package state could not be read")
+        pkg = {"package": None, "source": False, "restart_needed": False}
     return {
         "edition": "pro" if lic and state not in OFF_STATES else "community",
         "state": state,
@@ -735,4 +756,9 @@ def status() -> Dict[str, Any]:
         "features": [f for f in FEATURES if _has(live, f)],
         "licensed_features": lic["features"] if lic else [],
         "pro_installed": PRO_INSTALLED,
+        "pro_load_error": PRO_LOAD_ERROR,  # the package is there but failed to import at startup
+        "pro_api": PRO_API,
+        "pro_package": pkg["package"],  # the installed package's marker; None for a source checkout or none at all
+        "pro_source": pkg["source"],  # app/pro is a checkout without the marker: never overwritten by a download
+        "pro_restart_needed": pkg["restart_needed"],  # a package was installed since this process started
     }

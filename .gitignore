@@ -49,3 +49,5 @@ Thumbs.db
 # NullShift Pro (proprietary, licensed installs only)
 app/pro/
 scripts/license_issue.py
+app/.pro-new-*/
+app/.pro-old-*/

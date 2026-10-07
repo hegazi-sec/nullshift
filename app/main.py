@@ -19,6 +19,7 @@ from app.execution.investigation_service import run_investigation
 from app.playbooks.runner import PlaybookRunner, SPARSE_THRESHOLD
 from app.prompts import SYSTEM_PROMPT, VERDICT_ASK
 from app import licensing
+from app import pro_package  # imported with the app: its LOADED_SHA is the Pro package this process started with
 from app import rag as _rag_mod
 from app.auth import router as auth_router, get_current_user, require_admin, init_auth_startup, _validate_csrf, html_page
 from app.db.chat_store import store
@@ -672,9 +673,17 @@ class _SameOriginWrites:
 # No /docs, /redoc or /openapi.json: they need no login and would hand out the route map.
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(auth_router)
-if licensing.PRO_INSTALLED:  # app/pro/ ships only to licensed installs; Community runs without it
-    from app.pro import install as _install_pro
-    _install_pro(app)
+try:
+    if licensing.PRO_INSTALLED:  # app/pro/ ships only to licensed installs; Community runs without it
+        _pro_problem = pro_package.load_problem()  # an installed package built for another PRO_API is not imported
+        if _pro_problem:
+            raise ImportError(_pro_problem)
+        from app.pro import install as _install_pro
+        _install_pro(app)
+except Exception as e:  # a package that fails to import never stops NullShift: Community keeps running
+    logging.getLogger("nullshift").exception("NullShift Pro (app/pro/) failed to load; running as Community")
+    licensing.PRO_INSTALLED = False
+    licensing.PRO_LOAD_ERROR = f"{type(e).__name__}: {e}"
 app.add_middleware(_SameOriginWrites)
 
 # Serve static assets (logo, favicon) at /static/
@@ -2028,7 +2037,7 @@ def api_license(current_user: Dict[str, Any] = Depends(get_current_user)):
     an analyst gets null for both."""
     s = licensing.status()
     if current_user.get("role") != "admin":
-        s["install_id"] = s["machine"] = None
+        s["install_id"] = s["machine"] = s["pro_package"] = s["pro_load_error"] = None
     return s
 
 
@@ -2055,7 +2064,9 @@ def api_admin_license_activate(payload: Dict[str, Any], current_user: Dict[str, 
     """Exchange a product key for a license at the license server and save it. `transfer`
     moves a key on its maximum installs here (the other install loses Pro at its next
     check-in). Errors answer {"message", "code"}: after a 409 `activation_limit` the UI
-    offers the move. The key is never logged in full: the last 4 characters at most."""
+    offers the move. The key is never logged in full: the last 4 characters at most.
+    Then the Pro package follows the license: `pro_sync` in the answer says whether it
+    was downloaded (a restart loads it), is current, or why not (best effort)."""
     key = str(payload.get("key") or "")
     transfer = payload.get("transfer") is True
     try:
@@ -2066,7 +2077,8 @@ def api_admin_license_activate(payload: Dict[str, Any], current_user: Dict[str, 
         raise HTTPException(status_code=e.status, detail={"message": str(e), "code": e.code})
     log.info("License %s (%s) %s with key …%s by %s", lic.get("id"), lic.get("customer"),
              "moved to this install" if transfer else "activated", licensing.last4(key), current_user["username"])
-    return licensing.status()
+    pro = pro_package.sync()
+    return {**licensing.status(), "pro_sync": pro}
 
 
 @app.post('/api/admin/license/request-code')

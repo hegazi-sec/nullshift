@@ -447,6 +447,8 @@ services:
 
 **Air-gapped networks.** Settings › License (or `nullshift license request-code <KEY>`) shows a request code for your key. Send it to Cyber-Pillar, receive a `.lic` file, and load it in Settings › License or with `nullshift license <file>`. Such a license never phones home.
 
+**The Pro code.** `app/pro/` is not in this repository: it downloads from the license server once a license with a Pro feature is active (at activation, at `nullshift start` and with the daily check-in; `nullshift pro sync` any time), as a package signed by the server and checked here before a byte of it is unpacked. Air-gapped installs receive a `nullshift-pro-<N>.nspro` bundle with the `.lic` and load it with `nullshift pro install <file>`. A new package is loaded at the next restart (`nullshift start` reloads by itself); Settings › License and `nullshift pro status` show what is installed. A checkout that already holds the Pro source is never overwritten.
+
 **Staying on.** An online license checks in with the license server once a day to pick up renewals; a network failure never changes anything. Only three things turn Pro off: a revocation signed by the server for this very license and install (a key revoked, or moved to another server), expiry (after a 14-day grace period), or a system clock rolled back more than 24 hours. The install then continues as Community: logins and alert ingestion never stop, and users over the limit keep their access (only new seats are refused).
 
 ## License

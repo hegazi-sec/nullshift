@@ -1217,7 +1217,8 @@
     <div class="section-desc">
       NullShift Community is free: one SIEM queried and 3 active users. A NullShift Pro license lifts
       those limits and turns on agents, SOC-lead metrics and report export. An expired license keeps
-      working for 14 days.
+      working for 14 days. The Pro code itself downloads from the license server at activation and with the
+      daily check-in; a new download is loaded at the next restart.
     </div>
     <div class="panel" id="licenseBody">
       <div class="hint">Loading…</div>
@@ -2637,9 +2638,21 @@
     const features = Object.entries(LICENSE_FEATURES).map(([f, name]) => `
         <div class="k">${name}</div>
         <div class="v">${(j.features || []).includes(f) ? '<span class="pill green">on</span>' : '<span class="pill gray">off</span>'}</div>`).join('');
-    // Pro features licensed, but their code (app/pro/) is not in this build
+    // Pro features licensed, but their code (app/pro/) is not loaded in this process
     const needsPro = !j.pro_installed && (j.licensed_features || []).some(f => f !== 'multi_siem');
     const hasLic = !!j.license_id;
+    // The Pro code: a source checkout (never downloaded over), the installed package (its commit, whether
+    // this process loaded it, whether it failed to import), or none yet
+    const pkg = j.pro_package;
+    const proCode = j.pro_source ? '<span class="pill gray">source checkout</span>'
+      : pkg ? `<span class="pill ${j.pro_load_error ? 'red' : j.pro_installed ? 'green' : 'yellow'}">package</span>${esc((pkg.sha256 || '').slice(0, 12))}`
+          + (pkg.commit ? ` · commit ${esc(pkg.commit)}` : '') + (pkg.installed_at ? ` · installed ${esc(fmtDay(pkg.installed_at))}` : '')
+          + (j.pro_restart_needed ? '<span class="pill yellow">restart needed</span>' : '')
+      : '<span class="pill gray">not installed</span>';
+    const proNote = j.pro_load_error ? `<div class="hint-box" style="border-color:var(--red);color:var(--red);">The Pro code failed to load, so this install runs as Community: ${esc(j.pro_load_error)}. Restart NullShift: it downloads the package again at startup.</div>`
+      : j.pro_restart_needed ? '<div class="hint-box">A new Pro package was downloaded. Restart NullShift to load it.</div>'
+      : needsPro ? '<div class="hint-box">This install doesn’t have the Pro code yet: it downloads at activation and with the daily check-in (or <code>nullshift pro sync</code>); air-gapped, load the <code>.nspro</code> bundle with <code>nullshift pro install &lt;file&gt;</code>. Restart NullShift to load it.</div>'
+      : '';
     const checkin = !hasLic ? '—' : j.offline ? 'not needed: offline license' : j.checked_at ? fmtAbsTime(j.checked_at) : 'never: the license server was not reached yet';
     // This machine's fingerprint (the first 12 of 64 hex), and whether the license is tied to one
     const machine = !j.machine ? '<span class="pill gray">not bound</span>no hardware ID found; set NULLSHIFT_MACHINE_ID to bind this install'
@@ -2660,8 +2673,9 @@
         <div class="k">Machine</div><div class="v" style="flex-wrap:wrap;">${machine}</div>
         <div class="k">Seats</div><div class="v">${esc(j.seats_used)} of ${esc(j.seats)} in use</div>
         ${features}
+        <div class="k">Pro code</div><div class="v" style="flex-wrap:wrap;">${proCode}</div>
       </div>
-      ${needsPro ? '<div class="hint-box">This build doesn’t include the Pro code: agents, SOC-lead metrics and report export need the Pro build.</div>' : ''}`;
+      ${proNote}`;
     document.getElementById('removeLicenseBtn').disabled = j.state === 'none';
   }
 
@@ -2693,10 +2707,16 @@
       const j = await api('/api/admin/license/activate', send('POST', { key, transfer }));
       _licenseChanged(j);
       input.value = '';
-      // the outcome by the saved license's state: an activation can succeed and still leave Pro off
+      // the outcome by the saved license's state: an activation can succeed and still leave Pro off.
+      // Then the Pro code: downloaded with the license (a restart loads it), current, or why not
       const verb = transfer ? 'Moved to this install' : 'Activated';
-      if (j.state === 'valid') setStatus(st, verb + ' ✓', 'ok');
-      else if (j.state === 'grace') setStatus(st, `${verb} ✓ — this license expired ${fmtDay(j.expires)} and works until ${fmtDay(j.grace_ends)}: renew it`, 'warn');
+      const sync = j.pro_sync || {};
+      const pro = sync.status === 'installed' ? ' — NullShift Pro downloaded: restart NullShift to load it'
+        : sync.status === 'current' ? ' — the Pro code is up to date'
+        : sync.status === 'error' ? ' — the Pro code was not downloaded: ' + (sync.message || 'try nullshift pro sync later')
+        : '';
+      if (j.state === 'valid') setStatus(st, verb + ' ✓' + pro, sync.status === 'error' ? 'warn' : 'ok');
+      else if (j.state === 'grace') setStatus(st, `${verb} ✓ — this license expired ${fmtDay(j.expires)} and works until ${fmtDay(j.grace_ends)}: renew it${pro}`, 'warn');
       else if (j.state === 'moved') setStatus(st, verb + ', but Pro is still off: the license is bound to another machine. ' + (j.moved_message || ''), 'err');
       else if (j.state === 'expired') setStatus(st, `${verb}, but Pro is still off: this license expired ${fmtDay(j.expires)} and its grace period is over. Renew it with Cyber-Pillar`, 'err');
       else if (j.state === 'clock') setStatus(st, verb + ', but Pro is still off: ' + (j.clock_message || 'the system clock is behind; fix the clock') + '. The license server’s time is ahead of this machine’s clock', 'err');

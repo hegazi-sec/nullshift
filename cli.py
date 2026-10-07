@@ -14,6 +14,9 @@ Usage:
     nullshift license   Show the license, or install a .lic file (nullshift license <file>);
                         nullshift license request-code <KEY> prints the offline activation code;
                         nullshift license reset-clock sets the rollback clock to now (logged)
+    nullshift pro       The Pro code (app/pro/): nullshift pro status shows what is installed;
+                        nullshift pro sync downloads or updates it from the license server;
+                        nullshift pro install <file.nspro> loads the bundle sent to air-gapped installs
 """
 from __future__ import annotations
 import os
@@ -115,6 +118,7 @@ def cmd_start() -> None:
 
     port = _get_port()
     DATA.mkdir(parents=True, exist_ok=True)
+    _pro_sync_before_start()
 
     with open(LOG_FILE, 'a') as log:
         proc = subprocess.Popen(
@@ -145,6 +149,36 @@ def cmd_start() -> None:
         print(f'  nullshift logs')
         PID_FILE.unlink(missing_ok=True)
         sys.exit(1)
+
+
+def _pro_sync_before_start() -> None:
+    """Best effort, before the server starts: download or update the Pro package when the
+    license has a Pro feature, so the server loads it at once (a short timeout; the daily
+    check-in tries again). Nothing here can stop the start."""
+    try:
+        sys.path.insert(0, str(BASE))
+        os.chdir(BASE)  # .env (NULLSHIFT_LICENSE_SERVER) is read from the repo, as the server reads it
+        from app import pro_package
+        r = pro_package.sync(timeout=5)
+    except Exception:
+        return
+    if r['status'] == 'installed':
+        print(f'{_green("✓")} NullShift Pro downloaded (package {r["sha256"][:12]})')
+    elif r['status'] == 'error':
+        print(_muted(f'  Pro package: {r["message"]}'))
+
+
+def _pro_sync_line(r) -> str:
+    """One line on a sync's outcome, for activate and `pro sync`."""
+    if r['status'] == 'installed':
+        return f'{_green("✓")} NullShift Pro downloaded (package {r["sha256"][:12]}): restart NullShift to load it'
+    if r['status'] == 'current':
+        return f'{_green("✓")} The Pro code is up to date'
+    if r['status'] == 'source':
+        return _muted('  Pro code: a source checkout, never downloaded over')
+    if r['status'] == 'skipped':
+        return _muted(f'  Pro code not downloaded: {r["message"]}')
+    return _red(f'✗ Pro code not downloaded: {r["message"]}')
 
 
 def cmd_stop() -> None:
@@ -208,6 +242,19 @@ def cmd_setup() -> None:
     subprocess.run([exe, str(BASE / 'setup.py')])
 
 
+def _local_changes(porcelain: str) -> list[str]:
+    """The `git status --porcelain` lines that are the user's own changes. A downloaded Pro
+    package (app/pro/ holding .package.json) is untracked in a public clone and is not one:
+    an update must not stop for it."""
+    lines = [line for line in porcelain.splitlines() if line.strip()]
+    if (BASE / 'app' / 'pro' / '.package.json').exists():
+        def is_package(line: str) -> bool:
+            path = line[3:].replace('\\', '/').rstrip('/')  # `XY path`
+            return path == 'app/pro' or path.startswith('app/pro/')
+        lines = [line for line in lines if not is_package(line)]
+    return lines
+
+
 def cmd_update() -> None:
     """Pull the latest from origin/main, refresh dependencies, and restart."""
     if not (BASE / '.git').exists():
@@ -220,16 +267,16 @@ def cmd_update() -> None:
 
     # 1) Warn about uncommitted local changes
     try:
-        dirty = subprocess.run(
+        dirty = _local_changes(subprocess.run(
             ['git', '-C', str(BASE), 'status', '--porcelain'],
             capture_output=True, text=True, check=True,
-        ).stdout.strip()
+        ).stdout)
         if dirty:
             print(_red('✗ Uncommitted local changes detected:'))
             print()
-            for line in dirty.splitlines()[:8]:
+            for line in dirty[:8]:
                 print(f'    {_muted(line)}')
-            if len(dirty.splitlines()) > 8:
+            if len(dirty) > 8:
                 print(f'    {_muted("…")}')
             print()
             print('  Commit, stash, or revert your changes before updating.')
@@ -372,17 +419,35 @@ def _print_license(s=None) -> None:
         print(f'  Machine   {_muted("not bound (no hardware ID found: set NULLSHIFT_MACHINE_ID)")}')
     print(f'  Seats     {s["seats_used"]} of {s["seats"]} in use')
     print(f'  Features  {", ".join(s["features"]) or _muted("Community")}')
+    print(f'  Pro code  {_pro_code_line(s)}')
+
+
+def _pro_code_line(s) -> str:
+    """The Pro package as status() reports it: source checkout, installed package (with its
+    commit and any load error), or none."""
+    if s['pro_source']:
+        return 'source checkout' + (_red(' — failed to load: ' + s['pro_load_error']) if s['pro_load_error'] else '')
+    if s['pro_package'] is not None:
+        pkg = s['pro_package']
+        line = f'package {(pkg.get("sha256") or "?")[:12]} (commit {pkg.get("commit") or "unknown"}, installed {(pkg.get("installed_at") or "?")[:10]})'
+        if s['pro_load_error']:
+            line += _red(' — failed to load: ' + s['pro_load_error'])
+        elif not s['pro_installed']:
+            line += _muted(' — not loaded yet: restart NullShift')
+        return line
+    return _muted('not installed (downloads at activation and the daily check-in; nullshift pro sync)')
 
 
 def cmd_activate() -> None:
     """nullshift activate <KEY> [--transfer] — exchange a product key for a license at the
     license server (NULLSHIFT_LICENSE_SERVER, default https://nullshift.cyber-pillar.com),
-    then show the edition. --transfer moves a key already on its maximum installs here: the
-    other install loses Pro at its next check-in (at most 3 moves per 30 days). Takes effect
-    at once, running server included (it reads config.db live)."""
+    then download the Pro code and show the edition. --transfer moves a key already on its
+    maximum installs here: the other install loses Pro at its next check-in (at most 3
+    moves per 30 days). The license takes effect at once, running server included (it reads
+    config.db live); a downloaded Pro package needs a restart."""
     sys.path.insert(0, str(BASE))
     os.chdir(BASE)
-    from app import licensing
+    from app import licensing, pro_package
 
     args = sys.argv[2:]
     transfer = '--transfer' in args
@@ -416,7 +481,41 @@ def cmd_activate() -> None:
                'clock': licensing.CLOCK_MESSAGE + '. The license server\'s time is ahead of this machine\'s clock.'
                }.get(s['state'], s['state'])
         print(_red(f'✗ {verb} for {lic["customer"]}, but Pro is still off: {why}'))
-    _print_license(s)
+    print(_pro_sync_line(pro_package.sync()))  # the Pro code follows the license (best effort)
+    _print_license()
+
+
+def cmd_pro() -> None:
+    """nullshift pro status — the installed Pro package (app/pro/), if any.
+    nullshift pro sync — download or update it from the license server (the license must
+    have a Pro feature; never over a source checkout). nullshift pro install <file.nspro> —
+    the bundle Cyber-Pillar sends air-gapped installs with the .lic, verified the same way.
+    A new package is loaded at the next restart."""
+    sys.path.insert(0, str(BASE))
+    os.chdir(BASE)
+    from app import pro_package
+
+    verb = sys.argv[2] if len(sys.argv) > 2 else ''
+    if verb == 'status' and len(sys.argv) == 3:
+        _print_license()
+        return
+    if verb == 'sync' and len(sys.argv) == 3:
+        r = pro_package.sync()
+        print(_pro_sync_line(r))
+        if r['status'] == 'error':
+            sys.exit(1)
+        return
+    if verb == 'install' and len(sys.argv) == 4:
+        try:
+            marker = pro_package.install_bundle(sys.argv[3])
+        except (ValueError, OSError) as e:
+            print(_red(f'✗ {e}'))
+            sys.exit(1)
+        print(f'{_green("✓")} NullShift Pro installed (package {marker["sha256"][:12]}, commit '
+              f'{marker["commit"] or "unknown"}): restart NullShift to load it')
+        return
+    print(_red('✗ Usage: nullshift pro status | sync | install <file.nspro>'))
+    sys.exit(1)
 
 
 def cmd_license() -> None:
@@ -474,6 +573,7 @@ COMMANDS = {
     'passwd':  cmd_passwd,
     'activate': cmd_activate,
     'license': cmd_license,
+    'pro': cmd_pro,
 }
 
 
@@ -494,6 +594,9 @@ def main() -> None:
         print(f'    {_cyan("license")} Show the license, or install a .lic file  (nullshift license <file>)')
         print(f'             Offline activation code: nullshift license request-code <KEY>')
         print(f'             Clock reported as rolled back after a correction: nullshift license reset-clock')
+        print(f'    {_cyan("pro")}     The Pro code: nullshift pro status | sync | install <file.nspro>')
+        print(f'             sync downloads it from the license server (activation and start do too); install loads')
+        print(f'             the bundle sent to air-gapped installs. Restart NullShift to load a new package.')
         print()
         sys.exit(0 if len(sys.argv) < 2 else 1)
 
