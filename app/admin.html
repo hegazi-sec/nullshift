@@ -331,6 +331,8 @@
       transition: border-color .12s;
     }
     textarea { height: auto; min-height: 72px; resize: vertical; }
+    /* The browser's own file picker is light on this dark UI */
+    input[type="file"] { color-scheme: dark; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
     input:focus, select:focus, textarea:focus { border-color: var(--accent); }
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     input:disabled, select:disabled, textarea:disabled { opacity: .4; cursor: not-allowed; }
@@ -538,6 +540,11 @@
       line-height: 1.6;
       margin-bottom: 12px;
     }
+    .hint-box a { color: inherit; }
+    /* Numbered steps under a field (offline activation) */
+    .steps { margin: 2px 0 0; padding-left: 18px; }
+    .steps li { margin-top: 2px; }
+    .steps b { color: var(--text2); font-weight: 600; }
 
     /* ── Chain editor ───────────────────────────────── */
     .chain-row {
@@ -779,6 +786,7 @@
     <button type="button" class="tab" role="tab" id="tab-rag" aria-selected="false" tabindex="-1" aria-controls="pane-rag" data-pane="rag">RAG</button>
     <button type="button" class="tab" role="tab" id="tab-vision" aria-selected="false" tabindex="-1" aria-controls="pane-vision" data-pane="vision">Vision</button>
     <button type="button" class="tab" role="tab" id="tab-usage" aria-selected="false" tabindex="-1" aria-controls="pane-usage" data-pane="usage">Usage</button>
+    <button type="button" class="tab" role="tab" id="tab-license" aria-selected="false" tabindex="-1" aria-controls="pane-license" data-pane="license">License</button>
   </div>
 
   <!-- ─ Users ────────────────────────────────────────────────── -->
@@ -790,6 +798,7 @@
     <div id="usersStatus" class="form-status" role="status"></div>
 
     <div class="section-title" style="margin-top:28px;">Create user</div>
+    <div class="section-desc" id="seatsHint"></div>
     <form id="createForm" class="panel">
       <div class="field">
         <label for="newUsername">Username</label>
@@ -881,6 +890,9 @@
           <label><input type="checkbox" data-siem-check="splunk"/>Splunk <span class="pill green siem-primary" hidden>primary</span></label>
           <label><input type="checkbox" data-siem-check="elastic"/>Elastic / Elastic SIEM <span class="pill green siem-primary" hidden>primary</span></label>
           <label><input type="checkbox" data-siem-check="sentinel"/>Microsoft Sentinel <span class="pill green siem-primary" hidden>primary</span></label>
+        </div>
+        <div class="hint-box" id="siemCommunityNote" hidden>
+          Community queries the primary (first) SIEM only. A <a href="#license">NullShift Pro license</a> queries all of them.
         </div>
       </div>
 
@@ -1198,6 +1210,90 @@
       <button class="btn btn-ghost" id="refreshUsageBtn">↺ Refresh</button>
     </div>
   </div>
+
+  <!-- ─ License ───────────────────────────────────────────────── -->
+  <div class="pane" id="pane-license" role="tabpanel" aria-labelledby="tab-license">
+    <div class="section-title">Edition</div>
+    <div class="section-desc">
+      NullShift Community is free: one SIEM queried and 3 active users. A NullShift Pro license lifts
+      those limits and turns on agents, SOC-lead metrics and report export. An expired license keeps
+      working for 14 days.
+    </div>
+    <div class="panel" id="licenseBody">
+      <div class="hint">Loading…</div>
+    </div>
+
+    <div class="section-title" style="margin-top:28px;">Activate with a product key</div>
+    <div class="section-desc">
+      Enter the key from your NullShift Pro order (<code>NS-XXXXX-XXXXX-XXXXX-XXXXX</code>). This server sends the key,
+      its install ID and its machine fingerprint to the Cyber-Pillar license server and receives a license issued to
+      this install on this machine; from then on the license is checked here, and renewals arrive with a daily check-in.
+    </div>
+    <div class="panel">
+      <div class="field">
+        <label for="productKey">Product key</label>
+        <input id="productKey" type="text" placeholder="NS-XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" spellcheck="false" autocapitalize="characters"/>
+        <div class="hint">Activating again from this install (a reinstall, a rebuilt container) never uses up another activation.
+          Moving to a new server: activate there, then confirm the move when asked (at most 3 moves per 30 days).</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="activateBtn" data-action="save">Activate</button>
+        <button class="btn btn-danger" id="transferBtn" data-action="save" hidden>Move the license to this install</button>
+        <span id="activateStatus" class="status" role="status"></span>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:28px;">Offline activation (air-gapped)</div>
+    <div class="section-desc">
+      No route to the internet from this server? Get a request code for your key here and finish the activation
+      by e-mail; the license you get back never phones home.
+    </div>
+    <div class="panel">
+      <div class="field">
+        <label for="offlineKey">Product key</label>
+        <input id="offlineKey" type="text" placeholder="NS-XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" spellcheck="false" autocapitalize="characters"/>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost" id="requestCodeBtn" data-action="save">Get request code</button>
+        <span id="requestCodeStatus" class="status" role="status"></span>
+      </div>
+      <div class="field" id="requestCodeField" hidden>
+        <label for="requestCode">Request code</label>
+        <textarea id="requestCode" rows="3" readonly spellcheck="false" aria-describedby="requestCodeSteps"></textarea>
+        <ol class="hint steps" id="requestCodeSteps">
+          <li>Send this code to Cyber-Pillar (reply to your order, or from any connected machine).</li>
+          <li>You receive a <code>.lic</code> file issued to this install.</li>
+          <li>Load the file below, under <b>Load a license file</b>.</li>
+        </ol>
+      </div>
+      <div class="actions" id="requestCodeActions" hidden>
+        <button class="btn btn-ghost" id="copyCodeBtn">Copy</button>
+        <span id="copyCodeStatus" class="status" role="status"></span>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:28px;">Load a license file</div>
+    <div class="section-desc">
+      The <code>.lic</code> from offline activation, or any license you were sent. Checked on this server, offline:
+      nothing is sent anywhere, and a bad paste never replaces the saved license.
+    </div>
+    <div class="panel">
+      <div class="field">
+        <label for="licenseText">License</label>
+        <textarea id="licenseText" rows="4" placeholder="paste the license here" autocomplete="off" spellcheck="false"></textarea>
+        <div class="hint">One line of text, usually delivered as a <code>.lic</code> file.</div>
+      </div>
+      <div class="field">
+        <label for="licenseFile">From a file</label>
+        <input id="licenseFile" type="file" accept=".lic,.txt"/>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="saveLicenseBtn">Save license</button>
+        <button class="btn btn-danger" id="removeLicenseBtn">Remove</button>
+        <span id="licenseStatus" class="status" role="status"></span>
+      </div>
+    </div>
+  </div>
 </div>
 
 </div><!-- /shell-main -->
@@ -1230,7 +1326,12 @@
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
       const d = j.detail;
-      throw new Error(typeof d === 'string' ? d : d ? JSON.stringify(d) : `HTTP ${r.status}`);
+      // A {message, code} detail (license activation) keeps its code on the error, so the
+      // caller can offer the next step; any other object is shown as is.
+      const e = new Error(typeof d === 'string' ? d : d && d.message ? d.message : d ? JSON.stringify(d) : `HTTP ${r.status}`);
+      e.status = r.status;
+      e.code = d && typeof d === 'object' ? d.code || '' : '';
+      throw e;
     }
     return j;
   }
@@ -1329,6 +1430,7 @@
       else if (pane === 'rag') refreshRagStatus();  // status only; the form keeps its edits
       if (pane === 'users') loadUsers();            // read-only table; the create form is untouched
       if (pane === 'usage') loadUsage();            // read-only telemetry
+      if (pane === 'license') loadLicense();        // read-only panel; the paste box is untouched
   }
   document.querySelectorAll('.tab').forEach(t => { t.onclick = () => openTab(t); });
   // Arrow keys, Home and End move between tabs: the ARIA tabs pattern the markup promises.
@@ -1359,9 +1461,19 @@
   }).catch(() => {});
 
   // ─── Users ───────────────────────────────────────────────────
+  // Seats in use, by the create form. The server enforces the limit (402), so a failure here is silent.
+  async function loadSeats(){
+    try {
+      const j = await api('/api/license');
+      document.getElementById('seatsHint').textContent =
+        `${j.seats_used} of ${j.seats} seats in use · ${j.edition === 'pro' ? 'Pro' : 'Community'}`;
+    } catch {}
+  }
+
   async function loadUsers(){
     const el = document.getElementById('users');
     const st = document.getElementById('usersStatus');
+    loadSeats();
     try {
       const j = await api('/admin/users');
       const rows = (j.users || []).map(u => {
@@ -2200,11 +2312,19 @@
     _showSiemFields();
   }));
 
-  // The SIEM part of GET /api/admin/settings: the effective connected list and each SIEM's fields.
+  // Shown when more SIEMs are set up than queried: Community, with a second SIEM connected.
+  function _siemNote(st) {
+    document.getElementById('siemCommunityNote').hidden =
+      !((st.configured_siems || []).length > (st.connected_siems || []).length);
+  }
+
+  // The SIEM part of GET /api/admin/settings: every SIEM set up (Community queries only the
+  // first, but a save must keep the rest) and each SIEM's fields.
   function _applySiem(st) {
     const s = st.settings || st;
-    _siemOrder = (st.connected_siems || []).filter(p => _siemFields[p]);
+    _siemOrder = (st.configured_siems || st.connected_siems || []).filter(p => _siemFields[p]);
     _showSiemFields();
+    _siemNote(st);
     // Populate fields — secrets come back as {present, suffix} stubs (not strings)
     document.querySelectorAll('[data-siem-field]').forEach(el => {
       const key = el.dataset.siemField;
@@ -2496,6 +2616,169 @@
       setStatus(st, `Saved. ${d.rescored} existing alert${d.rescored === 1 ? '' : 's'} re-scored.`, 'ok');
     } catch(e) {
       setStatus(st, 'Could not save: ' + e.message, 'err');
+    }
+  };
+
+  // ─── License ─────────────────────────────────────────────────
+  const LICENSE_FEATURES = { multi_siem: 'Multi-SIEM', agents: 'Agents', metrics: 'SOC-lead metrics', reports: 'Report export' };
+  const fmtDay = v => v ? new Date(v).toLocaleDateString() : '—';
+
+  function renderLicense(j) {
+    const pro = j.edition === 'pro';
+    const [color, label, note] = {
+      valid:   ['green',  'valid'],
+      grace:   ['yellow', 'grace',   `expired ${fmtDay(j.expires)}, works until ${fmtDay(j.grace_ends)}`],
+      expired: ['red',    'expired', 'now running as Community'],
+      invalid: ['red',    'invalid', 'the saved license does not verify'],
+      clock:   ['red',    'clock',   j.clock_message || 'the system clock is behind; fix the clock'],
+      moved:   ['red',    'moved',   j.moved_message || 'this license is bound to another machine; activate again here with the product key'],
+      none:    ['gray',   'no license'],
+    }[j.state] || ['gray', j.state];
+    const features = Object.entries(LICENSE_FEATURES).map(([f, name]) => `
+        <div class="k">${name}</div>
+        <div class="v">${(j.features || []).includes(f) ? '<span class="pill green">on</span>' : '<span class="pill gray">off</span>'}</div>`).join('');
+    // Pro features licensed, but their code (app/pro/) is not in this build
+    const needsPro = !j.pro_installed && (j.licensed_features || []).some(f => f !== 'multi_siem');
+    const hasLic = !!j.license_id;
+    const checkin = !hasLic ? '—' : j.offline ? 'not needed: offline license' : j.checked_at ? fmtAbsTime(j.checked_at) : 'never: the license server was not reached yet';
+    // This machine's fingerprint (the first 12 of 64 hex), and whether the license is tied to one
+    const machine = !j.machine ? '<span class="pill gray">not bound</span>no hardware ID found; set NULLSHIFT_MACHINE_ID to bind this install'
+      : esc(j.machine) + (hasLic && !j.bound ? '<span class="pill gray">license not bound</span>' : '');
+    document.getElementById('licenseBody').innerHTML = `
+      <div class="kv-grid">
+        <div class="k">Edition</div>
+        <div class="v"><span class="pill ${pro ? 'green' : 'gray'}">${pro ? 'Pro' : 'Community'}</span></div>
+        <div class="k">Status</div>
+        <div class="v"><span class="pill ${color}">${esc(label)}</span>${esc(note || '')}</div>
+        <div class="k">Customer</div><div class="v">${esc(j.customer) || '—'}</div>
+        <div class="k">License ID</div><div class="v">${esc(j.license_id) || '—'}</div>
+        <div class="k">Type</div>
+        <div class="v">${esc(j.type) || (hasLic ? 'paid' : '—')}${j.offline ? '<span class="pill gray">offline</span>' : ''}</div>
+        <div class="k">Expires</div><div class="v">${esc(fmtDay(j.expires))}</div>
+        <div class="k">Last check-in</div><div class="v">${esc(checkin)}</div>
+        <div class="k">Install ID</div><div class="v" style="overflow-wrap:anywhere;">${esc(j.install_id) || '—'}</div>
+        <div class="k">Machine</div><div class="v" style="flex-wrap:wrap;">${machine}</div>
+        <div class="k">Seats</div><div class="v">${esc(j.seats_used)} of ${esc(j.seats)} in use</div>
+        ${features}
+      </div>
+      ${needsPro ? '<div class="hint-box">This build doesn’t include the Pro code: agents, SOC-lead metrics and report export need the Pro build.</div>' : ''}`;
+    document.getElementById('removeLicenseBtn').disabled = j.state === 'none';
+  }
+
+  async function loadLicense() {
+    try {
+      renderLicense(await api('/api/license'));
+    } catch(e) {
+      document.getElementById('licenseBody').innerHTML = `<div class="hint-box" style="border-color:var(--red);color:var(--red);">Error: ${esc(e.message)}</div>`;
+    }
+  }
+
+  // After a save or remove: the panel and, if Connectors has loaded, its Community note
+  function _licenseChanged(j) {
+    renderLicense(j);
+    if (_loaded.has('connectors')) api('/api/admin/settings').then(_siemNote).catch(() => {});
+  }
+
+  // Online: the product key goes to the license server, a license for this install comes back.
+  // A key on its maximum installs answers 409 activation_limit: the Move button then re-sends
+  // with transfer: true, which moves the key here and revokes the other install.
+  async function activate(transfer) {
+    const st = document.getElementById('activateStatus'), input = document.getElementById('productKey');
+    const moveBtn = document.getElementById('transferBtn');
+    const key = input.value.trim();
+    if (!key) { setStatus(st, 'Enter the product key first', 'warn'); return; }
+    moveBtn.hidden = true;
+    setStatus(st, transfer ? 'Moving the license here…' : 'Activating…');
+    try {
+      const j = await api('/api/admin/license/activate', send('POST', { key, transfer }));
+      _licenseChanged(j);
+      input.value = '';
+      // the outcome by the saved license's state: an activation can succeed and still leave Pro off
+      const verb = transfer ? 'Moved to this install' : 'Activated';
+      if (j.state === 'valid') setStatus(st, verb + ' ✓', 'ok');
+      else if (j.state === 'grace') setStatus(st, `${verb} ✓ — this license expired ${fmtDay(j.expires)} and works until ${fmtDay(j.grace_ends)}: renew it`, 'warn');
+      else if (j.state === 'moved') setStatus(st, verb + ', but Pro is still off: the license is bound to another machine. ' + (j.moved_message || ''), 'err');
+      else if (j.state === 'expired') setStatus(st, `${verb}, but Pro is still off: this license expired ${fmtDay(j.expires)} and its grace period is over. Renew it with Cyber-Pillar`, 'err');
+      else if (j.state === 'clock') setStatus(st, verb + ', but Pro is still off: ' + (j.clock_message || 'the system clock is behind; fix the clock') + '. The license server’s time is ahead of this machine’s clock', 'err');
+      else setStatus(st, verb + ', but Pro is still off (' + j.state + ')', 'err');
+    } catch(e) {
+      setStatus(st, 'Error: ' + e.message, 'err');
+      // the key stays in the box for the move; never offered for transfer_unavailable (only offline installs hold the key)
+      if (e.code === 'activation_limit') moveBtn.hidden = false;
+    }
+  }
+  document.getElementById('activateBtn').onclick = () => activate(false);
+  document.getElementById('transferBtn').onclick = async () => {
+    if (!await ask({ title: 'Move the license to this install?', danger: true, yes: 'Move license',
+        body: 'The other install loses Pro at its next check-in and drops to Community. A license can be moved at most 3 times in 30 days.' })) return;
+    activate(true);
+  };
+  document.getElementById('productKey').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('activateBtn').click(); }
+  });
+  document.getElementById('productKey').addEventListener('input', () => { document.getElementById('transferBtn').hidden = true; });
+
+  // Offline: a request code the customer sends to Cyber-Pillar; the .lic comes back by hand
+  document.getElementById('requestCodeBtn').onclick = async () => {
+    const st = document.getElementById('requestCodeStatus'), key = document.getElementById('offlineKey').value.trim();
+    if (!key) { setStatus(st, 'Enter the product key first', 'warn'); return; }
+    try {
+      const { code } = await api('/api/admin/license/request-code', send('POST', { key }));
+      document.getElementById('requestCode').value = code;
+      document.getElementById('requestCodeField').hidden = false;
+      document.getElementById('requestCodeActions').hidden = false;
+      setStatus(document.getElementById('copyCodeStatus'), '');
+      setStatus(st, 'Code ready: copy it below', 'ok');
+    } catch(e) {
+      setStatus(st, 'Error: ' + e.message, 'err');
+    }
+  };
+  document.getElementById('offlineKey').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('requestCodeBtn').click(); }
+  });
+  document.getElementById('copyCodeBtn').onclick = async () => {
+    const ta = document.getElementById('requestCode'), st = document.getElementById('copyCodeStatus');
+    try {
+      await navigator.clipboard.writeText(ta.value);
+      setStatus(st, 'Copied ✓', 'ok');
+    } catch(e) {  // no clipboard over plain http: leave it selected for Ctrl+C
+      ta.focus(); ta.select();
+      setStatus(st, 'Selected: press Ctrl+C / ⌘C to copy', 'warn');
+    }
+  };
+
+  document.getElementById('licenseFile').onchange = async e => {
+    const f = e.target.files[0];
+    if (f) document.getElementById('licenseText').value = (await f.text()).trim();
+  };
+
+  document.getElementById('saveLicenseBtn').onclick = async () => {
+    const st = document.getElementById('licenseStatus'), ta = document.getElementById('licenseText');
+    const license = ta.value.trim();
+    if (!license) { setStatus(st, 'Paste a license first', 'warn'); return; }
+    setStatus(st, 'Checking…');
+    try {
+      const j = await api('/api/admin/license', send('PUT', { license }));
+      _licenseChanged(j);
+      ta.value = '';
+      document.getElementById('licenseFile').value = '';
+      if (j.state === 'expired') setStatus(st, 'Saved, but this license has expired', 'warn');
+      else setStatus(st, 'License installed ✓', 'ok');
+    } catch(e) {
+      setStatus(st, 'Error: ' + e.message, 'err');
+    }
+  };
+
+  document.getElementById('removeLicenseBtn').onclick = async () => {
+    const st = document.getElementById('licenseStatus');
+    if (!await ask({ title: 'Remove the license?', danger: true, yes: 'Remove license',
+        body: 'This install drops to Community: one SIEM queried, 3 active users, and no agents, SOC-lead metrics or report export.' })) return;
+    setStatus(st, 'Removing…');
+    try {
+      _licenseChanged(await api('/api/admin/license', send('PUT', { license: '' })));
+      setStatus(st, 'License removed ✓', 'ok');
+    } catch(e) {
+      setStatus(st, 'Error: ' + e.message, 'err');
     }
   };
 

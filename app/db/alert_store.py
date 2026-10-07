@@ -270,7 +270,8 @@ class AlertStore:
     def stats(self, hours: int, buckets: int = 24) -> Dict[str, Any]:
         """Dashboard aggregates for alerts received in the last `hours`, plus the
         all-time backlog (new / investigating) that the inbox badge counts and the
-        arrival time of its oldest unacknowledged alert."""
+        arrival time of its oldest unacknowledged alert. The SOC-lead metrics (time to
+        acknowledge and resolve, agent share, rules to tune) are Pro: app/pro/metrics.py."""
         # ponytail: recomputed on every call and the UI polls each second; fine at
         # thousands of rows, pre-aggregate per hour if the inbox reaches millions
         since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
@@ -299,40 +300,10 @@ class AlertStore:
                 "recent": [dict(r) for r in q(
                     f"SELECT id, source, title, severity, status, created_at {win} "
                     f"ORDER BY created_at DESC LIMIT 8", since)],
-                "ack_s": q(f"SELECT AVG((julianday(acked_at) - julianday(created_at)) * 86400) {win} "
-                           f"AND acked_at IS NOT NULL", since)[0][0],
-                "resolve_s": self._resolve_s(since),
-                # Alerts taken off the queue in this window, and how many an agent took.
-                "handled": dict(zip(("total", "agents"), q(
-                    f"SELECT COUNT(*), COUNT(*) - COUNT(acked_by) {win} AND acked_at IS NOT NULL", since)[0])),
-                "noisy_rules": self._noisy_rules(since),
                 "backlog": {s: n for s, n in q(
                     "SELECT status, COUNT(*) FROM ingested_alerts WHERE status != 'dismissed' GROUP BY status")},
                 "oldest_new": q("SELECT MIN(created_at) FROM ingested_alerts WHERE status = 'new'")[0][0],
             }
-
-    def _resolve_s(self, since: str) -> Optional[float]:
-        """Mean arrival -> resolution for alerts received since `since`: a dismissal, or
-        for an escalated alert its case closing. Caller holds the lock."""
-        sql = ("SELECT AVG((julianday(done) - julianday(created_at)) * 86400) FROM ("
-               " SELECT created_at, CASE WHEN status = 'dismissed' THEN updated_at ELSE {closed} END AS done"
-               " FROM ingested_alerts WHERE created_at >= ?) WHERE done IS NOT NULL")
-        try:
-            return self.conn.execute(sql.format(
-                closed="(SELECT closed_at FROM incidents WHERE id = ingested_alerts.incident_id)"), (since,)).fetchone()[0]
-        except sqlite3.OperationalError:  # no incidents table yet: dismissals only
-            return self.conn.execute(sql.format(closed="NULL"), (since,)).fetchone()[0]
-
-    def _noisy_rules(self, since: str, min_decided: int = 3) -> List[Dict[str, Any]]:
-        """Rules with the most false positives since `since`, out of the alerts worked
-        (dismissed or under investigation); `tune` marks the ones mostly wrong. An alert still
-        being investigated counts as not false, so the rate errs low. Caller holds the lock."""
-        rows = self.conn.execute(
-            "SELECT title AS name, SUM(resolution = 'false_positive') AS fp,"
-            " SUM(status != 'new') AS decided, COUNT(*) AS n"
-            " FROM ingested_alerts WHERE created_at >= ? GROUP BY title"
-            " HAVING fp > 0 AND decided >= ? ORDER BY fp DESC, n DESC LIMIT 6", (since, min_decided)).fetchall()
-        return [{**dict(r), "rate": r["fp"] / r["decided"], "tune": r["fp"] / r["decided"] >= 0.8} for r in rows]
 
     def rescore(self, cfg: Optional[Dict[str, Any]] = None) -> int:
         """Re-read every alert's severity (the severity settings changed, or the app started

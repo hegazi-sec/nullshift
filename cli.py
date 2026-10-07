@@ -10,6 +10,10 @@ Usage:
     nullshift setup     Run the configuration wizard
     nullshift update    Pull latest from GitHub, refresh dependencies, restart
     nullshift passwd    Set a user's password (nullshift passwd [username], default admin)
+    nullshift activate  Activate NullShift Pro with a product key (nullshift activate <KEY>)
+    nullshift license   Show the license, or install a .lic file (nullshift license <file>);
+                        nullshift license request-code <KEY> prints the offline activation code;
+                        nullshift license reset-clock sets the rollback clock to now (logged)
 """
 from __future__ import annotations
 import os
@@ -340,6 +344,125 @@ def cmd_passwd() -> None:
     print(f'{_green("✓")} Password updated for {username}. Sessions already signed in stay valid until they expire.')
 
 
+def _print_license(s=None) -> None:
+    from app import licensing
+    s = s or licensing.status()
+    state = {'none': 'no license', 'invalid': 'saved license does not verify',
+             'clock': 'clock rollback: ' + licensing.CLOCK_MESSAGE,
+             'moved': 'moved: ' + licensing.MOVED_MESSAGE}.get(s['state'], s['state'])
+    print(f'  Edition   {_bold(s["edition"].title())} {_muted("(" + state + ")")}')
+    if s['customer']:
+        print(f'  Customer  {s["customer"]}')
+        kind = (s['type'] or 'paid') + (' · offline (activated with a request code)' if s['offline'] else '')
+        print(f'  Type      {kind}')
+        grace = _muted('(works until ' + s['grace_ends'][:10] + ')')
+        print(f'  Expires   {s["expires"][:10]} {grace}')
+        if s['offline']:
+            checkin = _muted('not needed for an offline license')
+        elif s['checked_at']:
+            checkin = s['checked_at'][:16].replace('T', ' ') + ' UTC'
+        else:
+            checkin = _muted('never (the server was not reached yet)')
+        print(f'  Check-in  {checkin}')
+    print(f'  Install   {s["install_id"]}')
+    if s['machine']:
+        note = '' if s['bound'] or not s['customer'] else _muted(' (the license is not bound to a machine)')
+        print(f'  Machine   {s["machine"]}{note}')
+    else:
+        print(f'  Machine   {_muted("not bound (no hardware ID found: set NULLSHIFT_MACHINE_ID)")}')
+    print(f'  Seats     {s["seats_used"]} of {s["seats"]} in use')
+    print(f'  Features  {", ".join(s["features"]) or _muted("Community")}')
+
+
+def cmd_activate() -> None:
+    """nullshift activate <KEY> [--transfer] — exchange a product key for a license at the
+    license server (NULLSHIFT_LICENSE_SERVER, default https://nullshift.cyber-pillar.com),
+    then show the edition. --transfer moves a key already on its maximum installs here: the
+    other install loses Pro at its next check-in (at most 3 moves per 30 days). Takes effect
+    at once, running server included (it reads config.db live)."""
+    sys.path.insert(0, str(BASE))
+    os.chdir(BASE)
+    from app import licensing
+
+    args = sys.argv[2:]
+    transfer = '--transfer' in args
+    keys = [a for a in args if not a.startswith('--')]
+    unknown = [a for a in args if a.startswith('--') and a != '--transfer']
+    if len(keys) != 1 or unknown:
+        print(_red('✗ Usage: nullshift activate NS-XXXXX-XXXXX-XXXXX-XXXXX [--transfer]'))
+        sys.exit(1)
+    try:
+        lic = licensing.activate(keys[0], transfer=transfer)
+    except licensing.ActivationError as e:
+        print(_red(f'✗ {e}'))
+        if e.status == 502:
+            print(_muted('  Air-gapped? nullshift license request-code <KEY>, send the code to Cyber-Pillar, '
+                         'then nullshift license <file.lic>'))
+        elif e.code == 'activation_limit':
+            print(_muted('  Moving from another server? nullshift activate <KEY> --transfer moves the license here; '
+                         'the other install loses Pro at its next check-in (at most 3 moves per 30 days).'))
+        sys.exit(1)
+    # the outcome by the saved license's state: an activation can succeed and still leave Pro off
+    s = licensing.status()
+    verb = 'Moved to this install' if transfer else 'Activated'
+    if s['state'] in ('valid', 'grace'):
+        print(f'{_green("✓")} {verb} for {lic["customer"]}')
+        if s['state'] == 'grace':
+            print(_muted(f'  This license expired on {s["expires"][:10]} and is in its grace period until '
+                         f'{s["grace_ends"][:10]}: renew it with Cyber-Pillar.'))
+    else:
+        why = {'moved': 'it is bound to another machine. ' + licensing.MOVED_MESSAGE,
+               'expired': 'it expired on ' + s['expires'][:10] + ' and its grace period is over. Renew it with Cyber-Pillar.',
+               'clock': licensing.CLOCK_MESSAGE + '. The license server\'s time is ahead of this machine\'s clock.'
+               }.get(s['state'], s['state'])
+        print(_red(f'✗ {verb} for {lic["customer"]}, but Pro is still off: {why}'))
+    _print_license(s)
+
+
+def cmd_license() -> None:
+    """nullshift license [file] — install a NullShift Pro license from a file, then show the
+    edition. Takes effect at once, running server included (it reads config.db live).
+    nullshift license request-code <KEY> — the offline activation code for air-gapped installs.
+    nullshift license reset-clock — set the rollback clock to now: for an install whose clock
+    was set ahead by mistake and corrected, and which no license server can put right
+    (an offline license). Shell access on the server is the trust; it is logged."""
+    sys.path.insert(0, str(BASE))
+    os.chdir(BASE)
+    from app import licensing
+
+    if len(sys.argv) > 2 and sys.argv[2] == 'reset-clock':
+        if len(sys.argv) > 3:
+            print(_red('✗ Usage: nullshift license reset-clock'))
+            sys.exit(1)
+        old, new = licensing.reset_clock()
+        print(f'{_green("✓")} License clock reset: {old or "unset"} → {new}')
+        _print_license()
+        return
+    if len(sys.argv) > 2 and sys.argv[2] == 'request-code':
+        if len(sys.argv) < 4:
+            print(_red('✗ Usage: nullshift license request-code NS-XXXXX-XXXXX-XXXXX-XXXXX'))
+            sys.exit(1)
+        try:
+            code = licensing.request_code(sys.argv[3])
+        except ValueError as e:
+            print(_red(f'✗ {e}'))
+            sys.exit(1)
+        print(code)  # alone on stdout, so it can be redirected to a file
+        print(_muted('Send this code to Cyber-Pillar. They answer with a .lic file: nullshift license <file.lic>'),
+              file=sys.stderr)
+        return
+    if len(sys.argv) > 2:
+        try:
+            blob = Path(sys.argv[2]).read_text().strip()
+            licensing.verify(blob)
+        except (OSError, ValueError) as e:
+            print(_red(f'✗ {e}'))
+            sys.exit(1)
+        licensing.save(blob)
+        print(f'{_green("✓")} License installed')
+    _print_license()
+
+
 COMMANDS = {
     'start':   cmd_start,
     'stop':    cmd_stop,
@@ -349,6 +472,8 @@ COMMANDS = {
     'setup':   cmd_setup,
     'update':  cmd_update,
     'passwd':  cmd_passwd,
+    'activate': cmd_activate,
+    'license': cmd_license,
 }
 
 
@@ -365,6 +490,10 @@ def main() -> None:
         print(f'    {_cyan("setup")}   Run the configuration wizard')
         print(f'    {_cyan("update")}  Pull latest from GitHub, refresh dependencies, restart')
         print(f'    {_cyan("passwd")}  Set a user\'s password  (nullshift passwd [username], default admin)')
+        print(f'    {_cyan("activate")} Activate NullShift Pro with a product key  (nullshift activate <KEY> [--transfer])')
+        print(f'    {_cyan("license")} Show the license, or install a .lic file  (nullshift license <file>)')
+        print(f'             Offline activation code: nullshift license request-code <KEY>')
+        print(f'             Clock reported as rolled back after a correction: nullshift license reset-clock')
         print()
         sys.exit(0 if len(sys.argv) < 2 else 1)
 

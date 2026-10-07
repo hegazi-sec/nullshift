@@ -126,13 +126,13 @@ def siem_of(payload: Dict[str, Any], hint: Any = None, configured: Any = None) -
 
 def load() -> Dict[str, Any]:
     """The admin's customisations ({thresholds, words, rules}) and the connected SIEMs."""
-    from app.connectors import connected_siems
+    from app.connectors import configured_siems
     from app.db.settings_store import settings_store
     try:
         custom = json.loads(settings_store.get("alert_severity") or "{}")
     except ValueError:
         custom = {}
-    siems = connected_siems()
+    siems = configured_siems()
     # an alert whose shape names no SIEM is read on the primary (first) SIEM's scale
     return {**(custom if isinstance(custom, dict) else {}), "configured": siems[0] if siems else None, "connected": siems}
 

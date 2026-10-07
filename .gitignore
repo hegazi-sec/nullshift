@@ -45,3 +45,7 @@ cookies.txt
 # OS
 .DS_Store
 Thumbs.db
+
+# NullShift Pro (proprietary, licensed installs only)
+app/pro/
+scripts/license_issue.py

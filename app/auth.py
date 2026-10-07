@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 
+from app import licensing
 from app.db import user_store
 from app.config import settings
 
@@ -344,6 +345,7 @@ async def admin_create_user(request: Request, payload: Dict[str, Any], _: Dict[s
         raise HTTPException(status_code=400, detail=f"password must be at least {MIN_PASSWORD_LEN} characters")
     if user_store.get_user_by_username(username):
         raise HTTPException(status_code=409, detail="username already exists")
+    licensing.check_seat()
     uid = user_store.create_user(username, get_password_hash(password), role)
     return {"id": uid, "username": username, "role": role}
 
@@ -366,8 +368,11 @@ async def admin_disable_user(user_id: int, request: Request, current: Dict[str, 
 @router.patch("/admin/users/{user_id}/enable")
 async def admin_enable_user(user_id: int, request: Request, _: Dict[str, Any] = Depends(require_admin)):
     _validate_csrf(request, request.headers.get('X-CSRF-Token'))
-    if not user_store.get_user_by_id(user_id):
+    target = user_store.get_user_by_id(user_id)
+    if not target:
         raise HTTPException(status_code=404, detail="user not found")
+    if not target["is_active"]:
+        licensing.check_seat()
     _set_user_active(user_id, True)
     return {"status": "enabled", "id": user_id}
 

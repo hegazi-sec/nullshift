@@ -1360,6 +1360,9 @@
     .tag-medium, .tag-inconclusive { color: var(--yellow); }
     .tag-high, .tag-suspicious { color: var(--orange); }
     .tag-critical, .tag-malicious { color: var(--red); }
+    .tag-pro { color: var(--accent); }  /* the one Pro lock: wherever a Pro feature's place is on a Community install */
+    .rail-link .tag-pro { position: absolute; top: 3px; right: 4px; }
+    .btn-case[aria-disabled="true"] { opacity: .6; cursor: default; }
     .run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); flex-shrink: 0; animation: pulse-dot 1s ease-in-out infinite; }
     .unread-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
     @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
@@ -1480,6 +1483,7 @@
   <a class="rail-link wide-only" href="#/agents" data-nav="agents">
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="4" y="6" width="12" height="10" rx="2"/><path d="M10 3v3M7.5 11h.01M12.5 11h.01M8 14h4"/></svg>
     <span>Agents</span>
+    <span class="tag tag-pro" hidden>Pro</span>
   </a>
   <div class="rail-spacer"></div>
   <button type="button" class="rail-link" id="acctBtn" popovertarget="acctMenu" aria-label="Account, settings and log out">
@@ -1491,7 +1495,7 @@
 </nav>
 <div class="pop-menu acct-menu" id="acctMenu" popover>
   <div class="acct-who"><b id="acctName">Signed in</b><span id="acctRole"></span></div>
-  <a class="narrow-only" href="#/agents">Agents</a>
+  <a class="narrow-only" href="#/agents">Agents <span class="tag tag-pro" hidden>Pro</span></a>
   <a id="adminLink" href="/admin" hidden>Settings</a>
   <button type="button" id="keysBtn">Keyboard shortcuts <kbd>?</kbd></button>
   <button type="button" id="notifyBtn" aria-pressed="false">Notifications: off</button>
@@ -1783,6 +1787,18 @@ const api = {
   testAlert: () => apiJSON('/api/alerts/test', { method: 'POST' }),
   agents: () => apiJSON('/api/agents'),
   scorecard: days => apiJSON(`/api/agents/scorecard?days=${days}`),
+}
+
+// ─── Edition ─────────────────────────────────────────────────────
+// What NullShift Pro turns on here (GET /api/license, once at boot). Until it answers, and
+// when it fails, the install reads as Community: the views lock instead of calling routes that 402.
+let license = { features: [], state: 'none' }
+const pro = f => license.features.includes(f)
+const PRO_TAG = '<span class="tag tag-pro">Pro</span>'
+
+async function loadLicense() {
+  try { license = await apiJSON('/api/license') } catch {}
+  document.querySelectorAll('a[href="#/agents"] .tag-pro').forEach(t => { t.hidden = pro('agents') })
 }
 
 // ─── Toast + screen-reader announcements ─────────────────────────
@@ -3446,12 +3462,13 @@ async function loadOnboarding() {
   if (conn.role !== 'admin' || welcomeEl.hidden) { onboardEl.hidden = true; return }
   let d, prefs
   try { [d, { prefs }] = await Promise.all([api.onboarding(), api.prefs()]) } catch { return }
-  const done = ONBOARD_STEPS.filter(([k]) => d[k]).length
-  onboardEl.hidden = !!prefs.ui_onboarding_dismissed || done === ONBOARD_STEPS.length
+  const steps = ONBOARD_STEPS.filter(([k]) => d[k] !== null)  // null: no agents here (Community), so no Triage step
+  const done = steps.filter(([k]) => d[k]).length
+  onboardEl.hidden = !!prefs.ui_onboarding_dismissed || done === steps.length
   if (onboardEl.hidden) return
-  $('onboardTitle').textContent = `Get NullShift running · ${done} of ${ONBOARD_STEPS.length} done`
+  $('onboardTitle').textContent = `Get NullShift running · ${done} of ${steps.length} done`
   withFocus(onboardEl, () => {
-    $('onboardSteps').innerHTML = ONBOARD_STEPS.map(([k, title, how, action]) => `
+    $('onboardSteps').innerHTML = steps.map(([k, title, how, action]) => `
       <li class="${d[k] ? 'done' : ''}">
         <span class="onboard-check" aria-hidden="true">${d[k] ? '✓' : ''}</span>
         <span class="onboard-text"><b>${title}</b><small>${how}</small></span>
@@ -4351,6 +4368,7 @@ async function enterCases(id, seq) {
     if (seq === navSeq && e.status !== 401) caseBody.innerHTML = `<div class="panel-error">Could not load this case: ${esc(e.message)}</div>`
     return
   }
+  await booted  // pro('reports') decides the export control
   if (seq !== navSeq) return
   renderCase(inc)
 }
@@ -4375,8 +4393,10 @@ function renderCase(inc) {
           <textarea class="fld" id="caseNotes" placeholder="Containment steps, escalation details, ticket refs…">${esc(inc.notes || '')}</textarea></div>
         <div class="case-actions field-actions">
           <span class="case-save-state" id="caseSaveState">Changes save automatically</span>
+          ${pro('reports') ? `
           <a class="btn-case" data-export href="/api/incidents/${enc(inc.id)}/report" target="_blank" rel="noopener">Export report (HTML)</a>
-          <a class="btn-case" data-export href="/api/incidents/${enc(inc.id)}/report?format=md" download>Export report (MD)</a>
+          <a class="btn-case" data-export href="/api/incidents/${enc(inc.id)}/report?format=md" download>Export report (MD)</a>`
+          : `<button type="button" class="btn-case" aria-disabled="true" title="Case reports are part of NullShift Pro. Add a license in Settings › License.">Export report · ${PRO_TAG}</button>`}
           <button type="button" class="btn-case danger" data-act="delete">Delete case</button>
         </div>
       </div>
@@ -4426,6 +4446,10 @@ caseBody.addEventListener('click', async e => {
   }
   const b = e.target.closest('button')
   if (!b || !id) return
+  if (b.getAttribute('aria-disabled') === 'true') {  // the locked export: say what unlocks it
+    notify(b.title, conn.role === 'admin' ? { label: 'Add a license', href: '/admin#license' } : null, { error: false })
+    return
+  }
   try {
     if (b.dataset.act === 'retry') {
       caseDirty = true
@@ -4538,15 +4562,16 @@ function dashItem(attr, id, tag, title, meta, badge) {
 const DASH_RENDER = {
   kpis: d => {
     const a = d.alerts, r = DASH_RANGES[d.hours], h = a.handled
+    const lock = h ? null : [PRO_TAG, null, 'NullShift Pro']  // no SOC-lead metrics: Community
     return `<div class="kpi-row">${[
       ['Unacknowledged', fmtCount(a.backlog.new || 0), 'alerts:new'],
       // the age ticks every second (see loadDashboard) without a re-render
       ['Oldest unacknowledged', a.oldest_new ? `<span data-age="${esc(a.oldest_new)}">${fmtAge(a.oldest_new)}</span>` : '—', 'alerts:new:oldest'],
       // windowed: alerts received in the selected range; the counts around them are the live queue
-      ['Time to acknowledge', fmtDur(a.ack_s), null, `mean · ${r}`],
-      ['Time to resolve', fmtDur(a.resolve_s), null, `mean · ${r} · to dismissal or case closed`],
-      ['Handled by agents', h.total ? `${Math.round(h.agents / h.total * 100)}%` : '—', null,
-       `${fmtCount(h.agents)} of ${fmtCount(h.total)} picked up · ${r}`],
+      ['Time to acknowledge', ...(lock || [fmtDur(a.ack_s), null, `mean · ${r}`])],
+      ['Time to resolve', ...(lock || [fmtDur(a.resolve_s), null, `mean · ${r} · to dismissal or case closed`])],
+      ['Handled by agents', ...(lock || [h.total ? `${Math.round(h.agents / h.total * 100)}%` : '—', null,
+       `${fmtCount(h.agents)} of ${fmtCount(h.total)} picked up · ${r}`])],
       ['Investigating', fmtCount(a.backlog.investigating || 0), 'alerts:investigating'],
       ['My open cases', fmtCount(d.cases_open), 'cases'],
     ].map(([l, v, go, sub]) => {
@@ -4574,7 +4599,7 @@ const DASH_RENDER = {
   },
   severity: d => dashBars(Object.keys(SEV_COLOR).map(s => ({ name: s, n: d.alerts.by_severity[s] || 0, color: SEV_COLOR[s] })), 'No alerts in this window', true, 'sev'),
   // False positives out of the alerts worked (dismissed or under investigation); 80% or more is flagged to tune.
-  noisy:    d => d.alerts.noisy_rules.map(r => `
+  noisy:    d => !d.alerts.noisy_rules ? `<div class="dash-empty">${PRO_TAG} Rule tuning is part of NullShift Pro.</div>` : d.alerts.noisy_rules.map(r => `
     <button type="button" class="hbar-row" data-q="${esc(r.name)}" title="Show these alerts">
       <span class="hbar-label">${r.tune ? '<span class="tag tag-high">tune</span> ' : ''}${esc(r.name)}</span>
       <span class="hbar-track">
@@ -4722,7 +4747,7 @@ dashEl.addEventListener('pointerout', () => { dashTip.style.display = 'none' })
 dashEl.addEventListener('focusout', () => { dashTip.style.display = 'none' })
 
 // ─── Agents ───────────────────────────────────────────────────────
-// Autonomous triage, investigator and reporter, plus approval-gated containment (app/agents.py).
+// Autonomous triage, investigator and reporter, plus approval-gated containment (app/pro/agents.py).
 const AGENT_INFO = {
   triage: ['Triage', 'Every minute: groups new alerts by rule and host and investigates each group, then dismisses confident false positives and opens a case for the rest (in shadow mode it only notes what it would do).', 'max_per_run', 'Groups per run'],
   investigator: ['Investigator', 'Every 2 minutes: L2 investigation of the cases triage opened. Closes confirmed false positives, flags the rest for a human, proposes isolation for malicious hosts.', 'max_per_run', 'Cases per run'],
@@ -4924,9 +4949,23 @@ async function loadAgents(force = false) {
   }
 }
 
+function renderAgentsLock() {  // Community, or a license that lapsed: a card in place of the agents
+  agentsEl.querySelector('#agentsLive').textContent = ''
+  agentsEl.querySelector('#agentsOwnerWrap').innerHTML = ''
+  agentsGrid.innerHTML = `
+    <section class="dash-card wide" aria-label="Agents, a NullShift Pro feature">
+      <header><h2>Agents ${PRO_TAG}</h2></header>
+      <p class="agent-desc">Autonomous agents are part of NullShift Pro.</p>
+      ${conn.role === 'admin' ? '<a class="btn-mini" href="/admin#license" style="text-decoration:none">Add a license</a>' : '<div class="agent-last">Ask an admin to add a license.</div>'}
+    </section>`
+}
+
 let agentsJump = false  // #/agents/proposals (a notification): scroll to the proposals once loaded
-function enterAgents(id) {
+async function enterAgents(id, seq) {
   setViewTitle('Agents')
+  await booted  // the edition and the role: the lock card or the live view
+  if (seq !== navSeq) return
+  if (!pro('agents')) { renderAgentsLock(); return }
   agentsJump = id === 'proposals'
   agentsSig = null
   loadAgents()
@@ -5287,8 +5326,15 @@ if (!location.hash || location.hash === '#') {
   history.replaceState(null, '', /^#\/[\w\-/%.~]*$/.test(back || '') ? back : '#/new')
 }
 try { sessionStorage.removeItem('ns.returnTo') } catch {}
+const booted = Promise.all([loadLicense(), ping()])  // the edition and the role: what the Pro locks show
 render()
-ping()
+booted.then(() => {  // Pro keeps working through the grace period: tell an admin once per tab session
+  if (conn.role !== 'admin' || license.state !== 'grace') return
+  try { if (sessionStorage.getItem('ns.graceNotice') === license.expires) return; sessionStorage.setItem('ns.graceNotice', license.expires) } catch {}
+  const day = t => new Date(t).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+  notify(`Your NullShift Pro license expired on ${day(license.expires)}. Pro features stop on ${day(license.grace_ends)}.`,
+         { label: 'Open License settings', href: '/admin#license' })
+})
 if (listSection !== 'chat') refreshList('chat')  // pending chats and titles are known from the start
 pollAttention()
 renderStatus()
@@ -5339,7 +5385,7 @@ every(1000, async () => {
     await pollAttention()
     if (route.view === 'dashboard') await loadDashboard()
     if (listShown && listSection === 'alerts') await refreshList('alerts')
-    if (route.view === 'agents' && _tick % 3 === 0) await loadAgents()
+    if (route.view === 'agents' && pro('agents') && _tick % 3 === 0) await loadAgents()
     if (_tick % 10 === 0) await refreshList('chat')  // new chats from agents, running investigations
     if (listShown && listSection === 'cases' && _tick % 15 === 0) await refreshList('cases')
   } finally {

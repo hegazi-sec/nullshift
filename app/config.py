@@ -100,6 +100,12 @@ class Settings(BaseSettings):
     JWT_SECRET: Optional[str] = None
     JWT_EXPIRE_MINUTES: int = 480
 
+    # NullShift Pro licensing (read by app/licensing.py through this class or the process
+    # environment). Declared so a .env that sets them loads: pydantic-settings refuses
+    # unknown keys. Neither is stored in config.db.
+    NULLSHIFT_MACHINE_ID: Optional[str] = None      # the raw hardware id to hash (Docker; any override)
+    NULLSHIFT_LICENSE_SERVER: Optional[str] = None  # overrides https://nullshift.cyber-pillar.com
+
     class Config:
         env_file = ".env"
 

@@ -9,15 +9,24 @@ __all__ = [
     "wazuh", "virustotal",
     "NormalizedAlert", "SIEMConnector",
     "SplunkConnector", "ElasticConnector", "SentinelConnector", "LimaCharlieConnector",
-    "get_siem_connector", "connected_siems", "siem_available", "SIEMS",
+    "get_siem_connector", "connected_siems", "configured_siems", "siem_available", "SIEMS",
 ]
 
 SIEMS = ("limacharlie", "wazuh", "splunk", "elastic", "sentinel")
 
 
 def connected_siems() -> list:
-    """The SIEMs this install queries, primary first: siem_providers (a comma list; "none"
-    means none), else the single siem_provider the setup wizard writes."""
+    """The SIEMs this install queries, primary first. Community queries only the primary;
+    querying several at once is licensed (multi_siem)."""
+    from app import licensing
+    siems = configured_siems()
+    return siems if licensing.has("multi_siem") else siems[:1]
+
+
+def configured_siems() -> list:
+    """Every SIEM set up, primary first, licensed or not: siem_providers (a comma list;
+    "none" means none), else the single siem_provider the setup wizard writes. Ingestion
+    reads alerts from all of them."""
     from app.config import settings
     raw = settings.SIEM_PROVIDERS or settings.SIEM_PROVIDER or ""
     out: list = []

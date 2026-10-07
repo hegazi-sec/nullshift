@@ -1,3 +1,7 @@
+# The verdict line an alert investigation asks for, from an analyst or an agent
+VERDICT_ASK = ("End with **Verdict:** (Likely Benign | Suspicious | Malicious | Inconclusive) "
+               "and **Confidence:** (Low | Medium | High).")
+
 SYSTEM_PROMPT = """
 # Identity
 You are an L1 SOC analyst working alongside the user. Your job has four stages:

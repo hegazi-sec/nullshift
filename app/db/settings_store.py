@@ -122,10 +122,22 @@ ALLOWED_KEYS = frozenset({
     "agents_config",
     # Alert severity per SIEM (JSON: thresholds, words, rule overrides; see app/alert_severity.py)
     "alert_severity",
+    # NullShift Pro license (signed, not secret; see app/licensing.py) and its bookkeeping:
+    # this install's id (licenses are issued to it), the latest time seen (clock rollback
+    # check) and the last license-server check-in. None of them is secret.
+    "license",
+    "install_id",
+    "license_clock",
+    "license_checked_at",
     # Setup / Auth
     "setup_complete",
     "jwt_secret",
 })
+
+# Written only by app/licensing.py (PUT /api/admin/license, activation, check-in, the
+# clock): the generic settings PUT refuses them, or a saved license, this install's
+# identity or the rollback clock could be rewritten by hand.
+LICENSE_KEYS = frozenset({"license", "install_id", "license_clock", "license_checked_at"})
 
 # Keys whose values must never be returned in full over the API. We surface
 # a `<set>` flag + last 4 chars so an admin can tell whether a key is

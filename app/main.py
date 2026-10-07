@@ -13,11 +13,12 @@ from app.llm import (
     get_last_call_info, get_last_rate_limit_info,
     _is_ollama_active, validate_and_retry_if_needed, tools_available,
 )
-from app.db.settings_store import settings_store, mask_for_api, ALLOWED_KEYS, SECRET_KEYS
+from app.db.settings_store import settings_store, mask_for_api, ALLOWED_KEYS, SECRET_KEYS, LICENSE_KEYS
 from app.execution.tool_runner import ToolRunner
 from app.execution.investigation_service import run_investigation
 from app.playbooks.runner import PlaybookRunner, SPARSE_THRESHOLD
-from app.prompts import SYSTEM_PROMPT
+from app.prompts import SYSTEM_PROMPT, VERDICT_ASK
+from app import licensing
 from app import rag as _rag_mod
 from app.auth import router as auth_router, get_current_user, require_admin, init_auth_startup, _validate_csrf, html_page
 from app.db.chat_store import store
@@ -28,10 +29,7 @@ from app.db.alert_store import alerts_inbox
 from app import alert_severity
 from app.db.agent_store import agent_store
 from app.alert_facts import alert_facts
-from app.scorecard import triage_scorecard
 from app.db import user_store
-from app import agents
-from app.reports import build_incident_report_md, build_incident_report_html
 from app.db.prefs_store import prefs as prefs_store
 from app.db.summary_store import summaries as summary_store
 from app.deployment_memory import write_memory_file, get_cached_memory
@@ -674,6 +672,9 @@ class _SameOriginWrites:
 # No /docs, /redoc or /openapi.json: they need no login and would hand out the route map.
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(auth_router)
+if licensing.PRO_INSTALLED:  # app/pro/ ships only to licensed installs; Community runs without it
+    from app.pro import install as _install_pro
+    _install_pro(app)
 app.add_middleware(_SameOriginWrites)
 
 # Serve static assets (logo, favicon) at /static/
@@ -1227,12 +1228,13 @@ def api_admin_get_settings(_: Dict[str, Any] = Depends(require_admin)):
     """Return current settings with API keys masked. The `env_defaults` block
     shows what would be used if the DB override is cleared, so the admin can
     tell whether an empty UI field means 'no key' or 'falling back to .env'."""
-    from app.connectors import connected_siems
+    from app.connectors import configured_siems, connected_siems
     raw = settings_store.get_all()
     return {
         "settings": mask_for_api(raw),
         "allowed_keys": sorted(ALLOWED_KEYS),
         "connected_siems": connected_siems(),  # effective, primary first (an unset list falls back to .env)
+        "configured_siems": configured_siems(),  # more than connected: Community queries the primary only
         "env_defaults": {
             "anthropic_api_key_set":   bool(settings.ANTHROPIC_API_KEY),
             "openai_api_key_set":      bool(settings.OPENAI_API_KEY),
@@ -1270,7 +1272,9 @@ def api_admin_put_settings(
     # Drop unknown keys silently rather than 400ing the whole request — UI
     # may post a few defaults we don't care about, and we don't want a typo
     # to wipe a real key. Whitelist is the safety net.
-    cleaned = {k: v for k, v in payload.items() if k in ALLOWED_KEYS}
+    # the license only through PUT /api/admin/license, which verifies it before it replaces
+    # one; its bookkeeping (install_id, the rollback clock, the last check-in) only by licensing.py
+    cleaned = {k: v for k, v in payload.items() if k in ALLOWED_KEYS and k not in LICENSE_KEYS}
     if not cleaned:
         raise HTTPException(status_code=400, detail="No recognized settings in payload")
     _check_routing_payload(cleaned)
@@ -1916,6 +1920,9 @@ def api_dashboard(hours: int = 24, current_user: Dict[str, Any] = Depends(get_cu
     this analyst's own, same scoping as their list endpoints."""
     hours = max(1, min(hours, 720))
     alerts = alerts_inbox.stats(hours)
+    if licensing.has("metrics"):  # absent in Community: the UI shows those tiles as Pro
+        from app.pro.metrics import soc_lead
+        alerts.update(soc_lead(alerts_inbox, alerts["since"]))
     open_cases = [
         {k: c.get(k) for k in ("id", "case_number", "title", "severity", "status")}
         for c in incident_store.list_for_user(current_user["id"]) if c.get("status") != "closed"
@@ -1992,6 +1999,86 @@ def api_admin_put_alert_severity(payload: Dict[str, Any], current_user: Dict[str
     return {**_severity_view(), "rescored": rescored}
 
 
+@app.on_event("startup")
+def _log_edition():
+    """One line at startup. Never raises: nothing stored in config.db may stop the app."""
+    try:
+        licensing.machine_id()  # computed once per process: its warnings (no id, a container) land in the startup log
+        lic = licensing.current()
+        log.info("Edition: %s", f"Pro license for {lic['customer']}, {lic['state']}, expires {str(lic['expires'])[:10]}"
+                 if lic else "Community (no license)")
+    except Exception:
+        log.exception("Edition could not be read at startup; continuing")
+
+
+@app.on_event("startup")
+def _start_license_checkin():
+    """Moves license_clock and checks the license in with the license server now and
+    every 24h, in a daemon thread. Failures are logged; nothing here can stop the app."""
+    try:
+        licensing.start_checkin_loop()
+    except Exception:
+        log.exception("License check-in loop did not start")
+
+
+@app.get('/api/license')
+def api_license(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """The edition, seats and features on: Settings › License, and the UI's Pro locks.
+    The install's identity (install_id, the machine fingerprint) is for admins only:
+    an analyst gets null for both."""
+    s = licensing.status()
+    if current_user.get("role") != "admin":
+        s["install_id"] = s["machine"] = None
+    return s
+
+
+@app.put('/api/admin/license')
+def api_admin_put_license(payload: Dict[str, Any], current_user: Dict[str, Any] = Depends(_require_admin_csrf)):
+    """Save a license (verified first, so a bad paste never replaces a good one; one issued
+    to another install is refused), or remove it with an empty value. An expired license
+    is saved and reported as expired."""
+    blob = str(payload.get("license") or "").strip()
+    if blob:
+        try:
+            lic = licensing.verify(blob)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        log.info("License %s (%s, %s) saved by %s", lic.get("id"), lic.get("customer"), lic["state"], current_user["username"])
+    else:
+        log.info("License removed by %s", current_user["username"])
+    licensing.save(blob or None, updated_by=current_user["id"])
+    return licensing.status()
+
+
+@app.post('/api/admin/license/activate')
+def api_admin_license_activate(payload: Dict[str, Any], current_user: Dict[str, Any] = Depends(_require_admin_csrf)):
+    """Exchange a product key for a license at the license server and save it. `transfer`
+    moves a key on its maximum installs here (the other install loses Pro at its next
+    check-in). Errors answer {"message", "code"}: after a 409 `activation_limit` the UI
+    offers the move. The key is never logged in full: the last 4 characters at most."""
+    key = str(payload.get("key") or "")
+    transfer = payload.get("transfer") is True
+    try:
+        lic = licensing.activate(key, updated_by=current_user["id"], transfer=transfer)
+    except licensing.ActivationError as e:
+        log.info("Activation with key …%s by %s%s failed: %s (%s)", licensing.last4(key), current_user["username"],
+                 " (transfer)" if transfer else "", e, e.code or e.status)
+        raise HTTPException(status_code=e.status, detail={"message": str(e), "code": e.code})
+    log.info("License %s (%s) %s with key …%s by %s", lic.get("id"), lic.get("customer"),
+             "moved to this install" if transfer else "activated", licensing.last4(key), current_user["username"])
+    return licensing.status()
+
+
+@app.post('/api/admin/license/request-code')
+def api_admin_license_request_code(payload: Dict[str, Any], current_user: Dict[str, Any] = Depends(_require_admin_csrf)):
+    """The offline activation request code for a product key (air-gapped installs):
+    sent to Cyber-Pillar, who answer with a .lic file for the paste box above."""
+    try:
+        return {"code": licensing.request_code(str(payload.get("key") or ""))}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.get('/api/onboarding')
 def api_onboarding(current_user: Dict[str, Any] = Depends(require_admin)):
     """The first-run checklist an empty console shows an admin: connect a SIEM (the
@@ -2000,8 +2087,16 @@ def api_onboarding(current_user: Dict[str, Any] = Depends(require_admin)):
         "siem": bool((settings_store.get("webhook_token") or "").strip()),
         "alert": alerts_inbox.count() > 0,
         "investigated": alerts_inbox.any_investigated(),
-        "triage": bool(agents.load_config()["triage"]["enabled"]),
+        "triage": _triage_on(),
     }
+
+
+def _triage_on() -> Optional[bool]:
+    """None without the agents (Community): the checklist then has no Triage step."""
+    if not licensing.has("agents"):
+        return None
+    from app.pro import agents
+    return bool(agents.load_config()["triage"]["enabled"])
 
 
 @app.post('/api/alerts/test')
@@ -2020,106 +2115,14 @@ def api_test_alert(current_user: Dict[str, Any] = Depends(require_admin)):
     return rec
 
 
-# ─── Autonomous agents (see app/agents.py) ───────────────────────────────────
-
-@app.on_event("startup")
-async def _startup_agents():
-    agents.start()
-
-
-@app.on_event("shutdown")
-async def _shutdown_agents():
-    agents.stop()
-
-
-@app.get('/api/agents')
-def api_agents(current_user: Dict[str, Any] = Depends(get_current_user)):
-    is_admin = current_user.get("role") == "admin"
-    cfg = agents.load_config()
-    return {
-        "config": cfg,
-        "active_now": agents._active(cfg),  # False: the UI says the agents are outside their active hours
-        "status": agents.status,
-        "running": [a for a in agents.AGENTS if agents._locks[a].locked()],
-        "log": agent_store.recent(60),
-        "proposals": agent_store.proposals(30),
-        "users": [u["username"] for u in user_store.list_users() if u["is_active"]] if is_admin else [],
-        "is_admin": is_admin,
-        "can_decide": current_user.get("role") in ("admin", "l2"),
-        "me": current_user["username"],
-        "me_id": current_user["id"],  # agent log rows carry owner_id; the UI links only its own chats
-    }
-
-
-@app.get('/api/agents/scorecard')
-def api_agents_scorecard(days: int = 7, current_user: Dict[str, Any] = Depends(get_current_user)):
-    """How the triage agent's shadow decisions compare with what analysts then did
-    with the same alerts, per severity, with a recommended auto-dismiss limit."""
-    return triage_scorecard(max(1, min(days, 90)))
-
-
-@app.put('/api/agents/config')
-def api_agents_config(payload: Dict[str, Any], current_user: Dict[str, Any] = Depends(require_admin)):
-    owner = payload.get("owner")
-    if owner and not user_store.get_user_by_username(str(owner)):
-        raise HTTPException(status_code=400, detail=f"No user named {owner!r}")
-    try:
-        cfg = agents.save_config(payload)
-    except (TypeError, ValueError) as e:
-        raise HTTPException(status_code=400, detail=f"Invalid agent setting: {e}")
-    log.info("Agents config updated by %s", current_user["username"])
-    return {"config": cfg}
-
-
-@app.post('/api/agents/{name}/run')
-def api_agents_run(name: str, current_user: Dict[str, Any] = Depends(require_admin)):
-    try:
-        return {"started": agents.run_now(name)}
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Unknown agent")
-
-
-@app.post('/api/agents/{name}/stop')
-def api_agents_stop(name: str, current_user: Dict[str, Any] = Depends(require_admin)):
-    """Switch an agent off (name 'all' = every agent) and end its run after the current step."""
-    try:
-        return {"stopped": agents.halt(list(agents.AGENTS) if name == "all" else [name], current_user)}
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Unknown agent")
-
-
-@app.post('/api/agents/log/{log_id}/undo')
-def api_agents_undo(log_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
-    try:
-        agents.undo(log_id, current_user)
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    return {"ok": True}
-
-
-@app.post('/api/agents/proposals/{pid}/{decision}')
-def api_agents_proposal(pid: str, decision: str, current_user: Dict[str, Any] = Depends(get_current_user)):
-    """approve (isolates the host in LimaCharlie), reject, or release (rejoin)."""
-    if current_user.get("role") not in ("admin", "l2"):
-        raise HTTPException(status_code=403, detail="Only admins and L2 analysts can decide on containment")
-    try:
-        return agents.decide(pid, decision, current_user)
-    except LookupError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-
-
 @app.post('/api/alerts/sync')
 def api_sync_alerts(current_user: Dict[str, Any] = Depends(get_current_user)):
     """Inbox Refresh button: pull recent LimaCharlie detections so anything the
     webhook missed (NullShift or the tunnel down) still lands. Ingest dedupes
     on detect_id, so re-pulling what the webhook already delivered is a no-op."""
     # ponytail: LimaCharlie only, fixed 24h window; add a since-last-sync cursor if outages outlast a day
-    from app.connectors import connected_siems, get_siem_connector
-    if "limacharlie" not in connected_siems():
+    from app.connectors import configured_siems, get_siem_connector
+    if "limacharlie" not in configured_siems():  # ingestion: every SIEM set up, licensed or not
         return {"added": 0, "pulled": 0, "note": "Pull refresh is only available for LimaCharlie"}
     conn = get_siem_connector("limacharlie")
     if not conn.is_available():
@@ -2175,7 +2178,7 @@ def _alert_group_seed(alerts: List[Dict[str, Any]]) -> str:
     head = (f"Investigate these {len(alerts)} related alerts together, first at {alerts[0]['created_at']}, "
             f"last at {alerts[-1]['created_at']}. Decide whether they are one incident (the same activity, "
             f"host or attacker seen more than once) or separate events, and assess them as a whole.")
-    frame = "\n\n".join([head, *(block(a, "\n… (truncated)") for a in alerts), agents._VERDICT_ASK])
+    frame = "\n\n".join([head, *(block(a, "\n… (truncated)") for a in alerts), VERDICT_ASK])
     cap = min(_GROUP_PAYLOAD_MAX, max(0, (_GROUP_SEED_MAX - len(frame)) // len(alerts)))
     blocks = []
     for a in alerts:
@@ -2183,7 +2186,7 @@ def _alert_group_seed(alerts: List[Dict[str, Any]]) -> str:
         if len(payload) > cap:
             payload = payload[:cap] + "\n… (truncated)"
         blocks.append(block(a, payload))
-    return "\n\n".join([head, *blocks, agents._VERDICT_ASK])
+    return "\n\n".join([head, *blocks, VERDICT_ASK])
 
 
 def _alert_investigation(alert: Dict[str, Any], current_user: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -2635,29 +2638,6 @@ def api_incidents_for_conversation(conversation_id: str, current_user: Dict[str,
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"incidents": incident_store.incidents_for_conversation(current_user["id"], conversation_id)}
-
-
-@app.get('/api/incidents/{incident_id}/report')
-def api_incident_report(incident_id: str, format: str = "html", current_user: Dict[str, Any] = Depends(get_current_user)):
-    inc = incident_store.get_for_user(current_user["id"], incident_id)
-    if not inc:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    conv_ids = [c["conversation_id"] for c in inc.get("conversations", [])]
-    conversations = []
-    for cid in conv_ids:
-        conv = store.get_conversation_for_user(current_user["id"], cid)
-        if conv:
-            conversations.append(conv)
-    ioc_verdicts = verdict_store.list_for_conversations(current_user["id"], conv_ids)
-    if format == "md":
-        md = build_incident_report_md(inc, conversations, ioc_verdicts)
-        return Response(
-            content=md,
-            media_type="text/markdown; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{inc["case_number"]}-report.md"'},
-        )
-    html_doc = build_incident_report_html(inc, conversations, ioc_verdicts)
-    return html_page(html_doc)
 
 
 def _validate_images(payload: MessageCreate) -> None:
