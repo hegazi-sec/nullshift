@@ -12,7 +12,7 @@ pydantic-settings
 pytest
 pytest-asyncio
 passlib==1.7.4  # pbkdf2_sha256 (app/auth.py); no bcrypt: bcrypt 5 breaks passlib's handler
-python-jose==3.5.0
+PyJWT>=2.0  # session tokens (HS256); python-jose has an unfixed advisory
 cryptography  # Ed25519 license signatures (app/licensing.py)
 python-multipart
 chromadb>=0.4.22

@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from jose import jwt, JWTError
+import jwt
 from passlib.context import CryptContext
 
 from app import licensing
@@ -133,7 +133,7 @@ def get_current_user(request: Request) -> Dict[str, Any]:
         role: str = payload.get("role")
         if username is None or role is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    except JWTError:
+    except jwt.InvalidTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     user = user_store.get_user_by_username(username)
