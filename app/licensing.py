@@ -420,6 +420,7 @@ def _seats(live: Optional[Dict[str, Any]]) -> int:
 
 def seats_used() -> int:
     from app.db import user_store
+    user_store.init_db()  # the CLI can ask before setup or the server ever created the table
     return sum(1 for u in user_store.list_users() if u["is_active"])
 
 
