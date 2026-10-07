@@ -16,7 +16,8 @@ Usage:
                         nullshift license reset-clock sets the rollback clock to now (logged)
     nullshift pro       The Pro code (app/pro/): nullshift pro status shows what is installed;
                         nullshift pro sync downloads or updates it from the license server;
-                        nullshift pro install <file.nspro> loads the bundle sent to air-gapped installs
+                        nullshift pro install <file.nspro> loads the bundle sent to air-gapped installs;
+                        nullshift pro free turns Pro on with Cyber-Pillar's free offer while it is open (no key)
 """
 from __future__ import annotations
 import os
@@ -394,13 +395,17 @@ def cmd_passwd() -> None:
 def _print_license(s=None) -> None:
     from app import licensing
     s = s or licensing.status()
-    state = {'none': 'no license', 'invalid': 'saved license does not verify',
+    state = {'none': 'no license' + (' — ' + s['ended_message'] if s.get('ended_message') else ''),
+             'invalid': 'saved license does not verify',
              'clock': 'clock rollback: ' + licensing.CLOCK_MESSAGE,
              'moved': 'moved: ' + licensing.MOVED_MESSAGE}.get(s['state'], s['state'])
     print(f'  Edition   {_bold(s["edition"].title())} {_muted("(" + state + ")")}')
     if s['customer']:
         print(f'  Customer  {s["customer"]}')
-        kind = (s['type'] or 'paid') + (' · offline (activated with a request code)' if s['offline'] else '')
+        if s['type'] == 'promo':  # the free Pro offer: no key, renewed at every check-in until Cyber-Pillar closes it
+            kind = 'Free Pro (offer) · renews daily while the offer is open'
+        else:
+            kind = (s['type'] or 'paid') + (' · offline (activated with a request code)' if s['offline'] else '')
         print(f'  Type      {kind}')
         grace = _muted('(works until ' + s['grace_ends'][:10] + ')')
         print(f'  Expires   {s["expires"][:10]} {grace}')
@@ -467,11 +472,18 @@ def cmd_activate() -> None:
             print(_muted('  Moving from another server? nullshift activate <KEY> --transfer moves the license here; '
                          'the other install loses Pro at its next check-in (at most 3 moves per 30 days).'))
         sys.exit(1)
-    # the outcome by the saved license's state: an activation can succeed and still leave Pro off
+    _activation_outcome(f'{"Moved to this install" if transfer else "Activated"} for {lic["customer"]}')
+    print(_pro_sync_line(pro_package.sync()))  # the Pro code follows the license (best effort)
+    _print_license()
+
+
+def _activation_outcome(what: str) -> None:
+    """The outcome of an activation (a key, a move, the free offer) by the saved license's
+    state: it can succeed and still leave Pro off."""
+    from app import licensing
     s = licensing.status()
-    verb = 'Moved to this install' if transfer else 'Activated'
     if s['state'] in ('valid', 'grace'):
-        print(f'{_green("✓")} {verb} for {lic["customer"]}')
+        print(f'{_green("✓")} {what}')
         if s['state'] == 'grace':
             print(_muted(f'  This license expired on {s["expires"][:10]} and is in its grace period until '
                          f'{s["grace_ends"][:10]}: renew it with Cyber-Pillar.'))
@@ -480,9 +492,7 @@ def cmd_activate() -> None:
                'expired': 'it expired on ' + s['expires'][:10] + ' and its grace period is over. Renew it with Cyber-Pillar.',
                'clock': licensing.CLOCK_MESSAGE + '. The license server\'s time is ahead of this machine\'s clock.'
                }.get(s['state'], s['state'])
-        print(_red(f'✗ {verb} for {lic["customer"]}, but Pro is still off: {why}'))
-    print(_pro_sync_line(pro_package.sync()))  # the Pro code follows the license (best effort)
-    _print_license()
+        print(_red(f'✗ {what}, but Pro is still off: {why}'))
 
 
 def cmd_pro() -> None:
@@ -490,13 +500,38 @@ def cmd_pro() -> None:
     nullshift pro sync — download or update it from the license server (the license must
     have a Pro feature; never over a source checkout). nullshift pro install <file.nspro> —
     the bundle Cyber-Pillar sends air-gapped installs with the .lic, verified the same way.
-    A new package is loaded at the next restart."""
+    A new package is loaded at the next restart.
+    nullshift pro free — turn Pro on with Cyber-Pillar's free offer while it is open: no key,
+    a promo license for this install that renews at every daily check-in; when the offer
+    ends, Pro turns off at the next check-in and NullShift continues as Community, nothing
+    lost. Then the Pro code is downloaded, as after a key. Refused while this install has a
+    live license of its own (a product key activated later replaces the promo license)."""
     sys.path.insert(0, str(BASE))
     os.chdir(BASE)
-    from app import pro_package
+    from app import licensing, pro_package
 
     verb = sys.argv[2] if len(sys.argv) > 2 else ''
     if verb == 'status' and len(sys.argv) == 3:
+        _print_license()
+        return
+    if verb == 'free' and len(sys.argv) == 3:
+        offer = licensing.promo_status()
+        if not offer.get('open'):
+            print(_red('✗ ' + (offer.get('message') or 'The free Pro offer is not open right now.')))
+            if not offer.get('error'):
+                print(_muted('  Cyber-Pillar opens it from time to time; Settings › License shows the card while it is open. '
+                             'A product key: nullshift activate <KEY>'))
+            sys.exit(1)
+        try:
+            lic = licensing.promo_activate()
+        except licensing.ActivationError as e:
+            print(_red(f'✗ {e}'))
+            sys.exit(1)
+        _activation_outcome(f'Free Pro (offer) activated: {lic["seats"]} active users, every Pro feature, free while '
+                            f'the offer lasts')
+        print(_muted('  The license renews daily while the offer is open. When Cyber-Pillar closes it, Pro turns off at '
+                     'the next check-in and NullShift continues as Community: nothing is lost.'))
+        print(_pro_sync_line(pro_package.sync()))  # the Pro code follows the license (best effort)
         _print_license()
         return
     if verb == 'sync' and len(sys.argv) == 3:
@@ -514,7 +549,7 @@ def cmd_pro() -> None:
         print(f'{_green("✓")} NullShift Pro installed (package {marker["sha256"][:12]}, commit '
               f'{marker["commit"] or "unknown"}): restart NullShift to load it')
         return
-    print(_red('✗ Usage: nullshift pro status | sync | install <file.nspro>'))
+    print(_red('✗ Usage: nullshift pro status | sync | install <file.nspro> | free'))
     sys.exit(1)
 
 
@@ -594,9 +629,10 @@ def main() -> None:
         print(f'    {_cyan("license")} Show the license, or install a .lic file  (nullshift license <file>)')
         print(f'             Offline activation code: nullshift license request-code <KEY>')
         print(f'             Clock reported as rolled back after a correction: nullshift license reset-clock')
-        print(f'    {_cyan("pro")}     The Pro code: nullshift pro status | sync | install <file.nspro>')
+        print(f'    {_cyan("pro")}     The Pro code: nullshift pro status | sync | install <file.nspro> | free')
         print(f'             sync downloads it from the license server (activation and start do too); install loads')
         print(f'             the bundle sent to air-gapped installs. Restart NullShift to load a new package.')
+        print(f'             free turns Pro on with Cyber-Pillar\'s free offer while it is open (no key needed).')
         print()
         sys.exit(0 if len(sys.argv) < 2 else 1)
 

@@ -25,6 +25,12 @@ nullshift-license-server/CONTRACT.md (protocol v2):
 - The Pro code itself (app/pro/) is a signed package the server serves to a license with a
   Pro feature, built for this core's PRO_API: app/pro_package.py downloads, verifies and
   installs it after an activation and on every check-in tick (never over a source tree).
+- Free Pro (promo): while Cyber-Pillar has an offer open, promo_activate() gets an install
+  without a valid license of its own an ordinary signed license of type `promo` with no
+  key (promo_status() asks whether the offer is open, cached PROMO_CACHE_SECONDS). It
+  renews at every check-in while the offer is open; once it closes, the check-in brings a
+  signed `promo_ended` revocation and the install is Community again, nothing lost. A
+  product key activated later replaces it.
 
 An expired license keeps working for GRACE_DAYS, then the install drops back to Community.
 Nothing here gates logins or alert ingestion: only adding users and the Pro features.
@@ -42,6 +48,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -62,11 +69,16 @@ PUBLIC_KEYS = {
 }
 DEFAULT_LICENSE_SERVER = "https://nullshift.cyber-pillar.com"  # NULLSHIFT_LICENSE_SERVER overrides: license_server()
 TIMEOUT = 15  # seconds, activation and check-in
+PROMO_TIMEOUT = 5  # seconds, the free Pro offer's state: informational, on Settings › License's load path
+PROMO_CACHE_SECONDS = 600  # the offer's state is asked at most once in ten minutes, whatever the answer
 CHECKIN_EVERY = 24 * 3600
 CLOCK_TOLERANCE = timedelta(hours=24)  # NTP corrections never trip the rollback check
 CLOCK_MESSAGE = "the system clock is behind; fix the clock"
 MOVED_MESSAGE = ("This license is bound to another machine: NullShift was copied or the hardware changed. "
                  "Activate again here with the product key to move it.")
+PROMO_ENDED_MESSAGE = "The free Pro offer has ended"
+PROMO_TYPE = "promo"  # the license type of a free Pro (offer) license; its key_id is "promo", it has no product key
+VERSION = ""  # NullShift has no release version yet; the promo request's optional `version` sends this
 MACHINE_SALT = "nullshift-machine-v1:"  # the raw hardware id is hashed with it; only the hash ever leaves
 _MACHINE_ID_FILES = ("/etc/machine-id", "/var/lib/dbus/machine-id")  # Linux (and Docker with it mounted)
 FEATURES = ("multi_siem", "agents", "metrics", "reports")
@@ -361,8 +373,9 @@ def save(blob: Optional[str], updated_by: Optional[int] = None, server_time: Opt
     signed `issued` time instead (server_time; see set_clock_from_server), so a clock
     once wrongly set ahead and then corrected is not taken for a rollback for as long as
     it had been ahead. A pasted .lic never carries server_time: an old file must not be
-    able to lower the clock."""
-    _store().set_many({"license": blob or None}, updated_by=updated_by)
+    able to lower the clock. Any save forgets why the previous license was removed by a
+    revocation (license_revoked); checkin() records that after it removes one."""
+    _store().set_many({"license": blob or None, "license_revoked": None}, updated_by=updated_by)
     if blob and not set_clock_from_server(server_time):
         touch_clock()
 
@@ -532,6 +545,43 @@ def _post(path: str, body: Dict[str, Any], timeout: Optional[float] = None) -> r
                          headers={"User-Agent": "NullShift"})
 
 
+def _get(path: str, timeout: Optional[float] = None) -> requests.Response:
+    return requests.get(f"{license_server()}{path}", timeout=timeout or TIMEOUT, headers={"User-Agent": "NullShift"})
+
+
+def _json_dict(r: requests.Response) -> Dict[str, Any]:
+    """The server's JSON object, {} for anything else (not JSON, not an object)."""
+    try:
+        data = r.json()
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _http_error(r: requests.Response, data: Dict[str, Any], known: Dict[str, Tuple[int, str]]) -> ActivationError:
+    """The ActivationError for a non-200 answer: the contract code's sentence from `known`,
+    or a generic one naming the HTTP status (and the code, clamped)."""
+    code = _code(data.get("error"))  # clamped: it goes into the message and the log
+    status, message = known.get(code, (502, f"The license server answered HTTP {r.status_code}"
+                                            f"{' (' + code + ')' if code else ''}. Try again later."))
+    return ActivationError(message, status, code)
+
+
+def _accept(data: Dict[str, Any], about: str, updated_by: Optional[int]) -> Dict[str, Any]:
+    """The license the server answered an activation with: verified (signature, this
+    install, the machine) and saved with the server's time; the activation counts as a
+    contact. ActivationError when it does not verify (nothing saved)."""
+    blob = str(data.get("license") or "").strip()
+    try:
+        lic = verify(blob)
+    except ValueError as e:
+        log.error("%s: the server's license does not verify: %s", about, e)
+        raise ActivationError(f"The license server sent a license this install can't use: {e}", 502, "bad_license")
+    save(blob, updated_by=updated_by, server_time=lic.get("issued"))
+    _store().set_many({"license_checked_at": _now().isoformat()})  # an activation is a contact too
+    return lic
+
+
 def activate(key: str, updated_by: Optional[int] = None, transfer: bool = False) -> Dict[str, Any]:
     """Exchange a product key for a license at the license server, verify it and save it.
     The request names this install and machine; with transfer=True a key on its maximum
@@ -548,29 +598,121 @@ def activate(key: str, updated_by: Optional[int] = None, transfer: bool = False)
     except requests.RequestException as e:
         log.warning("Activation with key …%s: license server unreachable (%s)", normalized[-4:], type(e).__name__)
         raise ActivationError(UNREACHABLE.format(server=license_server()), 502, "unreachable")
-    try:
-        data = r.json()
-    except ValueError:
-        data = {}
-    if not isinstance(data, dict):
-        data = {}
+    data = _json_dict(r)
     if r.status_code != 200:
-        code = _code(data.get("error"))  # clamped: it goes into the message and the log
-        status, message = _ACTIVATION_ERRORS.get(code, (502, f"The license server answered HTTP {r.status_code}"
-                                                           f"{' (' + code + ')' if code else ''}. Try again later."))
+        err = _http_error(r, data, _ACTIVATION_ERRORS)
         log.info("Activation with key …%s%s refused: %s", normalized[-4:], " (transfer)" if transfer else "",
-                 code or r.status_code)
-        raise ActivationError(message, status, code)
-    blob = str(data.get("license") or "").strip()
-    try:
-        lic = verify(blob)
-    except ValueError as e:
-        log.error("Activation with key …%s: the server's license does not verify: %s", normalized[-4:], e)
-        raise ActivationError(f"The license server sent a license this install can't use: {e}", 502, "bad_license")
-    save(blob, updated_by=updated_by, server_time=lic.get("issued"))
-    _store().set_many({"license_checked_at": _now().isoformat()})  # an activation is a contact too
+                 err.code or r.status_code)
+        raise err
+    lic = _accept(data, f"Activation with key …{normalized[-4:]}", updated_by)
     log.info("License %s (%s) activated with key …%s%s", lic.get("id"), lic.get("customer"), normalized[-4:],
              " (moved to this install)" if transfer else "")
+    return lic
+
+
+# ── Free Pro (promo) ─────────────────────────────────────────────────────────
+
+# contract error code of POST /v1/promo → (HTTP status NullShift answers, sentence for the admin)
+_PROMO_ERRORS = {
+    "promo_closed": (410, "The free Pro offer is not open right now."),
+    "promo_full": (409, "The free Pro offer has reached its number of installs, so this install can't join it. "
+                        "Try again later, or contact Cyber-Pillar for a product key."),
+    "rebind_limit": _ACTIVATION_ERRORS["rebind_limit"],
+    "malformed": (400, "The license server did not accept this install's details (install ID, machine or hostname)."),
+    "rate_limited": (429, "Too many attempts; wait a minute and try again."),
+}
+PROMO_UNREACHABLE = ("The license server ({server}) could not be reached. The free Pro offer needs a route to it: "
+                     "it is never offered offline.")
+PROMO_LICENSED_MESSAGE = ("This install already has a NullShift Pro license of its own; the free Pro offer is for "
+                          "installs without one. Remove the license first to try the offer instead.")
+
+_promo_lock = threading.Lock()
+_promo_cache: Dict[str, Any] = {"until": 0.0, "answer": None}  # the last answer of GET /v1/promo and when it goes stale
+
+
+def _promo_fetch() -> Dict[str, Any]:
+    """GET /v1/promo as {open, seats, days}: open only when the server said `true`, seats
+    and days only as positive integers. {"open": False, "error", "message"} for anything
+    else (unreachable, a non-200, an answer that is not JSON): the offer is not open for
+    this install until the server says so. Never raises."""
+    try:
+        r = _get("/v1/promo", timeout=PROMO_TIMEOUT)
+    except requests.RequestException as e:
+        log.info("Free Pro offer: license server unreachable (%s)", type(e).__name__)
+        return {"open": False, "error": "unreachable", "message": PROMO_UNREACHABLE.format(server=license_server())}
+    except Exception:  # nothing here may stop Settings › License or the CLI
+        log.exception("Free Pro offer: the request failed")
+        return {"open": False, "error": "unreachable", "message": PROMO_UNREACHABLE.format(server=license_server())}
+    data = _json_dict(r)
+    if r.status_code != 200:
+        code = _code(data.get("error"))
+        log.info("Free Pro offer: license server answered HTTP %s%s", r.status_code, f" ({code})" if code else "")
+        return {"open": False, "error": code or "unknown",
+                "message": f"The license server answered HTTP {r.status_code}{' (' + code + ')' if code else ''}. Try again later."}
+    answer: Dict[str, Any] = {"open": data.get("open") is True}
+    for k in ("seats", "days"):
+        v = data.get(k)
+        if isinstance(v, int) and not isinstance(v, bool) and v > 0:
+            answer[k] = v
+    return answer
+
+
+def promo_status(refresh: bool = False) -> Dict[str, Any]:
+    """Whether Cyber-Pillar's free Pro offer is open: GET /v1/promo (no credentials), the
+    answer cached for PROMO_CACHE_SECONDS whatever it was, so Settings › License asks the
+    server at most once in ten minutes. {"open": False, ...} on any failure; never raises."""
+    with _promo_lock:
+        cached = _promo_cache["answer"]
+        if cached is None or refresh or time.monotonic() >= _promo_cache["until"]:
+            cached = _promo_fetch()
+            _promo_cache.update(until=time.monotonic() + PROMO_CACHE_SECONDS, answer=cached)
+        return dict(cached)
+
+
+def _own_license(lic: Optional[Dict[str, Any]]) -> bool:
+    """A live (valid or in grace) license that is not the promo's: the install has one of
+    its own and the offer is not for it."""
+    return bool(lic) and lic["state"] not in OFF_STATES and lic.get("type") != PROMO_TYPE
+
+
+def promo_offer() -> Dict[str, Any]:
+    """What Settings › License needs for the Try NullShift Pro free card: `offered` (show
+    it) is the offer being open while this install has no valid license of its own
+    (`licensed`: none, or an expired, moved or clock-rolled one). With a license of its
+    own the server is not asked at all (`open` is then None). A promo license already held
+    counts as none: the card goes away only because the edition is Pro."""
+    lic = current()
+    if lic and lic["state"] not in OFF_STATES:  # a live license: its own, or the promo's
+        return {"offered": False, "open": None, "licensed": True,
+                "why": "this install has a valid license" + ("" if lic.get("type") == PROMO_TYPE else " of its own")}
+    st = promo_status()
+    return {"offered": st["open"] is True, "licensed": False, **st}
+
+
+def promo_activate(updated_by: Optional[int] = None) -> Dict[str, Any]:
+    """Turn Pro on with Cyber-Pillar's free offer: POST /v1/promo names this install and
+    machine (no key) and answers a signed promo license, verified and saved exactly like
+    an activation (install_id checked, the Pro package follows in the caller). Refused
+    here, before the server is asked, while the install holds a live license of its own:
+    the offer never replaces a paid or trial license (an expired, moved or clock-rolled
+    one it does; a promo license held already is renewed, same id). Returns the license
+    (as verify()); ActivationError with a readable sentence otherwise."""
+    if _own_license(current()):
+        raise ActivationError(PROMO_LICENSED_MESSAGE, 409, "licensed")
+    body = {"install_id": install_id(), "machine": machine_id(), "hostname": _hostname(), "version": VERSION}
+    try:
+        r = _post("/v1/promo", body)
+    except requests.RequestException as e:
+        log.warning("Free Pro offer: license server unreachable (%s)", type(e).__name__)
+        raise ActivationError(PROMO_UNREACHABLE.format(server=license_server()), 502, "unreachable")
+    data = _json_dict(r)
+    if r.status_code != 200:
+        err = _http_error(r, data, _PROMO_ERRORS)
+        log.info("Free Pro offer refused: %s", err.code or r.status_code)
+        raise err
+    lic = _accept(data, "Free Pro offer", updated_by)
+    log.info("License %s (%s) activated with the free Pro offer; it renews daily while the offer is open",
+             lic.get("id"), lic.get("customer"))
     return lic
 
 
@@ -590,6 +732,7 @@ REVOCATION_REASONS = {
     "revoked": "revoked by Cyber-Pillar",
     "moved": "moved to another machine",
     "released": "released from this install by Cyber-Pillar support (the key can be activated again)",
+    "promo_ended": "ended with the free Pro offer (Cyber-Pillar closed it)",
 }
 
 
@@ -631,14 +774,16 @@ def _verify_revocation(blob: Any, lic: Dict[str, Any]) -> Optional[str]:
 
 def checkin() -> str:
     """Ask the license server for the saved license's current terms. Returns what happened:
-    'skipped' (no license, or an offline one), 'revoked' or 'moved' (removed: a signed
-    revocation for this license and install, with that reason, the one answer that does),
-    'renewed' (a new license verified and saved), or 'kept' (any other answer, including no
-    network). Records license_checked_at when the server answered. A license in the state
-    `moved` checks in too: that is how it learns it was revoked over there. Any license
-    the server answers that verifies, the same blob included, resets license_clock from
-    its signed `issued`: the server's time is the trusted one, so a clock that ran ahead
-    and was corrected recovers at the next check-in instead of staying `clock`."""
+    'skipped' (no license, or an offline one), a reason in REVOCATION_REASONS ('revoked',
+    'moved', 'released', 'promo_ended': removed by a signed revocation for this license
+    and install, the one answer that does; the reason is kept as license_revoked, so
+    Settings › License can say the free Pro offer ended), 'renewed' (a new license
+    verified and saved), or 'kept' (any other answer, including no network). Records
+    license_checked_at when the server answered. A license in the state `moved` checks in
+    too: that is how it learns it was revoked over there. Any license the server answers
+    that verifies, the same blob included, resets license_clock from its signed `issued`:
+    the server's time is the trusted one, so a clock that ran ahead and was corrected
+    recovers at the next check-in instead of staying `clock`."""
     store = _store()
     blob = store.get("license")
     if not blob:
@@ -663,6 +808,7 @@ def checkin() -> str:
         reason = _verify_revocation(data["revocation"], lic)
         if reason:
             save(None)
+            store.set_many({"license_revoked": reason})  # after save(), which forgets the previous one
             log.warning("License %s %s; this install is now Community", lic.get("id"),
                         REVOCATION_REASONS.get(reason, f"revoked ({reason})"))
             return reason if reason in REVOCATION_REASONS else "revoked"
@@ -731,6 +877,8 @@ def status() -> Dict[str, Any]:
     lic = current()  # once: seats and features below derive from it, not from fresh reads
     state = lic["state"] if lic else "invalid" if store.get("license") else "none"
     live = lic if lic and state not in OFF_STATES else None
+    # why the last license went, while none replaced it: a signed revocation's reason (clamped)
+    revoked = (_code(store.get("license_revoked")) or None) if state == "none" else None
     try:
         from app import pro_package
         pkg = pro_package.state()
@@ -742,9 +890,11 @@ def status() -> Dict[str, Any]:
         "state": state,
         "clock_message": CLOCK_MESSAGE if state == "clock" else None,
         "moved_message": MOVED_MESSAGE if state == "moved" else None,
+        "revoked_reason": revoked,  # the last license was removed by a signed revocation with this reason
+        "ended_message": PROMO_ENDED_MESSAGE if revoked == "promo_ended" else None,
         "customer": lic.get("customer") if lic else None,
         "license_id": lic.get("id") if lic else None,
-        "type": lic.get("type") if lic else None,
+        "type": lic.get("type") if lic else None,  # trial | paid | promo (the free Pro offer: "Free Pro (offer)" in the UI/CLI)
         "offline": lic["offline"] if lic else None,
         "expires": lic["expires"] if lic else None,
         "grace_ends": lic["grace_ends"] if lic else None,

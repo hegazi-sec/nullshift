@@ -2091,6 +2091,33 @@ def api_admin_license_request_code(payload: Dict[str, Any], current_user: Dict[s
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.get('/api/admin/license/promo')
+def api_admin_license_promo(_: Dict[str, Any] = Depends(require_admin)):
+    """Cyber-Pillar's free Pro offer, for the Try NullShift Pro free card: `offered` when
+    the offer is open and this install has no valid license of its own (`licensed` says
+    it has one, and then the license server was not asked: `open` is null). The browser
+    never calls the license server; this backend does, the answer cached ten minutes."""
+    return licensing.promo_offer()
+
+
+@app.post('/api/admin/license/promo')
+def api_admin_license_promo_activate(current_user: Dict[str, Any] = Depends(_require_admin_csrf)):
+    """Turn Pro on with the free offer: a promo license for this install and machine,
+    saved like an activated one, then the Pro package follows it (`pro_sync`, as after a
+    key). Refused with {"message", "code"} while the install holds a live license of its
+    own (409 `licensed`), when the offer is closed (410 `promo_closed`) or full (409
+    `promo_full`), and for the activation errors."""
+    try:
+        lic = licensing.promo_activate(updated_by=current_user["id"])
+    except licensing.ActivationError as e:
+        log.info("Free Pro offer by %s failed: %s (%s)", current_user["username"], e, e.code or e.status)
+        raise HTTPException(status_code=e.status, detail={"message": str(e), "code": e.code})
+    log.info("License %s (%s) activated with the free Pro offer by %s", lic.get("id"), lic.get("customer"),
+             current_user["username"])
+    pro = pro_package.sync()
+    return {**licensing.status(), "pro_sync": pro}
+
+
 @app.get('/api/onboarding')
 def api_onboarding(current_user: Dict[str, Any] = Depends(require_admin)):
     """The first-run checklist an empty console shows an admin: connect a SIEM (the

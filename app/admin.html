@@ -1224,6 +1224,25 @@
       <div class="hint">Loading…</div>
     </div>
 
+    <!-- Cyber-Pillar's free Pro offer: shown only while this install has no valid license of its own and
+         the offer is open (the backend asks the license server, cached ten minutes; the browser never does) -->
+    <div id="promoOffer" hidden>
+      <div class="section-title" style="margin-top:28px;">Try NullShift Pro free</div>
+      <div class="section-desc">
+        Cyber-Pillar has opened a free Pro offer: this install can turn Pro on now, without a product key, free
+        while the offer lasts. The license renews itself with the daily check-in. When the offer ends, Pro turns
+        off at the next check-in and NullShift continues as Community with nothing lost: alerts, cases, users and
+        settings all stay.
+      </div>
+      <div class="panel">
+        <div class="hint" id="promoTerms"></div>
+        <div class="actions">
+          <button class="btn btn-primary" id="promoBtn" data-action="save">Try NullShift Pro free</button>
+          <span id="promoStatus" class="status" role="status"></span>
+        </div>
+      </div>
+    </div>
+
     <div class="section-title" style="margin-top:28px;">Activate with a product key</div>
     <div class="section-desc">
       Enter the key from your NullShift Pro order (<code>NS-XXXXX-XXXXX-XXXXX-XXXXX</code>). This server sends the key,
@@ -2633,7 +2652,7 @@
       invalid: ['red',    'invalid', 'the saved license does not verify'],
       clock:   ['red',    'clock',   j.clock_message || 'the system clock is behind; fix the clock'],
       moved:   ['red',    'moved',   j.moved_message || 'this license is bound to another machine; activate again here with the product key'],
-      none:    ['gray',   'no license'],
+      none:    ['gray',   'no license', j.ended_message || ''],  // "The free Pro offer has ended" after a promo_ended revocation
     }[j.state] || ['gray', j.state];
     const features = Object.entries(LICENSE_FEATURES).map(([f, name]) => `
         <div class="k">${name}</div>
@@ -2641,6 +2660,8 @@
     // Pro features licensed, but their code (app/pro/) is not loaded in this process
     const needsPro = !j.pro_installed && (j.licensed_features || []).some(f => f !== 'multi_siem');
     const hasLic = !!j.license_id;
+    // the free Pro offer's license (type promo) has no key: labelled as the offer, with how it stays on
+    const type = j.type === 'promo' ? 'Free Pro (offer) — renews daily while the offer is open' : esc(j.type) || (hasLic ? 'paid' : '—');
     // The Pro code: a source checkout (never downloaded over), the installed package (its commit, whether
     // this process loaded it, whether it failed to import), or none yet
     const pkg = j.pro_package;
@@ -2652,6 +2673,7 @@
     const proNote = j.pro_load_error ? `<div class="hint-box" style="border-color:var(--red);color:var(--red);">The Pro code failed to load, so this install runs as Community: ${esc(j.pro_load_error)}. Restart NullShift: it downloads the package again at startup.</div>`
       : j.pro_restart_needed ? '<div class="hint-box">A new Pro package was downloaded. Restart NullShift to load it.</div>'
       : needsPro ? '<div class="hint-box">This install doesn’t have the Pro code yet: it downloads at activation and with the daily check-in (or <code>nullshift pro sync</code>); air-gapped, load the <code>.nspro</code> bundle with <code>nullshift pro install &lt;file&gt;</code>. Restart NullShift to load it.</div>'
+      : j.ended_message ? '<div class="hint-box">Cyber-Pillar closed the free Pro offer, so this install runs as Community again: nothing was lost. To keep Pro, activate a product key below.</div>'
       : '';
     const checkin = !hasLic ? '—' : j.offline ? 'not needed: offline license' : j.checked_at ? fmtAbsTime(j.checked_at) : 'never: the license server was not reached yet';
     // This machine's fingerprint (the first 12 of 64 hex), and whether the license is tied to one
@@ -2666,7 +2688,7 @@
         <div class="k">Customer</div><div class="v">${esc(j.customer) || '—'}</div>
         <div class="k">License ID</div><div class="v">${esc(j.license_id) || '—'}</div>
         <div class="k">Type</div>
-        <div class="v">${esc(j.type) || (hasLic ? 'paid' : '—')}${j.offline ? '<span class="pill gray">offline</span>' : ''}</div>
+        <div class="v">${type}${j.offline ? '<span class="pill gray">offline</span>' : ''}</div>
         <div class="k">Expires</div><div class="v">${esc(fmtDay(j.expires))}</div>
         <div class="k">Last check-in</div><div class="v">${esc(checkin)}</div>
         <div class="k">Install ID</div><div class="v" style="overflow-wrap:anywhere;">${esc(j.install_id) || '—'}</div>
@@ -2681,17 +2703,74 @@
 
   async function loadLicense() {
     try {
-      renderLicense(await api('/api/license'));
+      const j = await api('/api/license');
+      renderLicense(j);
+      loadPromo(j);
     } catch(e) {
       document.getElementById('licenseBody').innerHTML = `<div class="hint-box" style="border-color:var(--red);color:var(--red);">Error: ${esc(e.message)}</div>`;
     }
   }
 
-  // After a save or remove: the panel and, if Connectors has loaded, its Community note
+  // The free Pro offer's card: only while this install has no valid license of its own (so never on a
+  // Pro edition, without even asking) and the offer is open. The backend asks the license server
+  // (cached ten minutes); the browser never calls it. Any failure just leaves the card hidden.
+  async function loadPromo(j) {
+    const box = document.getElementById('promoOffer');
+    if (j.edition === 'pro') { box.hidden = true; return; }
+    try {
+      const p = await api('/api/admin/license/promo');
+      box.hidden = !p.offered;
+      if (!p.offered) return;
+      const terms = [p.seats ? `${p.seats} active users` : '', 'every Pro feature',
+                     p.days ? `a license of ${p.days} days, renewed at each daily check-in while the offer is open` : ''];
+      document.getElementById('promoTerms').textContent = 'The offer: ' + terms.filter(Boolean).join(', ') + '.';
+      document.getElementById('promoBtn').disabled = false;
+    } catch(e) {
+      box.hidden = true;
+    }
+  }
+
+  // After a save or remove: the panel, the offer's card and, if Connectors has loaded, its Community note
   function _licenseChanged(j) {
     renderLicense(j);
+    loadPromo(j);
     if (_loaded.has('connectors')) api('/api/admin/settings').then(_siemNote).catch(() => {});
   }
+
+  // The outcome of an activation (a key, a move, the free offer), by the saved license's state: it can
+  // succeed and still leave Pro off. Then the Pro code: downloaded with the license (a restart loads it),
+  // current, or why not.
+  function reportActivation(st, j, verb) {
+    const sync = j.pro_sync || {};
+    const pro = sync.status === 'installed' ? ' — NullShift Pro downloaded: restart NullShift to load it'
+      : sync.status === 'current' ? ' — the Pro code is up to date'
+      : sync.status === 'error' ? ' — the Pro code was not downloaded: ' + (sync.message || 'try nullshift pro sync later')
+      : '';
+    if (j.state === 'valid') setStatus(st, verb + ' ✓' + pro, sync.status === 'error' ? 'warn' : 'ok');
+    else if (j.state === 'grace') setStatus(st, `${verb} ✓ — this license expired ${fmtDay(j.expires)} and works until ${fmtDay(j.grace_ends)}: renew it${pro}`, 'warn');
+    else if (j.state === 'moved') setStatus(st, verb + ', but Pro is still off: the license is bound to another machine. ' + (j.moved_message || ''), 'err');
+    else if (j.state === 'expired') setStatus(st, `${verb}, but Pro is still off: this license expired ${fmtDay(j.expires)} and its grace period is over. Renew it with Cyber-Pillar`, 'err');
+    else if (j.state === 'clock') setStatus(st, verb + ', but Pro is still off: ' + (j.clock_message || 'the system clock is behind; fix the clock') + '. The license server’s time is ahead of this machine’s clock', 'err');
+    else setStatus(st, verb + ', but Pro is still off (' + j.state + ')', 'err');
+  }
+
+  // Try NullShift Pro free: the backend asks the license server for a promo license (no key), saves it
+  // like an activated one and downloads the Pro code; the card stays, with its result, until the tab is
+  // opened again (then the Pro edition hides it).
+  document.getElementById('promoBtn').onclick = async () => {
+    const st = document.getElementById('promoStatus'), btn = document.getElementById('promoBtn');
+    btn.disabled = true;
+    setStatus(st, 'Activating the free Pro offer…');
+    try {
+      const j = await api('/api/admin/license/promo', send('POST'));
+      _licenseChanged(j);
+      document.getElementById('promoOffer').hidden = false;
+      reportActivation(st, j, 'Free Pro (offer) activated');
+    } catch(e) {
+      btn.disabled = false;
+      setStatus(st, 'Error: ' + e.message, 'err');
+    }
+  };
 
   // Online: the product key goes to the license server, a license for this install comes back.
   // A key on its maximum installs answers 409 activation_limit: the Move button then re-sends
@@ -2707,20 +2786,7 @@
       const j = await api('/api/admin/license/activate', send('POST', { key, transfer }));
       _licenseChanged(j);
       input.value = '';
-      // the outcome by the saved license's state: an activation can succeed and still leave Pro off.
-      // Then the Pro code: downloaded with the license (a restart loads it), current, or why not
-      const verb = transfer ? 'Moved to this install' : 'Activated';
-      const sync = j.pro_sync || {};
-      const pro = sync.status === 'installed' ? ' — NullShift Pro downloaded: restart NullShift to load it'
-        : sync.status === 'current' ? ' — the Pro code is up to date'
-        : sync.status === 'error' ? ' — the Pro code was not downloaded: ' + (sync.message || 'try nullshift pro sync later')
-        : '';
-      if (j.state === 'valid') setStatus(st, verb + ' ✓' + pro, sync.status === 'error' ? 'warn' : 'ok');
-      else if (j.state === 'grace') setStatus(st, `${verb} ✓ — this license expired ${fmtDay(j.expires)} and works until ${fmtDay(j.grace_ends)}: renew it${pro}`, 'warn');
-      else if (j.state === 'moved') setStatus(st, verb + ', but Pro is still off: the license is bound to another machine. ' + (j.moved_message || ''), 'err');
-      else if (j.state === 'expired') setStatus(st, `${verb}, but Pro is still off: this license expired ${fmtDay(j.expires)} and its grace period is over. Renew it with Cyber-Pillar`, 'err');
-      else if (j.state === 'clock') setStatus(st, verb + ', but Pro is still off: ' + (j.clock_message || 'the system clock is behind; fix the clock') + '. The license server’s time is ahead of this machine’s clock', 'err');
-      else setStatus(st, verb + ', but Pro is still off (' + j.state + ')', 'err');
+      reportActivation(st, j, transfer ? 'Moved to this install' : 'Activated');
     } catch(e) {
       setStatus(st, 'Error: ' + e.message, 'err');
       // the key stays in the box for the move; never offered for transfer_unavailable (only offline installs hold the key)
