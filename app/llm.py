@@ -374,7 +374,8 @@ class AnthropicProvider(LLMProvider):
             "messages": anthropic_messages,
         }
         if not _NO_SAMPLING_PARAMS.search(kwargs["model"]):
-            kwargs["temperature"] = temperature
+            # anthropic>=1 dropped temperature from create(); extra_body sends it exactly as before
+            kwargs["extra_body"] = {"temperature": temperature}
         if anthropic_tools:
             kwargs["tools"] = anthropic_tools
             if tool_choice == "auto":

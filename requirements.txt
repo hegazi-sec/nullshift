@@ -8,16 +8,14 @@ anthropic>=0.40.0
 # Routes chat through the local `claude` CLI using the operator's Claude.ai
 # subscription instead of an API key.
 claude-agent-sdk>=0.1.0
-paramiko>=3.4.0
 pydantic-settings
-numpy
 pytest
 pytest-asyncio
-passlib[bcrypt]==1.7.4
-python-jose==3.4.0
+passlib==1.7.4  # pbkdf2_sha256 (app/auth.py); no bcrypt: bcrypt 5 breaks passlib's handler
+python-jose==3.5.0
 cryptography  # Ed25519 license signatures (app/licensing.py)
 python-multipart
 chromadb>=0.4.22
-google-genai>=1.0.0
+google-genai>=1.0.0  # Gemini embeddings for RAG (chromadb's GoogleGeminiEmbeddingFunction)
 pyyaml>=6.0
 tzdata  # zoneinfo data where the OS has none (Windows, slim images): agent timezones
