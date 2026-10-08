@@ -787,6 +787,7 @@
     <button type="button" class="tab" role="tab" id="tab-vision" aria-selected="false" tabindex="-1" aria-controls="pane-vision" data-pane="vision">Vision</button>
     <button type="button" class="tab" role="tab" id="tab-usage" aria-selected="false" tabindex="-1" aria-controls="pane-usage" data-pane="usage">Usage</button>
     <button type="button" class="tab" role="tab" id="tab-license" aria-selected="false" tabindex="-1" aria-controls="pane-license" data-pane="license">License</button>
+    <button type="button" class="tab" role="tab" id="tab-updates" aria-selected="false" tabindex="-1" aria-controls="pane-updates" data-pane="updates">Updates</button>
   </div>
 
   <!-- ─ Users ────────────────────────────────────────────────── -->
@@ -1314,6 +1315,45 @@
       </div>
     </div>
   </div>
+
+  <!-- ─ Updates ───────────────────────────────────────────────── -->
+  <div class="pane" id="pane-updates" role="tabpanel" aria-labelledby="tab-updates">
+    <div class="section-title">Releases</div>
+    <div class="section-desc">
+      A NullShift release is a git tag signed with Cyber-Pillar's release key, and this install verifies it with
+      the copy of the key it already holds: nothing is ever installed from an unsigned tag or one signed by anyone
+      else. A clean clone of the release repository updates itself: the new release's dependencies first, a
+      fast-forward to the tag, a restart and a health check, with a rollback to the previous release if the check
+      fails. Any other install (local edits, a development tree, a zip download, a Docker image) is only told.
+      Details in <code>docs/UPDATES.md</code>.
+    </div>
+    <div class="panel">
+      <div class="kv-grid">
+        <div class="k">Version</div><div class="v" id="updVersion">—</div>
+        <div class="k">Mode</div>
+        <div class="v" style="flex-wrap:wrap;">
+          <select id="updMode" aria-label="Update mode" style="max-width:260px;">
+            <option value="off">Off — nothing is checked</option>
+            <option value="notify">Notify — a daily check; admins are told here</option>
+            <option value="auto">Auto — the daily check, then the update by itself</option>
+          </select>
+          <span id="updModeStatus" class="status" role="status"></span>
+        </div>
+        <div class="k">Last check</div>
+        <div class="v" style="flex-wrap:wrap;"><span id="updChecked">never</span><span id="updCheckError" class="pill red" hidden></span></div>
+        <div class="k">Latest release</div>
+        <div class="v" style="flex-wrap:wrap;"><span id="updLatestPill" class="pill gray">not checked yet</span><span id="updLatest"></span></div>
+        <div class="k">Last update</div>
+        <div class="v" style="flex-wrap:wrap;"><span id="updLastPill" class="pill gray" hidden></span><span id="updLast">none</span></div>
+      </div>
+      <div class="hint-box" id="updNote" hidden></div>
+      <div class="actions">
+        <button class="btn btn-ghost" id="checkUpdatesBtn">Check now</button>
+        <button class="btn btn-primary" id="updateNowBtn" hidden>Update now</button>
+        <span id="updStatus" class="status" role="status"></span>
+      </div>
+    </div>
+  </div>
 </div>
 
 </div><!-- /shell-main -->
@@ -1373,7 +1413,7 @@
   const sectionOf = el => el && el.closest('.panel, .provider-card');
   document.querySelector('.page').addEventListener('input', e => {
     const sec = sectionOf(e.target);
-    if (sec && !sec.closest('#pane-usage')) _dirty.add(sec);
+    if (sec && !sec.closest('#pane-usage, #pane-updates')) _dirty.add(sec);  // the update mode saves as it changes
   });
   document.querySelector('.page').addEventListener('click', e => {
     const b = e.target.closest('button');
@@ -1446,11 +1486,13 @@
       const pane = t.dataset.pane;
       document.getElementById('pane-' + pane).classList.add('active');
       if (pane !== 'rag') _stopRagPoller();
+      if (pane !== 'updates') clearTimeout(_updPoll);
       if (_loaders[pane] && !_loaded.has(pane)) { _loaded.add(pane); _loaders[pane](); }
       else if (pane === 'rag') refreshRagStatus();  // status only; the form keeps its edits
       if (pane === 'users') loadUsers();            // read-only table; the create form is untouched
       if (pane === 'usage') loadUsage();            // read-only telemetry
       if (pane === 'license') loadLicense();        // read-only panel; the paste box is untouched
+      if (pane === 'updates') loadUpdates();        // read-only panel; the mode saves as it changes
   }
   document.querySelectorAll('.tab').forEach(t => { t.onclick = () => openTab(t); });
   // Arrow keys, Home and End move between tabs: the ARIA tabs pattern the markup promises.
@@ -2863,6 +2905,127 @@
     try {
       _licenseChanged(await api('/api/admin/license', send('PUT', { license: '' })));
       setStatus(st, 'License removed ✓', 'ok');
+    } catch(e) {
+      setStatus(st, 'Error: ' + e.message, 'err');
+    }
+  };
+
+  // ─── Updates ─────────────────────────────────────────────────
+  // GET /api/admin/updates: the version, the mode, the last check (its result, or why it
+  // failed), the latest release and whether it verified, the last update's outcome, and
+  // why this install can only be told (if so). Everything from the server (tags, reasons,
+  // times) goes in with textContent: none of it is HTML.
+  const MODE_NOTES = {
+    off: 'Nothing is checked.',
+    notify: 'A daily check; admins are told here, by a dot on the Settings link and by nullshift update --check.',
+    auto: 'The daily check, then the update by itself when this install can update itself (it waits for a quiet moment first).',
+  };
+  const upd = id => document.getElementById(id);
+  let _updPoll = null, _updStarted = false, _updLatest = null;
+
+  function renderUpdates(j) {
+    const st = j.state || {}, last = st.last_update;
+    _updLatest = st.latest || null;
+    upd('updVersion').textContent = j.version || '—';
+    upd('updMode').value = j.mode || 'notify';
+    upd('updChecked').textContent = j.checking ? 'checking…' : st.checked_at ? fmtAbsTime(st.checked_at) : 'never';
+    upd('updCheckError').hidden = !st.error;
+    upd('updCheckError').textContent = st.error ? 'failed: ' + st.error : '';
+    const pill = upd('updLatestPill'), latest = upd('updLatest');
+    if (!st.checked_at)            { pill.className = 'pill gray';   pill.textContent = 'not checked yet'; latest.textContent = ''; }
+    else if (st.error && !st.latest) { pill.className = 'pill gray'; pill.textContent = 'unknown';         latest.textContent = 'the last check failed'; }
+    else if (!st.latest)           { pill.className = 'pill green';  pill.textContent = 'up to date';      latest.textContent = 'no release newer than ' + (j.version || ''); }
+    else if (st.verify === 'verified') { pill.className = 'pill green'; pill.textContent = 'update available'; latest.textContent = st.latest + ' — verified'; }
+    else                           { pill.className = 'pill yellow'; pill.textContent = 'update available'; latest.textContent = st.latest + ' ' + (st.verify || ''); }
+    const lp = upd('updLastPill'), lt = upd('updLast');
+    if (j.running) {
+      lp.hidden = false; lp.className = 'pill yellow'; lp.textContent = 'running';
+      lt.textContent = `updating to ${j.running.tag} (process ${j.running.pid}, started ${fmtAbsTime(j.running.started_at)})`;
+    } else if (last) {
+      const ok = last.result === 'updated', rolled = String(last.result || '').startsWith('rolled back');
+      lp.hidden = false; lp.className = 'pill ' + (ok ? 'green' : 'red'); lp.textContent = ok ? 'ok' : rolled ? 'rolled back' : 'failed';
+      lt.textContent = (last.tag ? last.tag + ': ' : '') + (last.result || '') + (last.finished_at ? ' · ' + fmtAbsTime(last.finished_at) : '')
+        + (last.rolled_back_from ? ' · rolled back from commit ' + String(last.rolled_back_from).slice(0, 12) : '');
+    } else { lp.hidden = true; lt.textContent = 'none'; }
+    // why this install is only told: its layout (Docker, a development tree, local edits…), this release
+    // (local commits, not signed), or no release key embedded in this version yet
+    let note = '';
+    if (j.reason) note = 'This install can only be told about releases: ' + j.reason + '. ' + (j.docker ? 'Rebuild the image instead: ' + j.docker_steps : 'Install a new release by hand.');
+    else if (st.reason) note = 'This install can only be told about this release: ' + st.reason + '.';
+    else if (st.latest && st.verify !== 'verified') note = st.latest + ' ' + st.verify + ': nothing unverified is ever installed.';
+    else if (!j.signed_releases) note = 'No release key is embedded in this version yet, so no release can verify: Auto never updates, and a newer release is installed by hand.';
+    upd('updNote').hidden = !note;
+    upd('updNote').textContent = note;
+    upd('updateNowBtn').hidden = !j.can_update;
+    upd('checkUpdatesBtn').disabled = !!j.checking || j.mode === 'off';
+    upd('checkUpdatesBtn').title = j.mode === 'off' ? 'Nothing is checked while the mode is Off' : '';
+    return j;
+  }
+
+  async function loadUpdates() {
+    try {
+      const j = renderUpdates(await api('/api/admin/updates'));
+      if (j.checking || j.running) _pollUpdates(upd('updStatus'));
+    } catch(e) {
+      setStatus(upd('updStatus'), 'Error: ' + e.message, 'err');
+    }
+  }
+
+  // A check runs in a server thread (it fetches from the repository, up to 30 s) and an update as its
+  // own process: poll until neither is going. The restart an update performs cuts the connection for a
+  // moment; that is not an error.
+  function _pollUpdates(st) {
+    clearTimeout(_updPoll);
+    _updPoll = setTimeout(async () => {
+      try {
+        const j = renderUpdates(await api('/api/admin/updates'));
+        if (j.checking || j.running) return _pollUpdates(st);
+        const s = j.state || {};
+        if (_updStarted) { _updStarted = false; setStatus(st, 'NullShift restarted. Reload this page to use the new release.', 'ok'); }
+        else if (s.error) setStatus(st, 'The check failed: ' + s.error, 'err');
+        else if (!s.latest) setStatus(st, 'Checked: up to date', 'ok');
+        else if (s.verify === 'verified') setStatus(st, 'Checked: ' + s.latest + ' is available', 'ok');
+        else setStatus(st, 'Checked: ' + s.latest + ' ' + s.verify, 'warn');
+      } catch(e) {
+        if (_updStarted) { setStatus(st, 'NullShift is restarting: reload this page in a minute.', 'warn'); return _pollUpdates(st); }
+        setStatus(st, 'Error: ' + e.message, 'err');
+      }
+    }, 2000);
+  }
+
+  upd('updMode').onchange = async e => {
+    const st = upd('updModeStatus'), mode = e.target.value;
+    setStatus(st, 'Saving…');
+    try {
+      renderUpdates(await api('/api/admin/updates/mode', send('PUT', { mode })));
+      setStatus(st, 'Saved ✓ ' + MODE_NOTES[mode], 'ok');
+    } catch(err) {
+      setStatus(st, 'Error: ' + err.message, 'err');
+      loadUpdates();
+    }
+  };
+
+  upd('checkUpdatesBtn').onclick = async () => {
+    const st = upd('updStatus');
+    setStatus(st, 'Checking…');
+    try {
+      renderUpdates(await api('/api/admin/updates/check', send('POST')));
+      _pollUpdates(st);
+    } catch(e) {
+      setStatus(st, 'Error: ' + e.message, 'err');
+    }
+  };
+
+  upd('updateNowBtn').onclick = async () => {
+    const st = upd('updStatus'), tag = _updLatest || 'the newest release';
+    if (!await ask({ title: `Update NullShift to ${tag}?`, yes: 'Update now',
+        body: 'The new release’s dependencies are installed, the code moves to the release and NullShift restarts: the console is unavailable for a moment and running investigations stop. If the restarted server fails its health check, the previous release is restored.' })) return;
+    setStatus(st, 'Starting the update…');
+    try {
+      renderUpdates(await api('/api/admin/updates/update', send('POST')));
+      _updStarted = true;
+      setStatus(st, 'Update started: NullShift restarts in a moment.', 'ok');
+      _pollUpdates(st);
     } catch(e) {
       setStatus(st, 'Error: ' + e.message, 'err');
     }

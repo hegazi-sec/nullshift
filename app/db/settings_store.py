@@ -18,6 +18,7 @@ Recognized keys (defined in ALLOWED_KEYS below):
 - SIEM connector keys (siem_provider, wazuh_*, splunk_*, elastic_*, sentinel_*, limacharlie_*)
 - setup_complete: 'true' | 'false'
 - jwt_secret: the runtime JWT secret (used when JWT_SECRET env var is not set)
+- update_mode / update_state: the release updates (app/updater.py)
 
 Stored in config.db (separate from chat.db which holds user/chat data).
 """
@@ -132,6 +133,10 @@ ALLOWED_KEYS = frozenset({
     "license_clock",
     "license_checked_at",
     "license_revoked",
+    # Updates (app/updater.py, docs/UPDATES.md): the mode ('off' | 'notify' | 'auto') and the
+    # bookkeeping of the daily check and the last update (JSON). Neither is secret.
+    "update_mode",
+    "update_state",
     # Setup / Auth
     "setup_complete",
     "jwt_secret",
@@ -141,6 +146,11 @@ ALLOWED_KEYS = frozenset({
 # clock): the generic settings PUT refuses them, or a saved license, this install's
 # identity or the rollback clock could be rewritten by hand.
 LICENSE_KEYS = frozenset({"license", "install_id", "license_clock", "license_checked_at", "license_revoked"})
+
+# Written only by app/updater.py (PUT /api/admin/updates/mode, `nullshift update --mode`,
+# the check and the update themselves): the generic settings PUT refuses them, or an
+# unchecked mode or a forged check result could be written by hand.
+UPDATE_KEYS = frozenset({"update_mode", "update_state"})
 
 # Keys whose values must never be returned in full over the API. We surface
 # a `<set>` flag + last 4 chars so an admin can tell whether a key is

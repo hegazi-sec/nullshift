@@ -105,6 +105,10 @@ class Settings(BaseSettings):
     # unknown keys. Neither is stored in config.db.
     NULLSHIFT_MACHINE_ID: Optional[str] = None      # the raw hardware id to hash (Docker; any override)
     NULLSHIFT_LICENSE_SERVER: Optional[str] = None  # overrides https://nullshift.cyber-pillar.com
+    # Release updates (app/updater.py), read the same way: the GitHub repository whose tags
+    # are checked when there is no git checkout, and "this is a Docker image" (notify only).
+    NULLSHIFT_UPDATE_REPO: Optional[str] = None     # overrides hegazi-sec/nullshift
+    NULLSHIFT_IN_DOCKER: Optional[str] = None       # any value: the install runs in a Docker image
 
     class Config:
         env_file = ".env"

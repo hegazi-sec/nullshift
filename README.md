@@ -63,7 +63,8 @@ nullshift status     # check if it's running, see URL + PID + uptime
 nullshift logs       # stream live server logs (Ctrl+C to exit)
 nullshift stop       # stop the server
 nullshift restart    # restart
-nullshift update     # pull latest from GitHub, refresh deps, restart
+nullshift update     # move to the newest signed release (deps, fast-forward, restart, health check)
+nullshift update --check              # only report; --mode off|notify|auto sets the daily check
 nullshift setup      # re-run the configuration wizard
 nullshift passwd     # set a user's password (nullshift passwd [username], default admin)
 nullshift activate NS-XXXXX-XXXXX-XXXXX-XXXXX   # activate NullShift Pro with a product key
@@ -113,6 +114,15 @@ Almost everything is configured through the **Admin UI** at `/admin` — no rest
 - **Users** — manage analyst accounts (admin, L1, L2 roles).
 
 Settings are persisted in a SQLite database (`app/data/config.db`). All changes apply immediately thanks to the settings proxy layer in `app/config.py`.
+
+## Updates
+
+NullShift tells you about new releases and, if you let it, installs them. The details are in [docs/UPDATES.md](docs/UPDATES.md).
+
+- **Signed releases.** A release is a git tag `vX.Y.Z` signed with Cyber-Pillar's release key. Every install verifies a tag with the copy of the key it already holds (`ALLOWED_SIGNERS` in `app/updater.py`), so nothing unsigned, or signed by anyone else, is ever installed, not even from a compromised repository. Until the key ships, releases are reported and installed by hand.
+- **Modes** (Settings › Updates, admin; `nullshift update --mode off|notify|auto`). **Off**: nothing is checked. **Notify** (default): a daily check; "Update available" in Settings › Updates, a dot on the Settings link, and `nullshift update --check` says the same. **Auto**: the daily check, then the update by itself, after waiting for a moment with no investigation running (up to 6 hours).
+- **What updates itself.** A clean `git clone` of the release repository. `nullshift update` (or *Update now*, or Auto) installs the new release's dependencies first, fast-forwards to the tag, restarts the server and checks `/health`; if the restarted server fails, it rolls back to the previous commit and dependencies and says so. A tree with local edits or commits, a development tree whose git root is a parent folder, or a zip download is only told about the release, with the reason shown.
+- **Docker.** A container is only told about a release (`/.dockerenv`, or `NULLSHIFT_IN_DOCKER=1`); rebuild the image instead: `git pull && docker compose build --no-cache && docker compose up -d`.
 
 ## Using the Console
 

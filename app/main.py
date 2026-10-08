@@ -13,13 +13,14 @@ from app.llm import (
     get_last_call_info, get_last_rate_limit_info,
     _is_ollama_active, validate_and_retry_if_needed, tools_available,
 )
-from app.db.settings_store import settings_store, mask_for_api, ALLOWED_KEYS, SECRET_KEYS, LICENSE_KEYS
+from app.db.settings_store import settings_store, mask_for_api, ALLOWED_KEYS, SECRET_KEYS, LICENSE_KEYS, UPDATE_KEYS
 from app.execution.tool_runner import ToolRunner
 from app.execution.investigation_service import run_investigation
 from app.playbooks.runner import PlaybookRunner, SPARSE_THRESHOLD
 from app.prompts import SYSTEM_PROMPT, VERDICT_ASK
 from app import licensing
 from app import pro_package  # imported with the app: its LOADED_SHA is the Pro package this process started with
+from app import updater
 from app import rag as _rag_mod
 from app.auth import router as auth_router, get_current_user, require_admin, init_auth_startup, _validate_csrf, html_page
 from app.db.chat_store import store
@@ -1282,8 +1283,9 @@ def api_admin_put_settings(
     # may post a few defaults we don't care about, and we don't want a typo
     # to wipe a real key. Whitelist is the safety net.
     # the license only through PUT /api/admin/license, which verifies it before it replaces
-    # one; its bookkeeping (install_id, the rollback clock, the last check-in) only by licensing.py
-    cleaned = {k: v for k, v in payload.items() if k in ALLOWED_KEYS and k not in LICENSE_KEYS}
+    # one; its bookkeeping (install_id, the rollback clock, the last check-in) only by licensing.py;
+    # the update mode only through PUT /api/admin/updates/mode, its state only by updater.py
+    cleaned = {k: v for k, v in payload.items() if k in ALLOWED_KEYS and k not in LICENSE_KEYS | UPDATE_KEYS}
     if not cleaned:
         raise HTTPException(status_code=400, detail="No recognized settings in payload")
     _check_routing_payload(cleaned)
@@ -2116,6 +2118,59 @@ def api_admin_license_promo_activate(current_user: Dict[str, Any] = Depends(_req
              current_user["username"])
     pro = pro_package.sync()
     return {**licensing.status(), "pro_sync": pro}
+
+
+# ─── Updates (docs/UPDATES.md) ───────────────────────────────────────────────
+
+@app.on_event("startup")
+def _start_update_loop():
+    """The daily release check (and, in Auto, the update) in a daemon thread. Failures
+    are logged; nothing here can stop the app."""
+    try:
+        updater.start_loop()
+    except Exception:
+        log.exception("Update check loop did not start")
+
+
+@app.get('/api/admin/updates')
+def api_admin_updates(_: Dict[str, Any] = Depends(require_admin)):
+    """Settings › Updates: the version, mode, the last check and its result, the last
+    update's outcome, and why this install can only be notified (if so)."""
+    return updater.status()
+
+
+@app.put('/api/admin/updates/mode')
+def api_admin_updates_mode(payload: Dict[str, Any], current_user: Dict[str, Any] = Depends(_require_admin_csrf)):
+    """off | notify | auto. The only way the mode is written through the API: the generic
+    settings PUT refuses update_mode."""
+    try:
+        m = updater.set_mode(str(payload.get("mode") or ""), updated_by=current_user["id"])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    log.info("Update mode set to %s by %s", m, current_user["username"])
+    return updater.status()
+
+
+@app.post('/api/admin/updates/check')
+def api_admin_updates_check(current_user: Dict[str, Any] = Depends(_require_admin_csrf)):
+    """"Check now": the check runs in its own thread (it fetches from the repository, up to
+    30 s); the UI polls GET /api/admin/updates until `checking` is false."""
+    r = updater.check_now()
+    log.info("Update check started by %s", current_user["username"])
+    return {**r, **updater.status()}
+
+
+@app.post('/api/admin/updates/update')
+def api_admin_updates_update(current_user: Dict[str, Any] = Depends(_require_admin_csrf)):
+    """"Update now": `nullshift update` as a detached process, so it survives the restart
+    it performs. Refused (409, with the reason) when this install cannot update itself,
+    no verified update is known, or one is already running."""
+    r = updater.launch_detached()
+    if not r["started"]:
+        log.info("Update now by %s refused: %s", current_user["username"], r["reason"])
+        raise HTTPException(status_code=409, detail=r["reason"])
+    log.info("Update started by %s (process %s)", current_user["username"], r["pid"])
+    return {**r, **updater.status()}
 
 
 @app.get('/api/onboarding')

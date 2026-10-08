@@ -1283,6 +1283,7 @@
     }
     .pop-menu > a:hover, .pop-menu > button:hover, .pop-menu > a:focus-visible, .pop-menu > button:focus-visible { background: rgba(0,180,216,.08); outline: none; }
     .acct-menu { position: fixed; inset: auto auto 12px 96px; }
+    .upd-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }  /* a verified release is available (admins) */
     .acct-who { display: flex; flex-direction: column; gap: 1px; padding: var(--sp-2) var(--sp-3) var(--sp-3); margin-bottom: var(--sp-1); border-bottom: 1px solid var(--border2); }
     .acct-who b { font-size: var(--fs-4); }
     .acct-who span { font-size: var(--fs-2); color: var(--muted); }
@@ -1496,7 +1497,7 @@
 <div class="pop-menu acct-menu" id="acctMenu" popover>
   <div class="acct-who"><b id="acctName">Signed in</b><span id="acctRole"></span></div>
   <a class="narrow-only" href="#/agents">Agents <span class="tag tag-pro" hidden>Pro</span></a>
-  <a id="adminLink" href="/admin" hidden>Settings</a>
+  <a id="adminLink" href="/admin" hidden>Settings <span class="upd-dot" id="updateDot" hidden><span class="sr-only">New release available</span></span></a>
   <button type="button" id="keysBtn">Keyboard shortcuts <kbd>?</kbd></button>
   <button type="button" id="notifyBtn" aria-pressed="false">Notifications: off</button>
   <button type="button" id="densityBtn" aria-pressed="false">Density: comfortable</button>
@@ -3458,6 +3459,18 @@ const ONBOARD_STEPS = [
 ]
 const onboardEl = $('onboard')
 
+// The dot on the Settings link (admins): a verified NullShift release this install will not
+// install by itself (Notify, or Auto where only notifying is possible); Settings › Updates has it.
+async function loadUpdateNotice() {
+  const dot = $('updateDot')
+  if (conn.role !== 'admin') { dot.hidden = true; return }
+  try {
+    const j = await apiJSON('/api/admin/updates')
+    dot.hidden = !j.notice
+    dot.title = j.notice ? `NullShift ${j.notice} is available: Settings › Updates` : ''
+  } catch {}
+}
+
 async function loadOnboarding() {
   if (conn.role !== 'admin' || welcomeEl.hidden) { onboardEl.hidden = true; return }
   let d, prefs
@@ -5298,6 +5311,7 @@ async function ping() {
     conn.role = j.user?.role || ''
     conn.ready = !!j.model_ready
     $('adminLink').hidden = conn.role !== 'admin'
+    loadUpdateNotice()
     $('acctName').textContent = conn.user
     $('acctRole').textContent = { admin: 'Admin', l2: 'L2 analyst', l1: 'L1 analyst' }[conn.role] || conn.role
     $('acctInitial').textContent = conn.user.slice(0, 1)

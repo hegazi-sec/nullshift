@@ -8,7 +8,9 @@ Usage:
     nullshift status    Show server status and URL
     nullshift logs      Stream live server logs (Ctrl+C to exit)
     nullshift setup     Run the configuration wizard
-    nullshift update    Pull latest from GitHub, refresh dependencies, restart
+    nullshift update    Move to the newest signed release: its dependencies, git merge --ff-only, restart,
+                        health check (rolled back if it fails); nullshift update --check only reports;
+                        nullshift update --mode off|notify|auto sets the daily check's mode (docs/UPDATES.md)
     nullshift passwd    Set a user's password (nullshift passwd [username], default admin)
     nullshift activate  Activate NullShift Pro with a product key (nullshift activate <KEY>)
     nullshift license   Show the license, or install a .lic file (nullshift license <file>);
@@ -243,128 +245,116 @@ def cmd_setup() -> None:
     subprocess.run([exe, str(BASE / 'setup.py')])
 
 
+def _updater():
+    """app/updater.py, with the repo on the path and as the working directory (.env, the
+    data folder), as the other commands that use app/ do."""
+    sys.path.insert(0, str(BASE))
+    os.chdir(BASE)
+    from app import updater
+    return updater
+
+
 def _local_changes(porcelain: str) -> list[str]:
     """The `git status --porcelain` lines that are the user's own changes. A downloaded Pro
     package (app/pro/ holding .package.json) is untracked in a public clone and is not one:
-    an update must not stop for it."""
-    lines = [line for line in porcelain.splitlines() if line.strip()]
-    if (BASE / 'app' / 'pro' / '.package.json').exists():
-        def is_package(line: str) -> bool:
-            path = line[3:].replace('\\', '/').rstrip('/')  # `XY path`
-            return path == 'app/pro' or path.startswith('app/pro/')
-        lines = [line for line in lines if not is_package(line)]
-    return lines
+    an update must not stop for it. The filter lives in app/updater.py, which uses it to
+    tell a release checkout from a tree with local edits."""
+    return _updater().local_changes(porcelain, BASE)
+
+
+MODE_TEXT = {
+    'off': 'nothing is checked',
+    'notify': 'a daily check; admins are told in Settings › Updates (and by nullshift update --check)',
+    'auto': 'a daily check, then the update by itself (when this install can update itself)',
+}
+
+
+def _print_check(st, updater) -> None:
+    """What `nullshift update --check` says: the same as Settings › Updates."""
+    print(f'  NullShift {_bold(updater.VERSION)}  {_muted("mode: " + updater.mode())}')
+    if st['error']:
+        print(_red(f'✗ The check failed: {st["error"]}'))
+        sys.exit(1)
+    if not st['latest']:
+        print(f'  {_green("✓")} Up to date: no newer release')
+        return
+    if st['verify'] == updater.VERIFIED:
+        print(f'  {_cyan("●")} Update available: {_bold(st["latest"])} (verified)')
+    else:
+        print(f'  {_cyan("●")} Update available: {_bold(st["latest"])} — {st["latest"]} {st["verify"]}')
+    if st['reason']:
+        print(_muted(f'  This install can only be notified: {st["reason"]}'))
+    elif st['updatable']:
+        print(f'  Install it with:  {_cyan("nullshift update")}')
+
+
+def _restart_for_update() -> None:
+    """cmd_restart for the updater. A start that fails exits the CLI (sys.exit); in an update
+    that must become a failed health check and a rollback, not the end of the process."""
+    try:
+        cmd_restart()
+    except SystemExit as e:
+        raise RuntimeError(f'nullshift restart failed (exit {e.code}): see nullshift logs')
 
 
 def cmd_update() -> None:
-    """Pull the latest from origin/main, refresh dependencies, and restart."""
-    if not (BASE / '.git').exists():
-        print(_red('✗ Not a git repository.'))
-        print(f'  This command only works when NullShift was installed via git clone.')
+    """nullshift update — move this release checkout to the newest verified release: the new
+    release's dependencies first, git merge --ff-only, the restart, a health check and a
+    rollback to the previous commit if it fails (docs/UPDATES.md). Refused with the reason
+    for anything but a clean release checkout. nullshift update --check only reports (what
+    Settings › Updates shows); nullshift update --mode off|notify|auto sets the daily
+    check's mode."""
+    updater = _updater()
+    args = sys.argv[2:]
+    if args and args[0] == '--mode':
+        if len(args) != 2:
+            print(_red('✗ Usage: nullshift update --mode off|notify|auto'))
+            sys.exit(1)
+        try:
+            mode = updater.set_mode(args[1])
+        except ValueError as e:
+            print(_red(f'✗ {e}'))
+            sys.exit(1)
+        print(f'{_green("✓")} Update mode: {_bold(mode)} — {MODE_TEXT[mode]}')
+        return
+    if args == ['--check']:
+        _print_check(updater.check(), updater)
+        return
+    if args:
+        print(_red('✗ Usage: nullshift update [--check | --mode off|notify|auto]'))
+        sys.exit(1)
+
+    ck = updater.checkout()
+    if ck['dirty']:
+        print(_red('✗ Uncommitted local changes detected:'))
+        print()
+        for line in ck['dirty'][:8]:
+            print(f'    {_muted(line)}')
+        if len(ck['dirty']) > 8:
+            print(f'    {_muted("…")}')
+        print()
+        print('  Commit, stash, or revert your changes before updating.')
+        print(f'  To force a clean update: {_cyan("git stash && nullshift update")}')
+        sys.exit(1)
+    if not ck['release']:
+        print(_red(f'✗ This install cannot update itself: {ck["reason"]}'))
+        if ck['docker']:
+            print(f'  Rebuild the image instead:  {_cyan(updater.DOCKER_STEPS)}')
+        else:
+            print(_muted('  Only a clean clone of the release repository updates itself; nullshift update --check still reports.'))
         sys.exit(1)
 
     print(f'  {_bold("Updating NullShift…")}')
     print()
-
-    # 1) Warn about uncommitted local changes
-    try:
-        dirty = _local_changes(subprocess.run(
-            ['git', '-C', str(BASE), 'status', '--porcelain'],
-            capture_output=True, text=True, check=True,
-        ).stdout)
-        if dirty:
-            print(_red('✗ Uncommitted local changes detected:'))
-            print()
-            for line in dirty[:8]:
-                print(f'    {_muted(line)}')
-            if len(dirty) > 8:
-                print(f'    {_muted("…")}')
-            print()
-            print('  Commit, stash, or revert your changes before updating.')
-            print(f'  To force a clean update: {_cyan("git stash && nullshift update")}')
-            sys.exit(1)
-    except subprocess.CalledProcessError:
-        print(_red('✗ Could not check git status. Aborting.'))
-        sys.exit(1)
-
-    # 2) Fetch
-    print(f'  {_muted("◯")} Fetching from origin…')
-    fetch = subprocess.run(
-        ['git', '-C', str(BASE), 'fetch', 'origin', 'main'],
-        capture_output=True, text=True,
-    )
-    if fetch.returncode != 0:
-        print(_red('✗ git fetch failed:'))
-        print(fetch.stderr)
-        sys.exit(1)
-
-    # 3) Determine commits behind
-    behind = subprocess.run(
-        ['git', '-C', str(BASE), 'rev-list', '--count', 'HEAD..origin/main'],
-        capture_output=True, text=True,
-    ).stdout.strip()
-    try:
-        behind_n = int(behind)
-    except ValueError:
-        behind_n = 0
-
-    if behind_n == 0:
-        print(f'  {_green("✓")} Already up to date.')
+    r = updater.update(restart=_restart_for_update, say=lambda step: print(f'  {_muted("◯")} {step}'))
+    if r['result'] == 'current':
+        print(f'  {_green("✓")} Already up to date: NullShift {updater.VERSION} is the newest release.')
         return
-
-    # 4) Preview the new commits
-    print(f'  {_cyan("●")} {behind_n} commit{"s" if behind_n != 1 else ""} behind origin/main:')
-    print()
-    log = subprocess.run(
-        ['git', '-C', str(BASE), 'log', '--oneline', '--no-decorate',
-         f'HEAD..origin/main'],
-        capture_output=True, text=True,
-    ).stdout.strip()
-    for line in log.splitlines()[:10]:
-        print(f'    {_muted("•")} {line}')
-    if behind_n > 10:
-        print(f'    {_muted(f"… and {behind_n - 10} more")}')
-    print()
-
-    # 5) Snapshot requirements.txt to detect dependency changes
-    req_path = BASE / 'requirements.txt'
-    req_before = req_path.read_text() if req_path.exists() else ''
-
-    # 6) Pull
-    print(f'  {_muted("◯")} Pulling…')
-    pull = subprocess.run(
-        ['git', '-C', str(BASE), 'pull', 'origin', 'main', '--ff-only'],
-        capture_output=True, text=True,
-    )
-    if pull.returncode != 0:
-        print(_red('✗ git pull failed:'))
-        print(pull.stderr)
-        sys.exit(1)
-    print(f'  {_green("✓")} Code updated.')
-
-    # 7) Reinstall dependencies if requirements changed
-    req_after = req_path.read_text() if req_path.exists() else ''
-    if req_before != req_after:
-        print(f'  {_muted("◯")} requirements.txt changed — installing updated dependencies…')
-        python = _venv_python()
-        if python.exists():
-            subprocess.run(
-                [str(python), '-m', 'pip', 'install', '-q', '-r', str(req_path)],
-                cwd=str(BASE),
-            )
-            print(f'  {_green("✓")} Dependencies updated.')
-        else:
-            print(f'  {_red("⚠")}  venv missing — run {_cyan("python setup.py")} to recreate it.')
-
-    # 8) Restart the server if it's running
-    pid = _read_pid()
-    if _is_running(pid):
-        print(f'  {_muted("◯")} Restarting server…')
-        cmd_restart()
-    else:
-        print()
-        print(f'  Server was not running.')
-        print(f'  Start it with:  {_cyan("nullshift start")}')
+    if r['ok']:
+        print(f'  {_green("✓")} {r["message"]}')
+        return
+    print(_red(f'✗ {r["message"]}'))
+    sys.exit(1)
 
 
 # ── entry point ───────────────────────────────────────────────────────────────
@@ -623,7 +613,8 @@ def main() -> None:
         print(f'    {_cyan("status")}  Show server status and URL')
         print(f'    {_cyan("logs")}    Stream live server logs  (Ctrl+C to exit)')
         print(f'    {_cyan("setup")}   Run the configuration wizard')
-        print(f'    {_cyan("update")}  Pull latest from GitHub, refresh dependencies, restart')
+        print(f'    {_cyan("update")}  Move to the newest signed release (deps, git merge --ff-only, restart, health check)')
+        print(f'             --check only reports; --mode off|notify|auto sets the daily check (default notify)')
         print(f'    {_cyan("passwd")}  Set a user\'s password  (nullshift passwd [username], default admin)')
         print(f'    {_cyan("activate")} Activate NullShift Pro with a product key  (nullshift activate <KEY> [--transfer])')
         print(f'    {_cyan("license")} Show the license, or install a .lic file  (nullshift license <file>)')
