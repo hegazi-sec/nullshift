@@ -105,8 +105,13 @@ startup sync fetches the package for its `PRO_API`.
    `ssh-keygen -t ed25519 -C release@cyber-pillar.com -f ~/.ssh/nullshift-release`
 2. Bump `VERSION` (app/version.py) and `pyproject.toml`, commit, sync the
    public repo.
-3. Sign and push the tag in **both** repositories:
-   `git -c gpg.format=ssh -c user.signingkey=~/.ssh/nullshift-release.pub tag -s v0.3.0 -m "NullShift 0.3.0"`
-   then `git push origin v0.3.0` (and the public remote).
+3. Sign and push the tag, in a clean clone of each repository you release
+   (the public and private repositories have separate histories, so never
+   tag both from one checkout). Point git at the **private** key, so
+   ssh-keygen asks for its passphrase (the `.pub` path only works with the
+   key loaded in ssh-agent):
+   `git -c gpg.format=ssh -c user.signingkey="$HOME/.ssh/nullshift-release" tag -s v0.3.0 <commit> -m "NullShift 0.3.0"`
+   then `git push origin v0.3.0`. v0.3.0 was the first, on public
+   `a69c7b1` (2026-10-08).
 4. If core changed what `app/pro` relies on, bump `PRO_API` and publish the
    Pro package first.

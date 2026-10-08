@@ -12,6 +12,10 @@
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-2a3a55?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Made by Ahmed Hegazi](https://img.shields.io/badge/Made_by-Ahmed_Hegazi-eab308?style=flat-square)](#author)
 
+<img src="docs/demo.gif" alt="A critical alert arrives, one click investigates it, NullShift answers Malicious with the evidence and IOCs, answers a follow-up question, and the alert is escalated to a case" width="800"/>
+
+<sub>Alert in → one-click investigation → verdict with evidence and IOCs → follow-up → case. Demo data; AI waits sped up.</sub>
+
 </div>
 
 ---
