@@ -1,14 +1,13 @@
 # Updates
 
 How a NullShift install learns about, and optionally installs, a new
-release from GitHub (2026-10). The Pro package already updates itself
-(`nullshift pro sync`); this is about the core.
+release from GitHub (2026-10).
 
 ## Releases
 
 A release is a **signed git tag** `vMAJOR.MINOR.PATCH` (e.g. `v0.3.0`) on
 the repository the install was cloned from (public `hegazi-sec/nullshift`,
-or the private repo). `app/version.py` holds `VERSION` ("0.3.0"); a release
+or the private repo). `app/version.py` holds `VERSION` ("0.4.0"); a release
 bumps it (and `pyproject.toml`) in the commit the tag points to.
 
 Tags are signed with Cyber-Pillar's **release SSH key**. Its public key is
@@ -16,9 +15,10 @@ embedded in `app/updater.py` (`ALLOWED_SIGNERS`, git's allowed-signers
 format, principal `release@cyber-pillar.com`). An install verifies a tag
 with **its own** embedded key (never one fetched with the update), so a
 compromised GitHub repository cannot ship an update. Rotating the key is a
-release signed by the old key that adds the new one. Until the key exists
-`ALLOWED_SIGNERS` is empty: nothing verifies, so Auto never updates, and
-Notify says the newer release "is not signed; update manually".
+release signed by the old key that adds the new one. The key has been
+embedded since 0.3.0. A build whose `ALLOWED_SIGNERS` is empty verifies
+nothing: Auto never updates, and Notify says the newer release "is not
+signed; update manually".
 
 Unsigned tags (`v0.1.0`, `v0.2.0`) and any tag whose signature does not
 verify are never installed automatically.
@@ -39,8 +39,9 @@ update and its result, the commit rolled back from).
 
 Only a **release checkout**: the NullShift folder is the top level of its
 own git repository (`git rev-parse --show-toplevel` is this folder), the
-working tree is clean (the same `_local_changes` filter `nullshift update`
-uses), and HEAD is an ancestor of the new tag. Anything else (a development
+working tree is clean (`git status --porcelain` lists nothing: no tracked
+change and no untracked file that `.gitignore` does not cover), and HEAD is
+an ancestor of the new tag. Anything else (a development
 tree where the git root is a parent folder, local edits, local commits, a
 zip download without `.git`, Docker) is **notify only**, with the reason
 shown. Docker is detected (`/.dockerenv` or `NULLSHIFT_IN_DOCKER`): the
@@ -49,11 +50,13 @@ message gives the rebuild steps (`git pull`, `docker compose build
 
 ## The check (daily, plus "Check now")
 
-- In a git checkout: `git fetch --tags --quiet origin`, then the highest
+- In its own git checkout (the repository's top level is this folder, clean
+  or not): `git fetch --tags --quiet origin`, then the highest
   `v*` semver tag above `VERSION`, then `git verify-tag` with
   `gpg.format=ssh` and an allowed-signers file written from
   `ALLOWED_SIGNERS` to a temp file. Its result is "verified" or the reason.
-- Without git (zip, Docker image): the GitHub tags API of
+- Otherwise (a zip download, a Docker image, a development tree whose git
+  root is a parent folder, or no git): the GitHub tags API of
   `NULLSHIFT_UPDATE_REPO` (default `hegazi-sec/nullshift`), notify only, no
   verification (nothing is installed from it).
 - Never raises; a failure is recorded in `update_state` and retried next
@@ -83,8 +86,7 @@ verified release tag"; `nullshift update --check` only reports;
    tag is not tried again automatically.
 
 Every step is logged (`nullshift.updater`) and the outcome stored in
-`update_state`. The Pro package needs nothing here: the restarted server's
-startup sync fetches the package for its `PRO_API`.
+`update_state`.
 
 ## UI and CLI
 
@@ -96,15 +98,19 @@ startup sync fetches the package for its `PRO_API`.
 - A small dot on the Settings link for admins when a verified update is
   available (Notify).
 - CLI: `nullshift update`, `nullshift update --check`, `nullshift update
-  --mode …`; `nullshift license`/`status` unchanged.
+  --mode …`; `nullshift status` unchanged.
 
 ## Release checklist (owner)
 
 1. Once: create the release key with a passphrase and send its public half
    to be embedded:
    `ssh-keygen -t ed25519 -C release@cyber-pillar.com -f ~/.ssh/nullshift-release`
-2. Bump `VERSION` (app/version.py) and `pyproject.toml`, commit, sync the
-   public repo.
+2. Bump `VERSION` (app/version.py) and `pyproject.toml`; on a new minor
+   release also the supported version in `SECURITY.md`; set `version` and
+   `date-released` (the day the tag is signed) in `CITATION.cff`. Commit,
+   sync the public repo. Keep the `app/pro/` line in `.gitignore`: an
+   install that ran 0.3.x may still hold that untracked folder, and without
+   the line it stops being a clean release checkout and is only notified.
 3. Sign and push the tag, in a clean clone of each repository you release
    (the public and private repositories have separate histories, so never
    tag both from one checkout). Point git at the **private** key, so
@@ -113,5 +119,3 @@ startup sync fetches the package for its `PRO_API`.
    `git -c gpg.format=ssh -c user.signingkey="$HOME/.ssh/nullshift-release" tag -s v0.3.0 <commit> -m "NullShift 0.3.0"`
    then `git push origin v0.3.0`. v0.3.0 was the first, on public
    `a69c7b1` (2026-10-08).
-4. If core changed what `app/pro` relies on, bump `PRO_API` and publish the
-   Pro package first.

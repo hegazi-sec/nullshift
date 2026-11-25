@@ -271,7 +271,7 @@ class AlertStore:
         """Dashboard aggregates for alerts received in the last `hours`, plus the
         all-time backlog (new / investigating) that the inbox badge counts and the
         arrival time of its oldest unacknowledged alert. The SOC-lead metrics (time to
-        acknowledge and resolve, agent share, rules to tune) are Pro: app/pro/metrics.py."""
+        acknowledge and resolve, agent share, rules to tune) are in app/soc_metrics.py."""
         # ponytail: recomputed on every call and the UI polls each second; fine at
         # thousands of rows, pre-aggregate per hour if the inbox reaches millions
         since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()

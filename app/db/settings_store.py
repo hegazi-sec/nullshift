@@ -123,16 +123,6 @@ ALLOWED_KEYS = frozenset({
     "agents_config",
     # Alert severity per SIEM (JSON: thresholds, words, rule overrides; see app/alert_severity.py)
     "alert_severity",
-    # NullShift Pro license (signed, not secret; see app/licensing.py) and its bookkeeping:
-    # this install's id (licenses are issued to it), the latest time seen (clock rollback
-    # check), the last license-server check-in and why the last license was removed by a
-    # signed revocation (so Settings › License can say the free Pro offer ended). None of
-    # them is secret.
-    "license",
-    "install_id",
-    "license_clock",
-    "license_checked_at",
-    "license_revoked",
     # Updates (app/updater.py, docs/UPDATES.md): the mode ('off' | 'notify' | 'auto') and the
     # bookkeeping of the daily check and the last update (JSON). Neither is secret.
     "update_mode",
@@ -141,11 +131,6 @@ ALLOWED_KEYS = frozenset({
     "setup_complete",
     "jwt_secret",
 })
-
-# Written only by app/licensing.py (PUT /api/admin/license, activation, check-in, the
-# clock): the generic settings PUT refuses them, or a saved license, this install's
-# identity or the rollback clock could be rewritten by hand.
-LICENSE_KEYS = frozenset({"license", "install_id", "license_clock", "license_checked_at", "license_revoked"})
 
 # Written only by app/updater.py (PUT /api/admin/updates/mode, `nullshift update --mode`,
 # the check and the update themselves): the generic settings PUT refuses them, or an

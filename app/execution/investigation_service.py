@@ -24,8 +24,8 @@ def _compute_available_sources() -> List[str]:
     """Which connectors this deployment can actually reach. The LLM is told to
     enumerate only these in SECTION 1 so the report doesn't claim sources are
     'Not retrieved' for connectors this install isn't configured to use."""
-    from app.connectors import connected_siems, siem_available
-    out: List[str] = [s for s in connected_siems() if siem_available(s)]
+    from app.connectors import configured_siems, siem_available
+    out: List[str] = [s for s in configured_siems() if siem_available(s)]
     if settings.VT_API_KEY:
         out.append("virustotal")
     return out
@@ -389,9 +389,9 @@ def run_investigation(intent: str, message: str, time_hint: Optional[str], curre
     # most recent 200 events broadly and let the LLM analyse them. Sending the
     # user's generic English words as keyword filters to the SIEM is worse than
     # useless: it returns 0 results and causes false "Likely Benign" responses.
-    from app.connectors import connected_siems
+    from app.connectors import configured_siems
     # ponytail: one SIEM after another; run them in a thread pool if a 3+ SIEM install feels slow
-    for secondary_siem in [s for s in connected_siems() if s != "wazuh"]:
+    for secondary_siem in [s for s in configured_siems() if s != "wazuh"]:
         ip_re_2 = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")
         ips_in_msg = ip_re_2.findall(message or "")
 

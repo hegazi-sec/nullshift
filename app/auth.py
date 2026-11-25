@@ -10,7 +10,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 import jwt
 from passlib.context import CryptContext
 
-from app import licensing
 from app.db import user_store
 from app.config import settings
 
@@ -345,7 +344,6 @@ async def admin_create_user(request: Request, payload: Dict[str, Any], _: Dict[s
         raise HTTPException(status_code=400, detail=f"password must be at least {MIN_PASSWORD_LEN} characters")
     if user_store.get_user_by_username(username):
         raise HTTPException(status_code=409, detail="username already exists")
-    licensing.check_seat()
     uid = user_store.create_user(username, get_password_hash(password), role)
     return {"id": uid, "username": username, "role": role}
 
@@ -371,8 +369,6 @@ async def admin_enable_user(user_id: int, request: Request, _: Dict[str, Any] = 
     target = user_store.get_user_by_id(user_id)
     if not target:
         raise HTTPException(status_code=404, detail="user not found")
-    if not target["is_active"]:
-        licensing.check_seat()
     _set_user_active(user_id, True)
     return {"status": "enabled", "id": user_id}
 

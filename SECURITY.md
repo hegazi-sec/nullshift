@@ -8,8 +8,8 @@ Only the latest minor release receives patches.
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | Yes        |
-| < 0.1   | No        |
+| 0.4.x   | Yes       |
+| < 0.4   | No        |
 
 ## Reporting a Vulnerability
 
@@ -57,7 +57,7 @@ NullShift is designed for use **inside a trusted SOC environment** behind a VPN 
 
 ## Sensitive Data Handling
 
-- API keys, SIEM credentials, and the JWT secret live in `app/data/config.db` (SQLite, file mode 0600). They never leave the host.
+- API keys, SIEM credentials, and the JWT secret live in `app/data/config.db` (SQLite, created with the service account's default permissions: restrict the folder yourself, e.g. `chmod 700 app/data`). They never leave the host.
 - Analyst conversations are stored in `app/data/chat.db` scoped per user.
 - LLM requests are sent to the provider you configure — NullShift does not send telemetry to any third party.
 

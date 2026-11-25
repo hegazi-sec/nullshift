@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+import re
 from typing import Optional
 
 
@@ -29,7 +30,7 @@ class Settings(BaseSettings):
 
     # Connected SIEMs, primary first, as a comma list (e.g. "limacharlie,wazuh"; "none" for none).
     # Unset: the single SIEM_PROVIDER (wazuh | splunk | elastic | sentinel | limacharlie),
-    # which the setup wizard writes. Read through app.connectors.connected_siems().
+    # which the setup wizard writes. Read through app.connectors.configured_siems().
     SIEM_PROVIDERS: str = ""
     SIEM_PROVIDER: str = "wazuh"
 
@@ -100,18 +101,15 @@ class Settings(BaseSettings):
     JWT_SECRET: Optional[str] = None
     JWT_EXPIRE_MINUTES: int = 480
 
-    # NullShift Pro licensing (read by app/licensing.py through this class or the process
-    # environment). Declared so a .env that sets them loads: pydantic-settings refuses
-    # unknown keys. Neither is stored in config.db.
-    NULLSHIFT_MACHINE_ID: Optional[str] = None      # the raw hardware id to hash (Docker; any override)
-    NULLSHIFT_LICENSE_SERVER: Optional[str] = None  # overrides https://nullshift.cyber-pillar.com
-    # Release updates (app/updater.py), read the same way: the GitHub repository whose tags
-    # are checked when there is no git checkout, and "this is a Docker image" (notify only).
+    # Release updates (read by app/updater.py through this class or the process environment):
+    # the GitHub repository whose tags are checked when there is no git checkout, and "this
+    # is a Docker image" (notify only). Neither is stored in config.db.
     NULLSHIFT_UPDATE_REPO: Optional[str] = None     # overrides hegazi-sec/nullshift
     NULLSHIFT_IN_DOCKER: Optional[str] = None       # any value: the install runs in a Docker image
 
     class Config:
         env_file = ".env"
+        extra = "ignore"  # a .env key no longer declared here (an older release's) never stops startup
 
     # Lowercase alias properties for convenience in code
     @property
@@ -126,6 +124,25 @@ class Settings(BaseSettings):
         if not url:
             raise ValueError("WAZUH_INDEXER_URL not configured. Set it in .env to enable Wazuh index searches.")
         return url
+
+
+def unknown_env_keys(env_file: str = ".env") -> list:
+    """The .env keys Settings does not declare. They are ignored (Config.extra), so startup
+    names them: a mistyped key would otherwise leave its setting at the default silently.
+    Never raises; an unreadable file or any other problem is no keys."""
+    from pydantic import ValidationError
+    try:
+        class _Strict(Settings):
+            class Config:
+                extra = "forbid"
+        _Strict(_env_file=env_file)
+    except ValidationError as e:
+        keys = {str(err["loc"][0]) for err in e.errors() if err["type"] == "extra_forbidden"}
+        # names only: a malformed line (no "=") reaches here whole, and may hold a secret
+        return sorted(k.upper() for k in keys if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", k))
+    except Exception:
+        pass
+    return []
 
 
 _MISSING = object()

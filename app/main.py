@@ -4,7 +4,7 @@ from app.schemas import (
     ChatRequest, ConversationCreate, MessageCreate, ToolExecuteRequest, PrefsUpdate,
     IncidentCreate, IncidentUpdate, IncidentLink, AlertDismiss, AlertEscalate, AlertGroup, AlertBulk,
 )
-from app.config import settings
+from app.config import settings, unknown_env_keys
 from app.connectors import wazuh, virustotal
 from app.llm import (
     chat_with_history, summarize_messages,
@@ -13,16 +13,17 @@ from app.llm import (
     get_last_call_info, get_last_rate_limit_info,
     _is_ollama_active, validate_and_retry_if_needed, tools_available,
 )
-from app.db.settings_store import settings_store, mask_for_api, ALLOWED_KEYS, SECRET_KEYS, LICENSE_KEYS, UPDATE_KEYS
+from app.db.settings_store import settings_store, mask_for_api, ALLOWED_KEYS, SECRET_KEYS, UPDATE_KEYS
 from app.execution.tool_runner import ToolRunner
 from app.execution.investigation_service import run_investigation
 from app.playbooks.runner import PlaybookRunner, SPARSE_THRESHOLD
 from app.prompts import SYSTEM_PROMPT, VERDICT_ASK
-from app import licensing
-from app import pro_package  # imported with the app: its LOADED_SHA is the Pro package this process started with
+from app import agents
 from app import updater
 from app import rag as _rag_mod
 from app.auth import router as auth_router, get_current_user, require_admin, init_auth_startup, _validate_csrf, html_page
+from app.soc_routes import router as soc_router
+from app.soc_metrics import soc_lead
 from app.db.chat_store import store
 from app.db.investigation_state import inv_state
 from app.db.verdict_store import verdicts as verdict_store, parse_decision
@@ -674,17 +675,9 @@ class _SameOriginWrites:
 # No /docs, /redoc or /openapi.json: they need no login and would hand out the route map.
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(auth_router)
-try:
-    if licensing.PRO_INSTALLED:  # app/pro/ ships only to licensed installs; Community runs without it
-        _pro_problem = pro_package.load_problem()  # an installed package built for another PRO_API is not imported
-        if _pro_problem:
-            raise ImportError(_pro_problem)
-        from app.pro import install as _install_pro
-        _install_pro(app)
-except Exception as e:  # a package that fails to import never stops NullShift: Community keeps running
-    logging.getLogger("nullshift").exception("NullShift Pro (app/pro/) failed to load; running as Community")
-    licensing.PRO_INSTALLED = False
-    licensing.PRO_LOAD_ERROR = f"{type(e).__name__}: {e}"
+app.include_router(soc_router)
+app.router.add_event_handler("startup", agents.start)
+app.router.add_event_handler("shutdown", agents.stop)
 app.add_middleware(_SameOriginWrites)
 
 # Serve static assets (logo, favicon) at /static/
@@ -702,6 +695,16 @@ _playbook_runner = PlaybookRunner()
 @app.on_event("startup")
 async def _startup_init_auth():
     init_auth_startup()
+
+
+@app.on_event("startup")
+def _warn_unknown_env_keys():
+    """Unknown .env keys are ignored (app/config.py), so name them once: a mistyped key
+    would otherwise leave its setting at the default without a word."""
+    unknown = unknown_env_keys()
+    if unknown:
+        log.warning(".env keys that are not NullShift settings and are ignored (a typo, or a key an older "
+                    "release read): %s", ", ".join(unknown))
 
 
 @app.on_event("shutdown")
@@ -839,12 +842,12 @@ def health():
 
 
 @app.get('/debug/siem')
-def debug_siem():
-    """Unauthenticated diagnostic: probe each connected SIEM with a small
+def debug_siem(_: Dict[str, Any] = Depends(require_admin)):
+    """Admin-only diagnostic: probe each connected SIEM with a small
     `recent_alerts` query so we can confirm the connectors are reachable and
     authenticated, without sending a chat."""
-    from app.connectors import connected_siems, get_siem_connector
-    out: Dict[str, Any] = {"connected": connected_siems()}
+    from app.connectors import configured_siems, get_siem_connector
+    out: Dict[str, Any] = {"connected": configured_siems()}
     for provider in out["connected"]:
         out[provider] = _probe_siem(provider, get_siem_connector)
     return out
@@ -878,8 +881,8 @@ def _probe_siem(provider: str, get_siem_connector) -> Dict[str, Any]:
 
 
 @app.get('/debug/llm')
-def debug_llm():
-    """Unauthenticated diagnostic: show which LLM providers the running
+def debug_llm(_: Dict[str, Any] = Depends(require_admin)):
+    """Admin-only diagnostic: show which LLM providers the running
     server has loaded. Helps tell 'env-not-read' from 'sdk-not-installed'
     from 'old-uvicorn-process' apart without restarting."""
     import os, sys
@@ -904,15 +907,14 @@ def debug_llm():
 
 # convenience debugging endpoint to verify Wazuh connectivity/token
 @app.get('/wazuh/token')
-def wazuh_token():
-    """Return the current token (if any) and attempt a trivial search.
-    Use this from curl or the browser to confirm that the WAZUH_API_TOKEN
-    (or user/pass) settings are being applied correctly.  It is intentionally
-    unprotected since it's only for local development.
+def wazuh_token(_: Dict[str, Any] = Depends(require_admin)):
+    """Admin-only: say whether a Wazuh API token is available (never the token itself)
+    and attempt a trivial search, to confirm that the WAZUH_API_TOKEN (or user/pass)
+    settings are being applied correctly.
     """
     from app.connectors import wazuh
     token = wazuh._get_token()
-    result = {"token_present": bool(token), "token": token}
+    result = {"token_present": bool(token)}
     # try a quick search to see if the API responds
     if token:
         try:
@@ -1238,13 +1240,12 @@ def api_admin_get_settings(_: Dict[str, Any] = Depends(require_admin)):
     """Return current settings with API keys masked. The `env_defaults` block
     shows what would be used if the DB override is cleared, so the admin can
     tell whether an empty UI field means 'no key' or 'falling back to .env'."""
-    from app.connectors import configured_siems, connected_siems
+    from app.connectors import configured_siems
     raw = settings_store.get_all()
     return {
         "settings": mask_for_api(raw),
         "allowed_keys": sorted(ALLOWED_KEYS),
-        "connected_siems": connected_siems(),  # effective, primary first (an unset list falls back to .env)
-        "configured_siems": configured_siems(),  # more than connected: Community queries the primary only
+        "configured_siems": configured_siems(),  # effective, primary first (an unset list falls back to .env)
         "env_defaults": {
             "anthropic_api_key_set":   bool(settings.ANTHROPIC_API_KEY),
             "openai_api_key_set":      bool(settings.OPENAI_API_KEY),
@@ -1282,10 +1283,9 @@ def api_admin_put_settings(
     # Drop unknown keys silently rather than 400ing the whole request — UI
     # may post a few defaults we don't care about, and we don't want a typo
     # to wipe a real key. Whitelist is the safety net.
-    # the license only through PUT /api/admin/license, which verifies it before it replaces
-    # one; its bookkeeping (install_id, the rollback clock, the last check-in) only by licensing.py;
-    # the update mode only through PUT /api/admin/updates/mode, its state only by updater.py
-    cleaned = {k: v for k, v in payload.items() if k in ALLOWED_KEYS and k not in LICENSE_KEYS | UPDATE_KEYS}
+    # the update mode only through PUT /api/admin/updates/mode, its state only by updater.py;
+    # the agents' settings only through PUT /api/agents/config, which validates them
+    cleaned = {k: v for k, v in payload.items() if k in ALLOWED_KEYS and k not in UPDATE_KEYS | {"agents_config"}}
     if not cleaned:
         raise HTTPException(status_code=400, detail="No recognized settings in payload")
     _check_routing_payload(cleaned)
@@ -1931,9 +1931,7 @@ def api_dashboard(hours: int = 24, current_user: Dict[str, Any] = Depends(get_cu
     this analyst's own, same scoping as their list endpoints."""
     hours = max(1, min(hours, 720))
     alerts = alerts_inbox.stats(hours)
-    if licensing.has("metrics"):  # absent in Community: the UI shows those tiles as Pro
-        from app.pro.metrics import soc_lead
-        alerts.update(soc_lead(alerts_inbox, alerts["since"]))
+    alerts.update(soc_lead(alerts_inbox, alerts["since"]))
     open_cases = [
         {k: c.get(k) for k in ("id", "case_number", "title", "severity", "status")}
         for c in incident_store.list_for_user(current_user["id"]) if c.get("status") != "closed"
@@ -1988,7 +1986,7 @@ def _severity_view() -> Dict[str, Any]:
         siems.append({"id": sid, "label": base["label"], "fields": base["fields"], "scale": base["scale"],
                       "thresholds": prof["thresholds"], "default_thresholds": base["thresholds"],
                       "words": prof["words"], "default_words": base["words"], "alerts": counts.get(sid, 0)})
-    return {"configured_siem": cfg.get("configured") or "", "connected_siems": cfg.get("connected") or [], "siems": siems,
+    return {"configured_siem": cfg.get("configured") or "", "configured_siems": cfg.get("connected") or [], "siems": siems,
             "rules": cfg.get("rules") or {}, "seen_rules": alerts_inbox.rule_counts()}
 
 
@@ -2008,116 +2006,6 @@ def api_admin_put_alert_severity(payload: Dict[str, Any], current_user: Dict[str
     rescored = alerts_inbox.rescore()
     log.info("Alert severity settings saved by %s; %d alert(s) re-scored", current_user["username"], rescored)
     return {**_severity_view(), "rescored": rescored}
-
-
-@app.on_event("startup")
-def _log_edition():
-    """One line at startup. Never raises: nothing stored in config.db may stop the app."""
-    try:
-        licensing.machine_id()  # computed once per process: its warnings (no id, a container) land in the startup log
-        lic = licensing.current()
-        log.info("Edition: %s", f"Pro license for {lic['customer']}, {lic['state']}, expires {str(lic['expires'])[:10]}"
-                 if lic else "Community (no license)")
-    except Exception:
-        log.exception("Edition could not be read at startup; continuing")
-
-
-@app.on_event("startup")
-def _start_license_checkin():
-    """Moves license_clock and checks the license in with the license server now and
-    every 24h, in a daemon thread. Failures are logged; nothing here can stop the app."""
-    try:
-        licensing.start_checkin_loop()
-    except Exception:
-        log.exception("License check-in loop did not start")
-
-
-@app.get('/api/license')
-def api_license(current_user: Dict[str, Any] = Depends(get_current_user)):
-    """The edition, seats and features on: Settings › License, and the UI's Pro locks.
-    The install's identity (install_id, the machine fingerprint) is for admins only:
-    an analyst gets null for both."""
-    s = licensing.status()
-    if current_user.get("role") != "admin":
-        s["install_id"] = s["machine"] = s["pro_package"] = s["pro_load_error"] = None
-    return s
-
-
-@app.put('/api/admin/license')
-def api_admin_put_license(payload: Dict[str, Any], current_user: Dict[str, Any] = Depends(_require_admin_csrf)):
-    """Save a license (verified first, so a bad paste never replaces a good one; one issued
-    to another install is refused), or remove it with an empty value. An expired license
-    is saved and reported as expired."""
-    blob = str(payload.get("license") or "").strip()
-    if blob:
-        try:
-            lic = licensing.verify(blob)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        log.info("License %s (%s, %s) saved by %s", lic.get("id"), lic.get("customer"), lic["state"], current_user["username"])
-    else:
-        log.info("License removed by %s", current_user["username"])
-    licensing.save(blob or None, updated_by=current_user["id"])
-    return licensing.status()
-
-
-@app.post('/api/admin/license/activate')
-def api_admin_license_activate(payload: Dict[str, Any], current_user: Dict[str, Any] = Depends(_require_admin_csrf)):
-    """Exchange a product key for a license at the license server and save it. `transfer`
-    moves a key on its maximum installs here (the other install loses Pro at its next
-    check-in). Errors answer {"message", "code"}: after a 409 `activation_limit` the UI
-    offers the move. The key is never logged in full: the last 4 characters at most.
-    Then the Pro package follows the license: `pro_sync` in the answer says whether it
-    was downloaded (a restart loads it), is current, or why not (best effort)."""
-    key = str(payload.get("key") or "")
-    transfer = payload.get("transfer") is True
-    try:
-        lic = licensing.activate(key, updated_by=current_user["id"], transfer=transfer)
-    except licensing.ActivationError as e:
-        log.info("Activation with key …%s by %s%s failed: %s (%s)", licensing.last4(key), current_user["username"],
-                 " (transfer)" if transfer else "", e, e.code or e.status)
-        raise HTTPException(status_code=e.status, detail={"message": str(e), "code": e.code})
-    log.info("License %s (%s) %s with key …%s by %s", lic.get("id"), lic.get("customer"),
-             "moved to this install" if transfer else "activated", licensing.last4(key), current_user["username"])
-    pro = pro_package.sync()
-    return {**licensing.status(), "pro_sync": pro}
-
-
-@app.post('/api/admin/license/request-code')
-def api_admin_license_request_code(payload: Dict[str, Any], current_user: Dict[str, Any] = Depends(_require_admin_csrf)):
-    """The offline activation request code for a product key (air-gapped installs):
-    sent to Cyber-Pillar, who answer with a .lic file for the paste box above."""
-    try:
-        return {"code": licensing.request_code(str(payload.get("key") or ""))}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.get('/api/admin/license/promo')
-def api_admin_license_promo(_: Dict[str, Any] = Depends(require_admin)):
-    """Cyber-Pillar's free Pro offer, for the Try NullShift Pro free card: `offered` when
-    the offer is open and this install has no valid license of its own (`licensed` says
-    it has one, and then the license server was not asked: `open` is null). The browser
-    never calls the license server; this backend does, the answer cached ten minutes."""
-    return licensing.promo_offer()
-
-
-@app.post('/api/admin/license/promo')
-def api_admin_license_promo_activate(current_user: Dict[str, Any] = Depends(_require_admin_csrf)):
-    """Turn Pro on with the free offer: a promo license for this install and machine,
-    saved like an activated one, then the Pro package follows it (`pro_sync`, as after a
-    key). Refused with {"message", "code"} while the install holds a live license of its
-    own (409 `licensed`), when the offer is closed (410 `promo_closed`) or full (409
-    `promo_full`), and for the activation errors."""
-    try:
-        lic = licensing.promo_activate(updated_by=current_user["id"])
-    except licensing.ActivationError as e:
-        log.info("Free Pro offer by %s failed: %s (%s)", current_user["username"], e, e.code or e.status)
-        raise HTTPException(status_code=e.status, detail={"message": str(e), "code": e.code})
-    log.info("License %s (%s) activated with the free Pro offer by %s", lic.get("id"), lic.get("customer"),
-             current_user["username"])
-    pro = pro_package.sync()
-    return {**licensing.status(), "pro_sync": pro}
 
 
 # ─── Updates (docs/UPDATES.md) ───────────────────────────────────────────────
@@ -2181,16 +2069,8 @@ def api_onboarding(current_user: Dict[str, Any] = Depends(require_admin)):
         "siem": bool((settings_store.get("webhook_token") or "").strip()),
         "alert": alerts_inbox.count() > 0,
         "investigated": alerts_inbox.any_investigated(),
-        "triage": _triage_on(),
+        "triage": bool(agents.load_config()["triage"]["enabled"]),
     }
-
-
-def _triage_on() -> Optional[bool]:
-    """None without the agents (Community): the checklist then has no Triage step."""
-    if not licensing.has("agents"):
-        return None
-    from app.pro import agents
-    return bool(agents.load_config()["triage"]["enabled"])
 
 
 @app.post('/api/alerts/test')
@@ -2216,7 +2096,7 @@ def api_sync_alerts(current_user: Dict[str, Any] = Depends(get_current_user)):
     on detect_id, so re-pulling what the webhook already delivered is a no-op."""
     # ponytail: LimaCharlie only, fixed 24h window; add a since-last-sync cursor if outages outlast a day
     from app.connectors import configured_siems, get_siem_connector
-    if "limacharlie" not in configured_siems():  # ingestion: every SIEM set up, licensed or not
+    if "limacharlie" not in configured_siems():
         return {"added": 0, "pulled": 0, "note": "Pull refresh is only available for LimaCharlie"}
     conn = get_siem_connector("limacharlie")
     if not conn.is_available():

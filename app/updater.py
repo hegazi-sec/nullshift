@@ -1,6 +1,5 @@
 """Release updates: how an install learns about, and optionally installs, a new NullShift
-release (docs/UPDATES.md). The Pro package updates itself (app/pro_package.py); this is
-the core.
+release (docs/UPDATES.md).
 
 - A release is a signed git tag `vMAJOR.MINOR.PATCH` on the repository the install was
   cloned from. It is verified with ALLOWED_SIGNERS below, this install's own copy of the
@@ -8,7 +7,7 @@ the core.
   ship an update. While the list is empty nothing verifies, so Auto never updates and
   Notify says the release "is not signed; update manually".
 - Only a release checkout updates itself: this folder is the top level of its own git
-  repository, the tree is clean (the `local_changes` filter `nullshift update` uses) and
+  repository, the tree is clean (no tracked change, no untracked file) and
   HEAD is an ancestor of the tag. A development tree whose git root is a parent folder,
   a zip download without .git and a Docker image are told about releases (the GitHub tags
   API, nothing verified or installed) and shown why.
@@ -99,7 +98,7 @@ def _store():
 
 def _setting(name: str) -> str:
     """A NULLSHIFT_* value: from .env through app.config's Settings, else the process
-    environment; "" when neither has it (as app/licensing.py reads its own)."""
+    environment; "" when neither has it."""
     try:
         from app.config import settings
         v = getattr(settings, name, None)
@@ -124,12 +123,18 @@ def set_mode(value: str, updated_by: Optional[int] = None) -> str:
 
 
 def state() -> Dict[str, Any]:
-    """update_state as stored (JSON); {} when there is none or it does not parse."""
+    """update_state as stored (JSON); {} when there is none or it does not parse. A stored
+    latest that is not above VERSION (what the update to this version, or a pull by hand,
+    left behind until the next check) reads as no newer release."""
     try:
         st = json.loads(_store().get("update_state") or "{}")
-        return st if isinstance(st, dict) else {}
     except (ValueError, TypeError):
         return {}
+    if not isinstance(st, dict):
+        return {}
+    if st.get("latest") and (parse_tag(st["latest"]) or (0, 0, 0)) <= current_version():
+        st.update(latest=None, verify=None, updatable=False, reason=None)
+    return st
 
 
 _state_lock = threading.Lock()
@@ -188,17 +193,10 @@ def _git(*args: str, timeout: int = TIMEOUT) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(BASE), *args], capture_output=True, text=True, timeout=timeout)
 
 
-def local_changes(porcelain: str, base: Optional[Path] = None) -> List[str]:
-    """The `git status --porcelain` lines that are the user's own changes. A downloaded Pro
-    package (app/pro/ holding .package.json) is untracked in a public clone and is not one:
-    an update must not stop for it. `nullshift update` uses this same filter."""
-    lines = [line for line in porcelain.splitlines() if line.strip()]
-    if ((base or BASE) / "app" / "pro" / ".package.json").exists():
-        def is_package(line: str) -> bool:
-            path = line[3:].replace("\\", "/").rstrip("/")  # `XY path`
-            return path == "app/pro" or path.startswith("app/pro/")
-        lines = [line for line in lines if not is_package(line)]
-    return lines
+def local_changes(porcelain: str) -> List[str]:
+    """The `git status --porcelain` lines: every tracked change and untracked file is the
+    user's own, and an update stops for any of them."""
+    return [line for line in porcelain.splitlines() if line.strip()]
 
 
 def in_docker() -> bool:

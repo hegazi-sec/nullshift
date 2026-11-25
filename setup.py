@@ -634,7 +634,7 @@ _SIEM_LABEL = {sid: label for sid, label, _, _ in SIEMS}
 
 
 def _connected_siems() -> list:
-    """Same rule as app.connectors.connected_siems: the siem_providers list ("none" = none),
+    """Same rule as app.connectors.configured_siems: the siem_providers list ("none" = none),
     else the single siem_provider older setups wrote."""
     raw = _config_get("siem_providers") or _config_get("siem_provider") or ""
     out: list = []

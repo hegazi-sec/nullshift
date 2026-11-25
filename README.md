@@ -29,21 +29,22 @@ It works with any major LLM provider — Anthropic Claude, OpenAI GPT, or a full
 ## Highlights
 
 - **12 LLM providers** — Claude Agent SDK (use your Claude subscription, no API key), cloud APIs, or fully local Ollama (even hosted on another machine over Tailscale).
-- **5 SIEM connectors, several at once** — Wazuh, LimaCharlie, Splunk, Elastic, Sentinel; every investigation queries all the connected ones (several at once is Pro; Community queries the primary).
+- **5 SIEM connectors, several at once** — Wazuh, LimaCharlie, Splunk, Elastic, Sentinel; every investigation queries all the connected ones.
 - **RAG over your own playbooks** — drop markdown files into `data/kb/` and they're indexed automatically.
 - **Structured investigation reports** — SECTION 1 (evidence) → SECTION 2 (reasoning) → SECTION 3 (verdict).
-- **Case management & reports** — group investigations into cases (`INC-0001`…) with severity, status, verdict, and notes; export Markdown or print-ready HTML/PDF (export is Pro).
+- **Case management & reports** — group investigations into cases (`INC-0001`…) with severity, status, verdict, and notes; export Markdown or print-ready HTML/PDF.
 - **Webhook alert ingestion** — SIEMs push alerts straight into NullShift's inbox; one click turns an alert into a full investigation.
-- **Autonomous SOC agents** *(Pro)* — Triage, Investigator and Reporter work the alert queue on their own. Start them in shadow mode, cap what they may decide by severity and confidence, limit them to after-hours, and keep host isolation behind a human approval.
+- **Autonomous SOC agents** — Triage, Investigator and Reporter work the alert queue on their own. Start them in shadow mode, cap what they may decide by severity and confidence, limit them to after-hours, and keep host isolation behind a human approval.
 - **Alert queue** — a dense table of the inbox with age against severity targets, a "Mine" filter, oldest-first sorting, bulk close / dismiss / add to case, one investigation for several related alerts, and keyboard triage.
 - **Alert workbench** — each alert shows its key facts, the investigation's verdict and summary, and the next decision (close as false positive, escalate to case, ask a follow-up) on one page.
 - **Built for the queue** — search alerts by host or IP across the raw payload, filter by status and severity, undo a dismissal, stop a running investigation, paste or drop screenshots, and move around with keyboard shortcuts.
-- **Live dashboard** — the oldest unacknowledged alert, and with Pro the numbers a SOC lead runs on: mean time to acknowledge and to resolve, how much of the queue the agents picked up, and the rules to tune (most false positives, flagged at 80% or more); plus alert volume, severity, hosts and open cases. Click a count or a bar to open the matching alerts.
+- **Live dashboard** — the oldest unacknowledged alert and the numbers a SOC lead runs on: mean time to acknowledge and to resolve, how much of the queue the agents picked up, and the rules to tune (most false positives, flagged at 80% or more); plus alert volume, severity, hosts and open cases. Click a count or a bar to open the matching alerts.
 - **Automatic IOC enrichment** — IPs, domains, and hashes in each message are checked against VirusTotal automatically.
 - **L1 → L2 handoff mode** — generates ticket-ready summaries with one command.
 - **Per-user temperature, conversation search, verdict tracking, debug traces.**
 - **CLI for daily ops** — `nullshift start/stop/status/logs`.
 - **Single-command setup** — no config files, no manual steps.
+- **All of it open source** — everything above is in this repository under Apache 2.0, for any number of users.
 
 ## Quick Start
 
@@ -71,9 +72,6 @@ nullshift update     # move to the newest signed release (deps, fast-forward, re
 nullshift update --check              # only report; --mode off|notify|auto sets the daily check
 nullshift setup      # re-run the configuration wizard
 nullshift passwd     # set a user's password (nullshift passwd [username], default admin)
-nullshift activate NS-XXXXX-XXXXX-XXXXX-XXXXX   # activate NullShift Pro with a product key
-nullshift license    # show the edition, or load a .lic file: nullshift license acme.lic
-nullshift license request-code <KEY>            # offline activation code for air-gapped networks
 ```
 
 ## Requirements
@@ -123,10 +121,11 @@ Settings are persisted in a SQLite database (`app/data/config.db`). All changes 
 
 NullShift tells you about new releases and, if you let it, installs them. The details are in [docs/UPDATES.md](docs/UPDATES.md).
 
-- **Signed releases.** A release is a git tag `vX.Y.Z` signed with Cyber-Pillar's release key. Every install verifies a tag with the copy of the key it already holds (`ALLOWED_SIGNERS` in `app/updater.py`), so nothing unsigned, or signed by anyone else, is ever installed, not even from a compromised repository. Until the key ships, releases are reported and installed by hand.
+- **Signed releases.** A release is a git tag `vX.Y.Z` signed with Cyber-Pillar's release key. Every install verifies a tag with the copy of the key it already holds (`ALLOWED_SIGNERS` in `app/updater.py`), so nothing unsigned, or signed by anyone else, is ever installed, not even from a compromised repository.
 - **Modes** (Settings › Updates, admin; `nullshift update --mode off|notify|auto`). **Off**: nothing is checked. **Notify** (default): a daily check; "Update available" in Settings › Updates, a dot on the Settings link, and `nullshift update --check` says the same. **Auto**: the daily check, then the update by itself, after waiting for a moment with no investigation running (up to 6 hours).
 - **What updates itself.** A clean `git clone` of the release repository. `nullshift update` (or *Update now*, or Auto) installs the new release's dependencies first, fast-forwards to the tag, restarts the server and checks `/health`; if the restarted server fails, it rolls back to the previous commit and dependencies and says so. A tree with local edits or commits, a development tree whose git root is a parent folder, or a zip download is only told about the release, with the reason shown.
-- **Docker.** A container is only told about a release (`/.dockerenv`, or `NULLSHIFT_IN_DOCKER=1`); rebuild the image instead: `git pull && docker compose build --no-cache && docker compose up -d`.
+- **Docker.** NullShift ships no Dockerfile; if you run it in your own container it is only told about a release (`/.dockerenv`, or `NULLSHIFT_IN_DOCKER=1`): rebuild your image instead, for example `git pull && docker compose build --no-cache && docker compose up -d`.
+- **Upgrading from 0.3.x.** 0.3.x had a Community and a Pro edition. From 0.4.0 everything is in the open-source project: no key or license is needed, and an install that had downloaded a Pro package can delete the leftover `app/pro/` folder. Open **Agents** right after upgrading: agents that were left switched on and sat idle without a Pro license run again, in the mode they were left in (**Stop all agents** switches them off). Every connected SIEM is now queried, not only the primary. The commands `nullshift activate`, `license` and `pro` are gone, and `NULLSHIFT_MACHINE_ID` / `NULLSHIFT_LICENSE_SERVER` in `.env` are no longer read and can be removed (the startup log names every `.env` key that is ignored).
 
 ## Using the Console
 
@@ -288,8 +287,6 @@ Use the public URL **without a port** in your SIEM (`https://<machine>.<tailnet>
 
 ## Autonomous SOC Agents
 
-*NullShift Pro (see [Editions](#editions)).*
-
 Agents work the alert inbox without an analyst at the keyboard. They investigate through the same pipeline as a chat (SIEM queries, playbooks, VirusTotal), acting as the user chosen under **Agents act as**, and every decision lands in the **Activity** list on the **Agents** view.
 
 | Agent | What it does |
@@ -352,9 +349,11 @@ Structured Markdown report (SECTION 1 / 2 / 3 with Verdict + Confidence)
 nullshift/
 ├── app/
 │   ├── main.py              FastAPI routes
-│   ├── licensing.py         Editions: license check, seat and SIEM limits
-│   ├── pro/                 NullShift Pro (proprietary, licensed installs only): agents,
-│   │                        SOC-lead metrics, report export
+│   ├── agents.py            Autonomous SOC agents (triage, investigator, reporter, containment)
+│   ├── scorecard.py         Triage shadow scorecard
+│   ├── reports.py           Case report export (Markdown, HTML)
+│   ├── soc_metrics.py       SOC-lead dashboard metrics
+│   ├── soc_routes.py        Routes for the agents, the scorecard and report export
 │   ├── llm.py               LLM provider chain
 │   ├── rag.py               Chroma-based playbook retrieval
 │   ├── connectors/          SIEM + VirusTotal clients
@@ -427,49 +426,9 @@ This is an actively maintained project — I'm building NullShift to be a tool w
 
 If you're using one of the beta connectors and run into a problem, **please tell me** — that's the fastest way to get it fixed and promoted to production-ready status.
 
-## Editions
-
-| | Community | Pro |
-|---|---|---|
-| Chat investigations, RAG playbooks, alert inbox & queue, cases, VirusTotal | ✓ | ✓ |
-| SIEMs queried | the primary one | all connected |
-| Active users | 3 | per license |
-| Autonomous SOC agents | — | ✓ |
-| SOC-lead dashboard metrics (MTTA, MTTR, agent share, rules to tune) | — | ✓ |
-| Case report export (HTML / Markdown) | — | ✓ |
-
-**Activating Pro.** Enter your product key (`NS-XXXXX-XXXXX-XXXXX-XXXXX`) in **Settings › License** or run `nullshift activate <KEY>`: NullShift exchanges it with the Cyber-Pillar license server for a license signed for this install, checked offline from then on. The license is tied to the install's ID (shown in Settings › License), so reinstalling or rebuilding with `app/data` kept never uses up an activation.
-
-**Free Pro (offer).** From time to time Cyber-Pillar opens a free Pro offer. While it is open, **Settings › License** shows a *Try NullShift Pro free* card on any install without a valid license of its own (`nullshift pro free` on the CLI): one click turns Pro on with no product key, as a license that renews itself with the daily check-in. When the offer closes, Pro ends at the next check-in and the install continues as Community with nothing lost; Settings › License then says the offer has ended. A product key activated at any time replaces the offer's license.
-
-**Machine binding.** The license is also bound to the machine it was activated on: NullShift hashes a hardware ID (Linux `/etc/machine-id`, the macOS platform UUID, the Windows `MachineGuid`, or `NULLSHIFT_MACHINE_ID`) and only that fingerprint, never the raw ID, is sent or stored. Settings › License and `nullshift license` show its first 12 characters. A copy of the install on other hardware shows the state **moved** and runs as Community until it is activated there.
-
-**Moving to a new server.** Activate the key on the new server. If the key is already on its maximum installs, Settings › License offers **Move the license to this install** (`nullshift activate <KEY> --transfer` on the CLI): the license moves at once and the old install loses Pro at its next check-in. Moves are self-service, at most 3 per 30 days; past that, contact Cyber-Pillar.
-
-**Docker.** A container's own `/etc/machine-id` changes when the image is rebuilt, after which the license shows **moved** (NullShift logs a warning at startup when it runs in a container without `NULLSHIFT_MACHINE_ID`). Give the container a stable ID: on a Linux host mount the host's, on a Windows host set `NULLSHIFT_MACHINE_ID` to the output of `(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Cryptography').MachineGuid`:
-
-```yaml
-services:
-  nullshift:
-    environment:
-      NULLSHIFT_MACHINE_ID: "<the host MachineGuid>"   # Windows host: the MachineGuid (or any stable value, 32+ characters)
-    volumes:
-      - /etc/machine-id:/etc/machine-id:ro                             # Linux host: the host's ID instead
-```
-
-`NULLSHIFT_MACHINE_ID` and `NULLSHIFT_LICENSE_SERVER` are process environment variables (compose `environment:` or `docker run -e`); a line in `.env` works too. A value of `uninitialized` or shorter than 32 characters is ignored and the next source is tried. Without any, the install is unbound: it works, but the license is not tied to the hardware.
-
-**Clock.** NullShift remembers the latest time it has seen; a clock more than 24 hours behind it reads as a rollback and turns Pro off (state **clock**). A clock that was set ahead by mistake and then corrected recovers by itself at the next license-server check-in (the server's signed time is the one trusted). For an offline license there is no server to ask: `nullshift license reset-clock` on the server sets the clock to now (it is logged with the old and new values).
-
-**Air-gapped networks.** Settings › License (or `nullshift license request-code <KEY>`) shows a request code for your key. Send it to Cyber-Pillar, receive a `.lic` file, and load it in Settings › License or with `nullshift license <file>`. Such a license never phones home.
-
-**The Pro code.** `app/pro/` is not in this repository: it downloads from the license server once a license with a Pro feature is active (at activation, at `nullshift start` and with the daily check-in; `nullshift pro sync` any time), as a package signed by the server and checked here before a byte of it is unpacked. Air-gapped installs receive a `nullshift-pro-<N>.nspro` bundle with the `.lic` and load it with `nullshift pro install <file>`. A new package is loaded at the next restart (`nullshift start` reloads by itself); Settings › License and `nullshift pro status` show what is installed. A checkout that already holds the Pro source is never overwritten.
-
-**Staying on.** An online license checks in with the license server once a day to pick up renewals; a network failure never changes anything. Only three things turn Pro off: a revocation signed by the server for this very license and install (a key revoked, or moved to another server), expiry (after a 14-day grace period), or a system clock rolled back more than 24 hours. The install then continues as Community: logins and alert ingestion never stop, and users over the limit keep their access (only new seats are refused).
-
 ## License
 
-NullShift Community is released under the [Apache License 2.0](LICENSE). NullShift Pro (`app/pro/`) is proprietary and ships only to licensed installs.
+NullShift is released under the [Apache License 2.0](LICENSE).
 
 ## Author
 

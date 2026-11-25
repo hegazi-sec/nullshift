@@ -56,8 +56,8 @@ def _siem_line(siem: str) -> str:
 
 
 def _siem_section() -> str:
-    from app.connectors import connected_siems
-    siems = connected_siems()
+    from app.connectors import configured_siems
+    siems = configured_siems()
     return "\n".join(_siem_line(s) for s in siems) if siems else "- _no SIEM connected — investigations have no SIEM evidence_"
 
 

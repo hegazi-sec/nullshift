@@ -91,8 +91,8 @@ class PlaybookRunner:
         bundle["playbook_source"] = source
         bundle["playbook_score"] = best["score"]
 
-        from app.connectors import connected_siems
-        siems = connected_siems()
+        from app.connectors import configured_siems
+        siems = configured_siems()
         logger.info(
             "Playbook activated: %s (score=%.2f) for SIEMs=%s",
             source, best["score"], ",".join(siems) or "none",
